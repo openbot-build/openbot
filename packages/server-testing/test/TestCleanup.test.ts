@@ -1,10 +1,14 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { TokenId } from "@openbot-build/domain/TokenId"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import * as GrantCleanup from "@openbot-build/plugin-apps/GrantCleanup"
 import { SqlClient } from "effect/sql"
 import * as TestStores from "@openbot-build/plugin-apps/DeveloperTestStores"
 import { assert, layer } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Authorizer, Policy } from "@nmnmcc/ability"
-import { Authorization, Execution, TokenId } from "@openbot-build/domain"
+import { Authorization, Execution } from "@openbot-build/domain"
 import {
 	Discovery,
 	Document,
@@ -21,28 +25,27 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import { DatabasePostgres as Database } from "@openbot-build/openbot"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as Records from "@openbot-build/server-kernel/Records"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Observation from "@openbot-build/server-execution/Observation"
 import * as Cleanup from "@openbot-build/plugin-apps/TestCleanup"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"
+import * as IndexCommandsFixture from "../src/IndexCommandsFixture.ts"
 import { developerTests } from "@openbot-build/server-database/Schema"
 import { eq } from "drizzle-orm"
 import * as Rows from "@openbot-build/plugin-apps/DeveloperRows"
 import { DeveloperAccess } from "@openbot-build/plugin-apps/DeveloperAccess"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
-import * as Postgres from "./PostgresTest.ts"
 
-const database = Layer.effectDiscard(Database.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(Postgres.start, (db) =>
-				Database.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),
@@ -53,6 +56,7 @@ const services = Observation.layer.pipe(
 		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 	),
 	Layer.provideMerge(database),
+	Layer.provideMerge(IndexCommandsFixture.layerPublicInstance),
 	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const actor = {

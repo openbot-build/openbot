@@ -5,7 +5,7 @@ description:
   model providers.
 ---
 
-See [account access](/access) for invitation-only upgrade defaults, email login,
+See [account access](/access) for invitation-only defaults, email login,
 approvals, group roles and admin recovery.
 
 For platform operators. These tasks affect the whole deployment. Have server
@@ -63,9 +63,9 @@ route except `/health` answers `503` with `SetupRequired`.
 
 The setup program connects to the database with `OPENBOT_DATABASE_URL` and
 `OPENBOT_SECRET_KEYS`. It writes the first platform settings and the first
-platform admins. In the image, it is `/app/dist/app/Setup.mjs`. From the code,
-run `pnpm --filter @openbot-build/openbot setup`. The package also has the
-command `openbot-setup`.
+platform admins. In the image, it is `/app/dist/Setup.mjs`. From the code, run
+`pnpm --filter @openbot-build/openbot setup`. The package also has the command
+`openbot-setup`.
 
 Create a private `setup.json` file (mode `600`):
 
@@ -86,7 +86,7 @@ not pass shared product settings as server arguments.
 ```sh
 docker run --rm --env-file openbot.env \
   -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
-  /app/dist/app/Setup.mjs --config=/run/setup.json
+  /app/dist/Setup.mjs --config=/run/setup.json
 ```
 
 Use `--config` for the file path and `--force` only for recovery. The file
@@ -103,9 +103,6 @@ when not needed), `region`, `bucket`, `accessKeyId`, `forcePathStyle`, and
 storage. Change storage later through `PATCH /v1/platform/settings` under
 `files.storage`. Keep secrets in the private file. Setup encrypts them in the
 database.
-
-Old setup flags for individual settings and `OPENBOT_SETUP_*` variables are no
-longer read. Move those values into the file.
 
 Setup also makes a random sign-in secret. Better Auth uses it to sign the
 sign-in cookies. OpenBot stores it encrypted, and you never see it.

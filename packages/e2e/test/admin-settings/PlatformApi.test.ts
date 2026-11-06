@@ -1,3 +1,15 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import {
+	PlatformSettings,
+	OrganizationSettings,
+} from "@openbot-build/domain/Settings"
+import { Chat, Platform } from "@openbot-build/domain/Authorization"
+import {
+	Model,
+	ModelProvider,
+	ModelCatalog,
+} from "@openbot-build/domain/Models"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
 import {
 	Access,
 	BrowserHost,
@@ -16,16 +28,16 @@ import {
 	Schema,
 	Stream,
 	String as Str,
+	Layer,
 } from "effect"
 import { LanguageModel, Response } from "effect/ai"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import {
-	AuthApi,
-	Authorization,
-	ModelProvidersApi,
-	Settings as SettingsApi,
-	UserTokensApi,
-} from "@openbot-build/api"
+	HttpClient,
+	HttpClientRequest,
+	HttpClientResponse,
+	FetchHttpClient,
+} from "effect/http"
+import { AuthApi } from "@openbot-build/api"
 
 const { bot, message } = Messages
 type Send = Messages.Send
@@ -56,7 +68,12 @@ const tagOf = (response: HttpClientResponse.HttpClientResponse) =>
 	)
 
 // The host and the database are real, so the tests use real time.
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"Only platform admins change the platform, and the ceiling denies in every organization",
 		() =>
@@ -79,7 +96,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					403,
 				)
 				const settings = yield* json(
-					SettingsApi.PlatformSettings,
+					PlatformSettings,
 					account(root.session, "/v1/platform/settings"),
 				)
 				assert.strictEqual(settings.publicOrigin, publicOrigin)
@@ -91,11 +108,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					200,
 				)
 				const updated = yield* json(
-					SettingsApi.PlatformSettings,
+					PlatformSettings,
 					account(root.session, "/v1/platform/settings", "PATCH", {
 						expectedVersion: settings.version,
 						ceiling: yield* Policies.json(function* (_) {
-							yield* _.deny("read", Authorization.Chat, Policies.inOrganization)
+							yield* _.deny("read", Chat, Policies.inOrganization)
 						}),
 					}),
 					200,
@@ -199,7 +216,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// A model is its own thing. A provider links it and can change its values.
 				const small = yield* json(
-					ModelProvidersApi.Model,
+					Model,
 					account(alice.session, "/v1/organization/models", "POST", {
 						id: "small",
 						name: "Small",
@@ -240,10 +257,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						],
 					},
 				)
-				const provider = yield* decode(
-					ModelProvidersApi.ModelProvider,
-					200,
-				)(own)
+				const provider = yield* decode(ModelProvider, 200)(own)
 				assert.deepStrictEqual(provider.apiKey, { set: true, hint: "…6789" })
 				assert.strictEqual(Str.includes("sk-alice")(yield* own.text), false)
 				assert.deepStrictEqual(provider.models, [
@@ -294,7 +308,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(large.status, 200, yield* large.text)
 				const sharedProvider = yield* json(
-					ModelProvidersApi.ModelProvider,
+					ModelProvider,
 					account(root.session, "/v1/platform/model_providers", "POST", {
 						kind: "anthropic",
 						name: "Shared",
@@ -357,9 +371,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					alice.session,
 					"/v1/organization/model_catalog",
 				)
-				const aliceModels = yield* decode(ModelProvidersApi.ModelCatalog)(
-					aliceCatalog,
-				)
+				const aliceModels = yield* decode(ModelCatalog)(aliceCatalog)
 				assert.deepStrictEqual(
 					Arr.sort(
 						Arr.map(aliceModels.providers, (value) => value.id),
@@ -386,7 +398,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					false,
 				)
 				const bobModels = yield* json(
-					ModelProvidersApi.ModelCatalog,
+					ModelCatalog,
 					account(bob.session, "/v1/organization/model_catalog"),
 				)
 				assert.deepStrictEqual(bobModels.providers, [])
@@ -418,7 +430,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(removed.status, 204, yield* removed.text)
 				const after = yield* json(
-					ModelProvidersApi.ModelProvider,
+					ModelProvider,
 					account(
 						alice.session,
 						"/v1/organization/model_providers/" + provider.id,
@@ -432,7 +444,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// A provider cannot go while the Rules model names it.
 				const settings = yield* json(
-					SettingsApi.OrganizationSettings,
+					OrganizationSettings,
 					account(alice.session, "/v1/organization/settings"),
 				)
 				yield* account(alice.session, "/v1/organization/settings", "PATCH", {
@@ -452,7 +464,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// A token works on the platform only when its own policy says so.
 				const plain = yield* json(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					account(root.session, "/v1/user/tokens", "POST", {
 						name: "plain",
 					}),
@@ -463,11 +475,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					403,
 				)
 				const platformToken = yield* json(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					account(root.session, "/v1/user/tokens", "POST", {
 						name: "platform",
 						policy: yield* Policies.json(function* (_) {
-							yield* _.allow("read", Authorization.Platform)
+							yield* _.allow("read", Platform)
 						}),
 					}),
 				)
@@ -516,7 +528,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// A model is a language model unless it says otherwise.
 				const chat = yield* json(
-					ModelProvidersApi.Model,
+					Model,
 					create({
 						id: "chat",
 						name: "Chat",
@@ -526,7 +538,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(chat.type, "language")
 				const jev = yield* json(
-					ModelProvidersApi.Model,
+					Model,
 					create({
 						id: "jev-latest",
 						type: "decision",
@@ -559,7 +571,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				})
 				assert.strictEqual(yield* tagOf(openai), "ModelProviderInvalid")
 				const decisions = yield* json(
-					ModelProvidersApi.ModelProvider,
+					ModelProvider,
 					provider({
 						kind: "typesafe",
 						name: "TypeSafe",
@@ -570,7 +582,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				// A gateway can link both types.
 				const both = yield* json(
-					ModelProvidersApi.ModelProvider,
+					ModelProvider,
 					provider({
 						kind: "openai-compat",
 						name: "Gateway",
@@ -585,7 +597,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// The catalog shows the type of each model.
 				const catalog = yield* json(
-					ModelProvidersApi.ModelCatalog,
+					ModelCatalog,
 					account(alice.session, "/v1/organization/model_catalog"),
 				)
 				assert.deepStrictEqual(
@@ -610,7 +622,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const update = (changes: object) =>
 					Effect.gen(function* () {
 						const current = yield* json(
-							SettingsApi.OrganizationSettings,
+							OrganizationSettings,
 							account(alice.session, "/v1/organization/settings"),
 						)
 						return yield* account(
@@ -630,7 +642,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					selection(both.id, "chat"),
 				]) {
 					const saved = yield* json(
-						SettingsApi.OrganizationSettings,
+						OrganizationSettings,
 						update({ rulesModel }),
 						200,
 					)
@@ -774,11 +786,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				yield* Deferred.await(started)
 
 				const current = yield* json(
-					SettingsApi.PlatformSettings,
+					PlatformSettings,
 					asRootBefore("/v1/platform/settings", "GET"),
 				)
 				const changed = yield* json(
-					SettingsApi.PlatformSettings,
+					PlatformSettings,
 					asRootBefore("/v1/platform/settings", "PATCH", {
 						expectedVersion: current.version,
 						publicOrigin: nextOrigin,
@@ -797,7 +809,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(yield* tagOf(refused), "ForbiddenOrigin")
 				// Writes from the browser must come from the new origin now.
 				const settings = yield* json(
-					SettingsApi.OrganizationSettings,
+					OrganizationSettings,
 					asRootAfter("/v1/organization/settings", "GET"),
 				)
 				const write = (send: Send) =>

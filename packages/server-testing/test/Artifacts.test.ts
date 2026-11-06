@@ -1,6 +1,13 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import {
+	ComputerProvider,
+	Computer,
+	ComputerAccess,
+} from "@openbot-build/domain/Computers"
 import { Digest } from "effect/crypto"
 import { assert, layer } from "@effect/vitest"
-import { ArtifactsApi, ComputersApi, ExecutionsApi } from "@openbot-build/api"
+import { ArtifactsApi, ExecutionsApi } from "@openbot-build/api"
 import { Artifacts, Execution } from "@openbot-build/domain"
 import { Network } from "@openbot-build/protocol"
 import { eq } from "drizzle-orm"
@@ -22,13 +29,13 @@ import {
 	executionFailures,
 	files,
 } from "@openbot-build/server-database/Schema"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as BrowserHost from "./BrowserHost.ts"
-import * as Caller from "./Caller.ts"
-import * as Messages from "./Messages.ts"
-import * as Wait from "./Wait.ts"
-import * as ComputerScenarios from "./testing/ComputerScenarios.ts"
-import * as Devices from "./testing/Devices.ts"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as BrowserHost from "../src/BrowserHost.ts"
+import * as Caller from "../src/Caller.ts"
+import * as Messages from "../src/Messages.ts"
+import * as Wait from "../src/Wait.ts"
+import * as ComputerScenarios from "../src/ComputerScenarios.ts"
+import * as Devices from "../src/Devices.ts"
 
 const publicOrigin = "https://artifact-files.example.com"
 const storageOrigin = "http://artifact-files.test"
@@ -214,7 +221,12 @@ const publishInput = (commandKey: string, body: string) => ({
 	citations: [],
 })
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"Computer bytes and source text stay fixed through storage writes, restarts, and removal",
 		() =>
@@ -241,7 +253,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				yield* Messages.settled(send, receipt.chat)
 				const path = `/v1/chats/${receipt.chat}`
 				const computerProvider = yield* json(
-					ComputersApi.ComputerProvider,
+					ComputerProvider,
 					send("/v1/computer-providers", "POST", {
 						name: "Files",
 						credentials: { kind: "e2b", apiKey: "e2b_test_key_123456" },
@@ -264,14 +276,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				const madeRecord = yield* completed(host, send, made)
 				const computer = yield* json(
-					ComputersApi.Computer,
+					Computer,
 					send(`/v1/computers/${madeRecord.resource.id}`, "GET"),
 				)
 				const machinePath = `/v1/computers/${computer.id}`
-				yield* json(
-					ComputersApi.ComputerAccess,
-					send(`${machinePath}/bots/${bot}`, "PUT"),
-				)
+				yield* json(ComputerAccess, send(`${machinePath}/bots/${bot}`, "PUT"))
 				const write = (path: string, content: string) =>
 					send(machinePath + "/files", "PUT", {
 						path,

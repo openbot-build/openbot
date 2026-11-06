@@ -1,16 +1,15 @@
-import { Bots, Delegations, Execution } from "@openbot-build/domain"
+import { BotId } from "@openbot-build/domain/BotId"
+import { DelegationId } from "@openbot-build/domain/DelegationId"
+import { Delegations, Execution } from "@openbot-build/domain"
 import { Cause, Effect, Option, Schema } from "effect"
 import { Tool } from "effect/ai"
 import type { Entry } from "@openbot-build/apps-contract/apps/WorkflowTools"
-import type { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
-import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
-import type { Fence } from "@openbot-build/server-execution/execution/Store"
-import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
-import { Records, category } from "@openbot-build/server-kernel/errors/Records"
-import {
-	InputState,
-	Local,
-} from "@openbot-build/tools-contract/plugins/ToolEntry"
+import type { Definition } from "@openbot-build/tools-contract/ToolDefinitions"
+import { CallContext } from "@openbot-build/server-execution/CallContext"
+import type { Fence } from "@openbot-build/server-execution/Store"
+import * as Recovery from "@openbot-build/server-execution/Recovery"
+import { Records, category } from "@openbot-build/server-kernel/Records"
+import { InputState, Local } from "@openbot-build/tools-contract/ToolEntry"
 import { json } from "@openbot-build/apps-contract/apps/AppResults"
 import { DelegationCommands } from "./DelegationCommands.ts"
 
@@ -19,13 +18,13 @@ export const names = {
 	cancel: "openbot_cancel_delegation",
 } as const
 export const Delegate = Schema.Struct({
-	bot: Schema.optionalKey(Bots.BotId),
+	bot: Schema.optionalKey(BotId),
 	task: Schema.NonEmptyString.check(Schema.isMaxLength(20000)),
 	reason: Schema.optionalKey(Schema.String),
-	delegation: Schema.optionalKey(Delegations.DelegationId),
+	delegation: Schema.optionalKey(DelegationId),
 	limits: Delegations.DelegationLimits,
 })
-export const Cancel = Schema.Struct({ delegation: Delegations.DelegationId })
+export const Cancel = Schema.Struct({ delegation: DelegationId })
 const State = Schema.Struct({
 	kind: Schema.Literals(["delegate", "cancel-delegation"]),
 })

@@ -1,28 +1,18 @@
-import {
-	ChatConflict,
-	ChatNotFound,
-	ChatStorageUnavailable,
-} from "@openbot-build/domain"
-import {
-	InputPart as DomainInputPart,
-	MessageInput as DomainMessageInput,
-} from "@openbot-build/domain"
+import { BotId } from "@openbot-build/domain/BotId"
+import { PlanApproval } from "@openbot-build/domain/PlanApproval"
+import { FileInvalid } from "@openbot-build/domain/Files"
+import { Confession, Enrichment } from "@openbot-build/domain/BotMemory"
+import { MessageInput } from "@openbot-build/domain/Chats"
+import { ChatItem } from "@openbot-build/domain/Artifacts"
+import { ChatTodos } from "@openbot-build/domain/Todos"
 import { errors as ExecutionErrors } from "./ExecutionsApi.ts"
-import {
-	ChatSettingsChange as UpdateChatRequest,
-	ChatTodoChange as UpdateTodosRequest,
-} from "@openbot-build/domain"
-import { Artifacts, Execution, ChatModelInvalid } from "@openbot-build/domain"
+import { Artifacts, Execution } from "@openbot-build/domain"
 import { BotAuth } from "./AuthApi.ts"
 import { Chat, Config, Item, Turn } from "@openbot-build/core"
-import * as BotMemory from "./BotMemory.ts"
 import { Authorize, GroupRequired, Required, own } from "./Authorization.ts"
-import { BotErrors, BotId } from "./BotsApi.ts"
+import { BotErrors } from "./BotsApi.ts"
 import { Delegation, DelegationErrors } from "./DelegationsApi.ts"
-import { FileInvalid } from "./FilesApi.ts"
-import { PlanApproval } from "./PlanApproval.ts"
 import { Schema } from "effect"
-import { ChatTodos } from "@openbot-build/domain"
 import {
 	HttpApi,
 	HttpApiEndpoint,
@@ -30,11 +20,6 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-
-export const InputPart = DomainInputPart
-export type InputPart = typeof InputPart.Type
-export const MessageInput = DomainMessageInput
-export type MessageInput = typeof MessageInput.Type
 
 /** One message command. Network retries use the same key and body. */
 export const ChatCommandRequest = Schema.Struct({
@@ -47,7 +32,7 @@ export const ChatCommandReceipt = Schema.Struct({
 	...Execution.Receipt.fields,
 	chat: Chat.Id,
 	turn: Turn.Id,
-	/** The same input ID in the queue and in saved Chat Items. Older commands may have none. */
+	/** The same input ID in the queue and in saved Chat Items. A message to a task Chat can have none. */
 	inputId: Schema.optionalKey(Item.Id),
 })
 export type ChatCommandReceipt = typeof ChatCommandReceipt.Type
@@ -69,8 +54,6 @@ export const OutputFile = Schema.Struct({
 	availability: Artifacts.Availability,
 })
 export type OutputFile = typeof OutputFile.Type
-export const ChatItem = Artifacts.ChatItem
-export type ChatItem = typeof ChatItem.Type
 /** The saved status of one response. */
 export const ResponseStatus = Schema.Literals([
 	"in_progress",
@@ -125,9 +108,17 @@ export const ChatResponse = Schema.Struct({
 })
 export type ChatResponse = typeof ChatResponse.Type
 
-import { ChatKind, ChatParent, OpenWork } from "@openbot-build/domain/Chats"
-export { ChatKind, ChatParent, OpenWork } from "@openbot-build/domain/Chats"
-
+import {
+	ChatKind,
+	ChatParent,
+	OpenWork,
+	ChatNotFound,
+	ChatConflict,
+	ChatStorageUnavailable,
+	ChatModelInvalid,
+	ChatSettingsChange,
+	ChatTodoChange,
+} from "@openbot-build/domain/Chats"
 export const ChatStatus = Schema.Literals(["Idle", ...Turn.StatusTag.literals])
 export type ChatStatus = typeof ChatStatus.Type
 
@@ -184,7 +175,7 @@ export const ChatView = Schema.Struct({
 	/** The number of inputs that wait for a Turn. */
 	inbox: Schema.Natural,
 	/** Fixed input IDs let clients replace local pending rows with this saved queue. */
-	queuedInputs: Schema.optionalKey(Schema.Array(QueuedChatInput)),
+	queuedInputs: Schema.Array(QueuedChatInput),
 	open: OpenWork,
 })
 export type ChatView = typeof ChatView.Type
@@ -223,13 +214,6 @@ export class ChatExecutionUnavailable extends Schema.TaggedError<
 	ChatExecutionUnavailable,
 	{ readonly brand: unique symbol }
 >()("ChatExecutionUnavailable", { chat: Chat.Id }) {}
-export {
-	ChatConflict,
-	ChatNotFound,
-	ChatStorageUnavailable,
-} from "@openbot-build/domain"
-export { ChatModelInvalid } from "@openbot-build/domain"
-
 export const ChatOperationErrors = [
 	ChatNotFound.pipe(HttpApiSchema.status(404)),
 	ChatConflict.pipe(HttpApiSchema.status(409)),
@@ -244,8 +228,6 @@ export const ChatModels = Schema.Struct({
 })
 export type ChatModels = typeof ChatModels.Type
 
-export { ChatSettingsChange as UpdateChatRequest } from "@openbot-build/domain"
-
 export const InterruptChatRequest = Schema.Struct({
 	commandKey: Execution.CommandKey,
 	/** Also cancel the work that this Chat gave to Bots. */
@@ -253,11 +235,7 @@ export const InterruptChatRequest = Schema.Struct({
 })
 export type InterruptChatRequest = typeof InterruptChatRequest.Type
 
-export { TodoStatus, Todo, ChatTodos, todoProblem } from "@openbot-build/domain"
-
 /** Replaces the whole list. `revision` guards against concurrent changes. */
-export { ChatTodoChange as UpdateTodosRequest } from "@openbot-build/domain"
-
 const sendSuccess = ChatCommandReceipt.pipe(HttpApiSchema.status(202))
 const sendErrors = [
 	...ExecutionErrors,
@@ -313,7 +291,7 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 		),
 		HttpApiEndpoint.patch("updateChat", "/v1/chats/:chatId", {
 			params: chatParams,
-			payload: UpdateChatRequest,
+			payload: ChatSettingsChange,
 			success: ChatView,
 			error: [
 				...ChatOperationErrors,
@@ -399,7 +377,7 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 		}),
 		HttpApiEndpoint.put("updateChatTodos", "/v1/chats/:chatId/todos", {
 			params: chatParams,
-			payload: UpdateTodosRequest,
+			payload: ChatTodoChange,
 			success: ChatView,
 			error: ChatOperationErrors,
 		}).annotate(
@@ -416,7 +394,7 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 		),
 		HttpApiEndpoint.get("chatConfessions", "/v1/chats/:chatId/confessions", {
 			params: chatParams,
-			success: Schema.Array(BotMemory.Confession),
+			success: Schema.Array(Confession),
 			error: ChatOperationErrors,
 		}).annotate(
 			OpenApi.Description,
@@ -424,7 +402,7 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 		),
 		HttpApiEndpoint.get("chatEnrichments", "/v1/chats/:chatId/enrichments", {
 			params: chatParams,
-			success: Schema.Array(BotMemory.Enrichment),
+			success: Schema.Array(Enrichment),
 			error: ChatOperationErrors,
 		}).annotate(
 			OpenApi.Description,

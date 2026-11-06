@@ -16,7 +16,6 @@
 		"./Gates": "./dist/Gates.js",
 		"./GrantUse": "./dist/GrantUse.js",
 		"./Grants": "./dist/Grants.js",
-		"./HttpMounts": "./dist/HttpMounts.js",
 		"./Judge": "./dist/Judge.js",
 		"./RequestCommands": "./dist/RequestCommands.js",
 		"./RequestNotices": "./dist/RequestNotices.js",

@@ -1,19 +1,24 @@
 import {
+	LiveServerMessage,
+	LiveClientMessage,
+	LiveUnavailable,
+} from "@openbot-build/domain/Live"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
+import {
 	BrowserHost,
 	Caller,
 	Devices,
 	Messages,
 	Wait,
 } from "@openbot-build/server-testing"
-import { NodeHttpClient, NodeSocket } from "@effect/platform-node"
-import { assert, layer } from "@effect/vitest"
 import {
-	ChatSummary,
-	ChatView,
-	LiveApi,
-	ChatCommandReceipt,
-	UserTokensApi,
-} from "@openbot-build/api"
+	NodeHttpClient,
+	NodeSocket,
+	NodeServices,
+	NodeCrypto,
+} from "@effect/platform-node"
+import { assert, layer } from "@effect/vitest"
+import { ChatsApi } from "@openbot-build/api"
 import { Execution } from "@openbot-build/domain"
 import { Live } from "@openbot-build/core"
 import {
@@ -33,7 +38,7 @@ import {
 	String as Str,
 	SubscriptionRef,
 } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/http"
+import { HttpClient, HttpClientRequest, FetchHttpClient } from "effect/http"
 import { Socket } from "effect/socket"
 
 const { until } = Wait
@@ -54,16 +59,16 @@ const capabilities: Live.Capabilities = {
 }
 const answerSound = new Uint8Array([1, 2, 3, 4])
 
-type ServerMessage = LiveApi.LiveServerMessage
+type ServerMessage = LiveServerMessage
 
 const decodeServerMessage = Schema.decodeEffect(
-	Schema.fromJsonString(LiveApi.LiveServerMessage),
+	Schema.fromJsonString(LiveServerMessage),
 )
 const encodeServerMessages = Schema.encodeEffect(
-	Schema.fromJsonString(Schema.Array(LiveApi.LiveServerMessage)),
+	Schema.fromJsonString(Schema.Array(LiveServerMessage)),
 )
 const encodeClientMessage = Schema.encodeEffect(
-	Schema.fromJsonString(LiveApi.LiveClientMessage),
+	Schema.fromJsonString(LiveClientMessage),
 )
 
 /** An answer that names what went wrong. */
@@ -261,7 +266,10 @@ const text = (call: Caller.Call, status = 200) =>
 	})
 
 layer(
-	Layer.merge(BrowserHost.layerPlatform, NodeSocket.layerWebSocketConstructor),
+	Layer.merge(
+		Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+		NodeSocket.layerWebSocketConstructor,
+	),
 	{
 		excludeTestServices: true,
 	},
@@ -315,7 +323,7 @@ layer(
 						}),
 					)
 					const created = yield* json(
-						ChatView,
+						ChatsApi.ChatView,
 						send(`/v1/bots/${bot}/live`, "POST", {}),
 						201,
 					)
@@ -439,7 +447,7 @@ layer(
 
 				// A live Chat gets the Live model. Each call makes a new one.
 				const created = yield* json(
-					ChatView,
+					ChatsApi.ChatView,
 					send(alice.session, `/v1/bots/${botId}/live`, "POST", {}),
 					201,
 				)
@@ -448,7 +456,7 @@ layer(
 				const chat: string = created.chat.id
 				const liveUrl = urlOf(chat)
 				const noUpgrade = yield* json(
-					LiveApi.LiveUnavailable,
+					LiveUnavailable,
 					send(alice.session, `/v1/chats/${chat}/live`),
 					409,
 				)
@@ -473,7 +481,7 @@ layer(
 				)
 				assert.strictEqual(toText._tag, "ChatModelInvalid")
 				const directView = yield* json(
-					ChatView,
+					ChatsApi.ChatView,
 					send(alice.session, `/v1/chats/${direct.chat}`),
 				)
 				const toLive = yield* json(
@@ -488,14 +496,14 @@ layer(
 
 				// The default list has live Chats.
 				const listed = yield* json(
-					Schema.Array(ChatSummary),
+					Schema.Array(ChatsApi.ChatSummary),
 					send(alice.session, "/v1/chats"),
 				)
 				assert.ok(Arr.some(listed, (summary) => summary.chat.id === chat))
 
 				// While no Live session is open, a message waits in the inbox.
 				const waiting = yield* json(
-					ChatCommandReceipt,
+					ChatsApi.ChatCommandReceipt,
 					send(alice.session, `/v1/chats/${chat}/messages`, "POST", {
 						input: "Remember me",
 						commandKey: "remember",
@@ -505,7 +513,7 @@ layer(
 				assert.ok(waiting.executionId.length > 0)
 				assert.ok(waiting.turn.length > 0)
 				const idle = yield* json(
-					ChatView,
+					ChatsApi.ChatView,
 					send(alice.session, `/v1/chats/${chat}`),
 				)
 				assert.strictEqual(idle.status, "Running")
@@ -654,7 +662,7 @@ layer(
 				// A user token opens a Live session in the same way. The new session gets
 				// the earlier messages of the Chat.
 				const token = yield* json(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					send(alice.session, "/v1/user/tokens", "POST", { name: "live" }),
 					201,
 				)
@@ -732,7 +740,7 @@ layer(
 					}),
 				)
 				const pending = yield* json(
-					ChatCommandReceipt,
+					ChatsApi.ChatCommandReceipt,
 					send(alice.session, `/v1/chats/${chat}/messages`, "POST", {
 						input: "Keep this model",
 						commandKey: "keep-model",
@@ -740,11 +748,11 @@ layer(
 					202,
 				)
 				const beforeModelChange = yield* json(
-					ChatView,
+					ChatsApi.ChatView,
 					send(alice.session, `/v1/chats/${chat}`),
 				)
 				yield* json(
-					ChatView,
+					ChatsApi.ChatView,
 					send(alice.session, `/v1/chats/${chat}`, "PATCH", {
 						expected: beforeModelChange.chat.revision,
 						model: {
@@ -789,18 +797,18 @@ layer(
 				)
 				// An idle socket must hear a model change when input arrives through HTTP.
 				const beforeHttp = yield* json(
-					ChatView,
+					ChatsApi.ChatView,
 					send(alice.session, `/v1/chats/${chat}`),
 				)
 				yield* json(
-					ChatView,
+					ChatsApi.ChatView,
 					send(alice.session, `/v1/chats/${chat}`, "PATCH", {
 						expected: beforeHttp.chat.revision,
 						model: talk,
 					}),
 				)
 				const fromHttp = yield* json(
-					ChatCommandReceipt,
+					ChatsApi.ChatCommandReceipt,
 					send(alice.session, `/v1/chats/${chat}/messages`, "POST", {
 						input: "Change from HTTP",
 						commandKey: "http-model",

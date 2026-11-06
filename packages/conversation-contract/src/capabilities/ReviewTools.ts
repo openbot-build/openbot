@@ -1,8 +1,8 @@
 import { Execution } from "@openbot-build/domain"
 import { Context, Effect, Schema } from "effect"
 import { Tool } from "effect/ai"
-import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
-import type { Fence } from "@openbot-build/server-execution/execution/Store"
+import { CallContext } from "@openbot-build/server-execution/CallContext"
+import type { Fence } from "@openbot-build/server-execution/Store"
 
 export const names = {
 	approve: "openbot_approve",
@@ -208,6 +208,5 @@ export interface Service {
 }
 
 export class ReviewTools extends Context.Service<ReviewTools, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/conversation-contract/capabilities/ReviewTools",
+	"@openbot-build/conversation-contract/capabilities/ReviewTools",
 ) {}

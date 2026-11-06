@@ -1,15 +1,20 @@
 import { Network } from "@openbot-build/protocol"
-import { NodeCrypto } from "@effect/platform-node"
-import { HttpClient } from "effect/http"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
+import { HttpClient, FetchHttpClient } from "effect/http"
 import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import { assert, layer } from "@effect/vitest"
 import { Effect, Layer, Redacted, Ref } from "effect"
 import * as ChannelRegistry from "@openbot-build/plugin-channels/ChannelRegistry"
 import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
-import * as BrowserHost from "./BrowserHost.ts"
+import * as BrowserHost from "../src/BrowserHost.ts"
 
 const publicOrigin = "https://channel-config.example.com"
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"Channel connections share a saved version and change with its credentials",
 		() =>

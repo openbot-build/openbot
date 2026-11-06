@@ -1,8 +1,9 @@
+import type { Edit, LogEntry } from "@openbot-build/domain/BotMemory"
 import { type BotMemory, Bots as BotsApi } from "@openbot-build/domain"
 import { MemoryLogs } from "./MemoryLogs.ts"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import * as Memory from "./memory/BotMemory.ts"
-import * as Audience from "./memory/Audience.ts"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import * as Memory from "./BotMemory.ts"
+import * as Audience from "./Audience.ts"
 import {
 	Array as Arr,
 	Clock,
@@ -21,8 +22,6 @@ import { Hex } from "effect/encoding"
 import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
 import * as MemoryRecords from "./MemoryRecords.ts"
 import type { Home } from "@openbot-build/conversation-contract/bots/BotMemories"
-export type { Home } from "@openbot-build/conversation-contract/bots/BotMemories"
-
 /** A linked Bot uses the memory of its source. */
 export const homeOf = (organizationId: string, bot: BotsApi.Bot): Home =>
 	bot.source ?? { organizationId, bot: bot.id }
@@ -94,7 +93,7 @@ export interface Service {
 	readonly edit: (
 		home: Home,
 		person: Memory.Person,
-		command: Memory.Edit,
+		command: Edit,
 	) => Effect.Effect<
 		{
 			entries: BotMemory.Entry[]
@@ -109,7 +108,7 @@ export interface Service {
 		{
 			version: number
 			at: number
-			by: "memory_bot" | "person" | "promotion"
+			by: "memory_bot" | "person"
 			ids: string[]
 		}[],
 		BotsApi.BotStorageUnavailable
@@ -121,8 +120,7 @@ export interface Service {
 }
 
 export class BotMemories extends Context.Service<BotMemories, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-bots/BotMemories",
+	"@openbot-build/plugin-bots/BotMemories",
 ) {}
 
 export const make = Effect.gen(function* () {
@@ -145,7 +143,7 @@ export const make = Effect.gen(function* () {
 	const bump = (
 		home: Home,
 		ids: ReadonlyArray<string>,
-		by: Memory.LogEntry["by"],
+		by: LogEntry["by"],
 		reasons: ReadonlyArray<string>,
 	) =>
 		Effect.gen(function* () {
@@ -186,7 +184,7 @@ export const make = Effect.gen(function* () {
 	const persist = (
 		home: Home,
 		changes: ReadonlyArray<Memory.Change>,
-		by: Memory.LogEntry["by"],
+		by: LogEntry["by"],
 		reasons: ReadonlyArray<string> = [],
 	) =>
 		Effect.gen(function* () {
@@ -360,7 +358,7 @@ export const make = Effect.gen(function* () {
 				}),
 			)
 			.pipe(unavailable("The memory plan could not be saved."))
-	const edit = (home: Home, person: Memory.Person, command: Memory.Edit) =>
+	const edit = (home: Home, person: Memory.Person, command: Edit) =>
 		Effect.gen(function* () {
 			const now = yield* Clock.currentTimeMillis
 			const id = yield* newId(crypto)

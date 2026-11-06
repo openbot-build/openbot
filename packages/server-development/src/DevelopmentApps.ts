@@ -12,7 +12,7 @@ import {
 	pipe,
 } from "effect"
 import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
-import * as Probe from "@openbot-build/plugin-apps/Probe"
+import * as AppsOutside from "@openbot-build/plugin-apps/Outside"
 import { Authorization } from "./DevelopmentAuthorization.ts"
 import { Mode, Scenarios } from "./DevelopmentScenarios.ts"
 import { Business, readTool, writeTool } from "./DevelopmentBusiness.ts"
@@ -58,8 +58,7 @@ export class Publication extends Context.Service<
 		readonly mode: Effect.Effect<PublicationMode>
 		readonly set: (mode: PublicationMode) => Effect.Effect<void>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/server-development/DevelopmentApps/Publication") {}
+>()("@openbot-build/server-development/DevelopmentApps/Publication") {}
 export const layerPublication = Layer.effect(
 	Publication,
 	Effect.map(Ref.make<PublicationMode>("published"), (mode) =>
@@ -456,7 +455,7 @@ export const layerProbe = Layer.unwrap(
 	Effect.gen(function* () {
 		const authorization = yield* Authorization
 		const business = yield* Business
-		return Probe.layerWithNetwork((connection) =>
+		return AppsOutside.layerProbeWith((connection) =>
 			network(connection.owner, authorization, business),
 		)
 	}),

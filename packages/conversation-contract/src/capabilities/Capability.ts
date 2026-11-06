@@ -1,7 +1,8 @@
+import type { Capability } from "@openbot-build/domain/Bots"
+import type { ExecutionIdentity } from "@openbot-build/domain/Identity"
 import { type Computers as ComputersApi } from "@openbot-build/domain"
 import { type Bots as BotsApi } from "@openbot-build/domain"
 import { Authorization } from "@openbot-build/domain"
-import { type ExecutionIdentity } from "@openbot-build/domain"
 import type { Authorizer } from "@nmnmcc/ability"
 import { Effect, Schema, String as Str } from "effect"
 import { Digest } from "effect/crypto"
@@ -10,10 +11,8 @@ import {
 	botResource,
 	computerProviderResource,
 	computerResource,
-	rootOf,
 } from "@openbot-build/identity-contract/authorization/Resources"
-
-export type Capability = BotsApi.Capability
+import { rootOf } from "@openbot-build/domain/AuditResources"
 
 /** A short and stable text that names a capability, for logs, prompts and cache keys. */
 export const describe = (capability: Capability) =>

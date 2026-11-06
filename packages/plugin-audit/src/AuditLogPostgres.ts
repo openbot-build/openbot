@@ -1,6 +1,6 @@
+import { Caller } from "@openbot-build/domain/Identity"
 import { Organizations as OrganizationsModel } from "@openbot-build/domain"
 
-import { Caller } from "@openbot-build/domain"
 import type { PgClient } from "@effect/sql-pg"
 import { Clock, DateTime, Effect, Layer, Option, Schema } from "effect"
 import { and, desc, eq, lt } from "drizzle-orm"

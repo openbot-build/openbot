@@ -1,7 +1,11 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { Bot } from "@openbot-build/domain/Bots"
+import { SessionInfo } from "@openbot-build/domain/Accounts"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import {
 	Messages,
 	Caller,
-	PostgresTest,
 	DefaultBot,
 	Organizations,
 } from "@openbot-build/server-testing"
@@ -23,9 +27,10 @@ import {
 import { Digest } from "effect/crypto"
 import { assert, layer, vi } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
-import { Host, DatabasePostgres } from "@openbot-build/openbot"
+import { Host } from "@openbot-build/openbot"
+import { BuiltinModels } from "@openbot-build/models-contract/BuiltinModels"
 import { Config, Model, Provider } from "@openbot-build/core"
-import { AuthApi, BotsApi, ChatCommandReceipt } from "@openbot-build/api"
+import { AuthApi, ChatsApi } from "@openbot-build/api"
 
 import { LanguageModel, Response } from "effect/ai"
 import { Base64, Base64Url } from "effect/encoding"
@@ -66,7 +71,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 		() =>
 			Effect.gen(function* () {
 				const crypto = yield* Digest.Digest
-				const database = yield* PostgresTest.start
+				const database = yield* TestDatabase.start
 				const issuer = "https://id.example.com"
 				const publicOrigin = "https://e.example.com"
 				const pair = yield* Effect.promise(() =>
@@ -201,7 +206,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 					host: "127.0.0.1",
 					port: 0,
 					// Every organization can use this model, so each test account can run a Turn.
-					builtinModels: {
+					outside: Layer.succeed(BuiltinModels, {
 						providers: [{ id: testProvider, name: "Test" }],
 						models: [
 							Config.Model.make({
@@ -213,7 +218,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 							}),
 						],
 						resolve: () => languageModel,
-					},
+					}),
 					databaseUrl: Redacted.make(database.url),
 					clusterSecret: Redacted.make(
 						"test-cluster-secret-with-at-least-32-characters",
@@ -223,6 +228,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 							"1111111111111111111111111111111111111111111111111111111111111111",
 					),
 					auth: {
+						mode: "oidc" as const,
 						publicOrigin,
 						issuer,
 						clientId: "client",
@@ -237,6 +243,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 						...options,
 						auth: publicClient
 							? {
+									mode: "oidc" as const,
 									publicOrigin,
 									issuer,
 									clientId: "client",
@@ -269,7 +276,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 					}
 				})
 				const migration = yield* Layer.build(
-					DatabasePostgres.layer(options).pipe(
+					PgClient.layer({ url: options.databaseUrl }).pipe(
 						Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 					),
 				)
@@ -284,7 +291,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 						migration,
 					)
 				assert.ok(Exit.isFailure(yield* Effect.exit(start)))
-				yield* Effect.provideContext(DatabasePostgres.migrate, migration)
+				yield* Effect.provideContext(Migrations.migrate, migration)
 				let running = yield* start
 				// This test uses an explicitly public platform. Production defaults stay closed.
 				yield* sql(
@@ -572,14 +579,14 @@ layer(platform, { excludeTestServices: true })((it) => {
 						instructions: "Answer the person.",
 						model,
 					}),
-					Caller.json(Schema.toEncoded(BotsApi.Bot), 201),
+					Caller.json(Schema.toEncoded(Bot), 201),
 				)
 				const receipt = yield* Effect.flatMap(
 					session(alice.session, `/v1/bots/${aliceBot.id}/messages`, "POST", {
 						input: "hello",
 						commandKey: "hello",
 					}),
-					Caller.json(Schema.toEncoded(ChatCommandReceipt), 202),
+					Caller.json(Schema.toEncoded(ChatsApi.ChatCommandReceipt), 202),
 				)
 				assert.ok(receipt.executionId.length > 0)
 				const path = "/v1/chats/" + receipt.chat
@@ -660,7 +667,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 				const sessionInfo = (cookie: string) =>
 					Effect.flatMap(
 						request("/auth/session", { headers: { cookie } }),
-						Caller.json(Schema.toEncoded(AuthApi.SessionInfo)),
+						Caller.json(Schema.toEncoded(SessionInfo)),
 					)
 				const sessionA = yield* sessionInfo(alice.session)
 				const sessionB = yield* sessionInfo(nextAlice.session)

@@ -62,13 +62,21 @@ const rules = {
 	"host-only":
 		"Only the host serves HTTP. Do not call `HttpRouter.serve`, `HttpRouter.toWebHandler` or `HttpApiBuilder.layer`, add a global HTTP middleware, or make a layer from a workflow here. A plugin mounts its routes with `HttpHost` and gives its workflows with `Workflows.contribute`.",
 	"graft-boundary":
-		"Only the plugin kit (the `server-plugin` package), the `src/index.ts` file of a plugin package, the host (`packages/openbot/src`), the development server and the tests of OpenBot may import graft. Import graft's `Plugin` as `GraftPlugin`, so it is not mixed up with an OpenBot plugin.",
+		"Only the plugin kit (the `server-plugin` package), the `src/index.ts` file of a plugin package, the host (`packages/openbot/src`) and the tests of OpenBot may import graft. Import graft's `Plugin` as `GraftPlugin`, so it is not mixed up with an OpenBot plugin.",
 	"plugin-boundary":
 		"A plugin must not import another plugin, in its code or in its tests. Put shared service tags and types in a contract package. The host connects the plugins through graft.",
 	"plugin-entry":
 		"The `src/index.ts` file of a plugin package has one export only: the plugin, as the default export. Keep other code in other modules.",
 	"feature-lookup":
 		"Do not look for a feature with `Effect.serviceOption` or `Plugin.optional`. List the services that the code needs, so the layer or the plugin asks for them.",
+	"identity-key":
+		"The key of a service, a reference, a middleware or a symbol is `@openbot-build/<package>/<module path>`, plus `/<Name>` when the name is not the module name. A brand is `@openbot-build/<package>/<Name>`. Do not turn the deterministicKeys rule off.",
+	"package-layout":
+		"A package keeps its modules flat in `src`. Only a contract of several plugins has folders, one for each plugin, and each exports key names its source file.",
+	"no-reexport":
+		"Import a symbol from the package that owns it. Do not export it again, and do not give it a second name.",
+	"unused-entry":
+		"A server package has an exports key only when another package imports it, or a docs page shows it.",
 	parse: "The rules could not read this file.",
 } as const
 
@@ -252,9 +260,7 @@ const memberParts = (node: Node): ReadonlyArray<string> => {
  * These files read a value of the current request, such as the context window
  * of a model call. They do not look for a feature.
  */
-const lookupFiles = [
-	"packages/model-providers/src/providers/openai/Request.ts",
-] as const
+const lookupFiles = ["packages/model-providers/src/OpenAiRequest.ts"] as const
 
 /** True for `Effect.serviceOption`, `Plugin.optional` and `GraftPlugin.optional`. */
 const isLookup = (parts: ReadonlyArray<string>): boolean => {
@@ -270,9 +276,16 @@ const isLookup = (parts: ReadonlyArray<string>): boolean => {
 const isServer = (name: string | undefined): boolean =>
 	name !== undefined && (name === "openbot" || isServerPackage(name))
 
+/**
+ * The test helpers of `server-testing`. They are in `src`, so that other
+ * packages can import them, but they are test code. The rules for tests
+ * judge them, not the rules for server code.
+ */
+const testHelpers = /^packages\/server-testing\/src\//
+
 /** The host, the HTTP files of the kernel, and the execution engine. */
 const hostFiles =
-	/^packages\/(?:openbot\/src\/|server-execution\/src\/|server-kernel\/src\/errors\/(?:HttpHost|HttpBoundary|Reporting)\.ts$)/
+	/^packages\/(?:openbot\/src\/|server-execution\/src\/|server-kernel\/src\/(?:HttpHost|HttpBoundary|Reporting)\.ts$)/
 
 /** True for an object argument with `global: true`. */
 const isGlobal = (node: Node): boolean =>
@@ -330,7 +343,7 @@ const isHostCall = (node: Node): boolean => {
 const check = (file: string, program: Node) => {
 	const main = Str.endsWith("Main.ts")(file)
 	const owner = /^packages\/([^/]+)\/src\//.exec(file)?.[1]
-	const server = isServer(owner)
+	const server = isServer(owner) && !testHelpers.test(file)
 	const domain = Str.startsWith("packages/domain/src/")(file)
 	const core = coreImports(program)
 	const blind = isBlind(blindNames(program))
@@ -456,6 +469,7 @@ const httpAdapters = [
 	...httpViews,
 	"packages/plugin-auth/src/BetterAuth.ts",
 	"packages/plugin-authorization/src/Layer.ts",
+	"packages/server-kernel/src/Reporting.ts",
 ] as const
 
 /** The base packages: pure types, rules and contracts. Every server package may use them. */
@@ -470,9 +484,9 @@ const isBasePackage = (name: string) => Arr.contains(basePackages, name)
 const packageLayers: Readonly<Record<string, number>> = {
 	"server-database": 1,
 	"server-kernel": 2,
-	"identity-contract": 3,
-	"server-billing": 4,
-	"server-execution": 5,
+	"server-billing": 3,
+	"server-execution": 4,
+	"identity-contract": 5,
 	"tools-contract": 6,
 	"models-contract": 7,
 	"apps-contract": 8,
@@ -480,65 +494,29 @@ const packageLayers: Readonly<Record<string, number>> = {
 	"model-providers": 10,
 	"server-plugin": 11,
 	plugin: 12,
-	"server-upgrade": 13,
-	openbot: 14,
-	"server-development": 15,
-	"server-testing": 16,
+	openbot: 13,
+	"server-development": 14,
+	"server-testing": 15,
 }
 
-/** The server packages, without the host. Other packages use them only through their `exports`. */
-const serverPackages = [
-	"server-database",
-	"server-kernel",
-	"identity-contract",
-	"server-billing",
-	"server-execution",
-	"tools-contract",
-	"models-contract",
-	"apps-contract",
-	"conversation-contract",
-	"model-providers",
-	"server-plugin",
-	"plugin-audit",
-	"plugin-mail",
-	"plugin-platform",
-	"plugin-organization",
-	"plugin-access",
-	"plugin-sso",
-	"plugin-auth",
-	"plugin-authorization",
-	"plugin-models",
-	"plugin-files",
-	"plugin-artifacts",
-	"plugin-bots",
-	"plugin-capabilities",
-	"plugin-work",
-	"plugin-imported",
-	"plugin-chats",
-	"plugin-channels",
-	"plugin-apps",
-	"plugin-code",
-	"plugin-vaults",
-	"plugin-computers",
-	"plugin-triggers",
-	"plugin-billing",
-	"plugin-settings",
-	"plugin-turn-limiter",
-	"plugin-time-limiter",
-	"plugin-token-limiter",
-	"server-upgrade",
-	"server-development",
-	"server-testing",
-] as const
-const isServerPackage = (name: string) =>
-	Arr.some(serverPackages, (server) => server === name)
+/** True for the name of a contract package. */
+const isContractPackage = (name: string) => Str.endsWith("-contract")(name)
 
-/**
- * True for the name of a plugin package. A plugin package that is missing
- * from `serverPackages` still counts, so the plugin rules see it.
- */
+/** True for the name of a plugin package. */
 const isPluginPackage = (name: string) =>
 	Str.startsWith("plugin-")(name) && name !== "plugin"
+
+/**
+ * True for the name of a server package. The name says the kind of a package,
+ * so a new package needs no list: `server-*`, `*-contract`, `model-providers`
+ * and `plugin-*`. Other packages use a server package only through its
+ * `exports`.
+ */
+const isServerPackage = (name: string) =>
+	Str.startsWith("server-")(name) ||
+	isContractPackage(name) ||
+	name === "model-providers" ||
+	isPluginPackage(name)
 
 /** True for a package that has a layer: the host, a server package, a plugin package, or a base package. */
 const hasLayer = (name: string) =>
@@ -702,17 +680,20 @@ const PackageExports = Schema.fromJsonString(
 )
 
 /** The packages whose `exports` keys the public-entry rule checks: the server packages and the host. */
-const entryPackages = [...serverPackages, "openbot"] as const
-const hasEntries = (name: string) => Arr.contains(entryPackages, name)
+const hasEntries = (name: string) => isServer(name)
 
 /** Reads the `exports` keys of every server package and of the host. */
-const readEntries = Effect.fn("EffectRules.readEntries")(function* () {
+const readEntries = Effect.fn("EffectRules.readEntries")(function* (
+	packages: ReadonlyArray<string>,
+) {
 	const fs = yield* FileSystem.FileSystem
-	const pairs = yield* Effect.forEach(entryPackages, (name) =>
-		fs.readFileString(`packages/${name}/package.json`).pipe(
-			Effect.flatMap(Schema.decodeUnknownEffect(PackageExports)),
-			Effect.map((manifest) => [name, Rec.keys(manifest.exports)] as const),
-		),
+	const pairs = yield* Effect.forEach(
+		Arr.filter(packages, hasEntries),
+		(name) =>
+			fs.readFileString(`packages/${name}/package.json`).pipe(
+				Effect.flatMap(Schema.decodeUnknownEffect(PackageExports)),
+				Effect.map((manifest) => [name, Rec.keys(manifest.exports)] as const),
+			),
 	)
 	return Rec.fromEntries(pairs) satisfies Entries
 })
@@ -733,6 +714,11 @@ const unknownEntry = (target: string, served: Entries): boolean => {
  * source of other packages for test helpers, but a server package only
  * through its public entry. The tests of a server package stay inside it and
  * keep its layer.
+ *
+ * `storage-contract-boundary` and `execution-boundary` judge only `src`. A test
+ * calls the HTTP contract to act as a client, and it may start a cluster or a
+ * local Chat runtime to make the setting it checks. Neither is server work, so
+ * these two rules do not look at tests.
  */
 const entries = (
 	file: string,
@@ -780,7 +766,8 @@ const boundaries = (
 	served: Entries,
 ): ReadonlyArray<Omit<Finding, "file">> => {
 	const source = /^packages\/([^/]+)\/src\//.exec(file)
-	if (source === null) return entries(file, code, path, served)
+	if (source === null || testHelpers.test(file))
+		return entries(file, code, path, served)
 	const owner = source[1]!
 	const server = owner === "openbot" || isServerPackage(owner)
 	return Arr.flatMap(
@@ -842,8 +829,7 @@ const graftPlaces = [
 	/^packages\/server-plugin\/(?:src|test)\//,
 	/^packages\/plugin-[^/]+\/src\/index\.ts$/,
 	/^packages\/openbot\/src\//,
-	/^packages\/server-development\/(?:src|test)\//,
-	/^packages\/server-testing\/test\//,
+	/^packages\/server-testing\/(?:src|test)\//,
 	/^packages\/openbot\/test\//,
 ] as const
 
@@ -974,25 +960,14 @@ const pluginEntry = (
 	]
 }
 
-/**
- * Keys that live in a kernel package, but that a plugin gives. The kernel holds
- * the tag, so the host can name it in the types of its routes. The billing and
- * imported plugins give the service.
- */
-const pluginSlots = [
-	"@openbot-build/server-billing/billing/Host",
-	"@openbot-build/server-execution/imported/ImportedRecords",
-] as const
-
 /** The packages whose keys a plugin may publish: the contract packages, api, domain and protocol. */
 const publishable =
-	/^@openbot-build\/(?:api|domain|protocol|identity-contract|tools-contract|models-contract|apps-contract|conversation-contract)(?:\/|$)/
+	/^@openbot-build\/(?:api|domain|protocol|[a-z]+(?:-[a-z]+)*-contract)(?:\/|$)/
 
 /** True when a key that comes from this import path is a key of the kernel or of a library. */
 const forbiddenKey = (owner: string, source: string): boolean =>
 	!Str.startsWith(".")(source) &&
 	!publishable.test(source) &&
-	!Arr.contains(pluginSlots, source) &&
 	// A package may name its own keys through its own entries.
 	!Str.startsWith(`@openbot-build/${owner}/`)(source) &&
 	source !== `@openbot-build/${owner}`
@@ -1110,6 +1085,607 @@ const kernelKeys = (
 	)
 }
 
+/** The place of a module in its package: `packages/<pkg>/<root>/<path>.ts`. */
+interface ModulePath {
+	readonly pkg: string
+	readonly root: "src" | "test"
+	/** The path below `src`, without `.ts`. A test path keeps `test/` in front. */
+	readonly path: string
+}
+
+/**
+ * The place of a file in its package. The identity-key, package-layout and
+ * unused-entry rules all read it, so the key of a module, its file and its
+ * exports key cannot disagree.
+ */
+const modulePath = (file: string): Option.Option<ModulePath> => {
+	const match = /^packages\/([^/]+)\/(src|test)\/(.+)\.ts$/.exec(file)
+	if (match === null) return Option.none()
+	const [, pkg, root, rest] = match
+	return Option.some({
+		pkg: pkg!,
+		root: root === "src" ? "src" : "test",
+		path: root === "src" ? rest! : `test/${rest!}`,
+	})
+}
+
+/** Each node, with the nodes above it. The nearest one is last. */
+const withAncestors = (
+	node: Node,
+	above: ReadonlyArray<Node> = [],
+): ReadonlyArray<readonly [Node, ReadonlyArray<Node>]> => [
+	[node, above],
+	...Arr.flatMap(children(node), (child) =>
+		withAncestors(child, [...above, node]),
+	),
+]
+
+/** The name of the nearest class or `const` above a node. */
+const declaredName = (above: ReadonlyArray<Node>): Option.Option<string> =>
+	pipe(
+		Arr.findFirst(
+			Arr.reverse(above),
+			(node) =>
+				((node.type === "ClassDeclaration" ||
+					node.type === "ClassExpression") &&
+					node.id !== null &&
+					node.id !== undefined) ||
+				(node.type === "VariableDeclarator" && node.id.type === "Identifier"),
+		),
+		Option.flatMap((node) =>
+			(node.type === "ClassDeclaration" || node.type === "ClassExpression") &&
+			node.id !== null &&
+			node.id !== undefined
+				? Option.some(node.id.name)
+				: node.type === "VariableDeclarator" && node.id.type === "Identifier"
+					? Option.some(node.id.name)
+					: Option.none(),
+		),
+	)
+
+/** The text that turns the deterministicKeys rule off. It is built here, so this file does not hold it. */
+const keysOff = Arr.join(["deterministicKeys", "off"], ":")
+
+/** A key or a brand name, and the call that gives it. */
+interface KeySite {
+	readonly kind: "key" | "brand"
+	readonly argument: Node
+}
+
+const isKeyText = (node: Node) =>
+	(node.type === "Literal" && Predicate.isString(node.value)) ||
+	node.type === "TemplateLiteral"
+
+/**
+ * The key of `X.Service<..>()(key)`, `X.Service<..>(key)`, `X.Reference(key)`
+ * and `Symbol.for(key)`, and the name of `Schema.brand(name)`. Types are
+ * already stripped, so `Context.Service<A, B>()(key)` reads as
+ * `Context.Service()(key)`.
+ */
+const keySite = (node: Node): Option.Option<KeySite> => {
+	if (node.type !== "CallExpression") return Option.none()
+	const first = node.arguments[0]
+	if (first === undefined) return Option.none()
+	const callee = node.callee
+	const name = propertyName(callee)
+	if (
+		callee.type === "CallExpression" &&
+		Equal.equals(propertyName(callee.callee), Option.some("Service"))
+	)
+		return Option.some({ kind: "key", argument: first })
+	if (Equal.equals(name, Option.some("Service")) && isKeyText(first))
+		return Option.some({ kind: "key", argument: first })
+	if (Equal.equals(name, Option.some("Reference")))
+		return Option.some({ kind: "key", argument: first })
+	if (
+		Equal.equals(name, Option.some("for")) &&
+		callee.type === "MemberExpression" &&
+		callee.object.type === "Identifier" &&
+		callee.object.name === "Symbol"
+	)
+		return Option.some({ kind: "key", argument: first })
+	if (Equal.equals(name, Option.some("brand")))
+		return Option.some({ kind: "brand", argument: first })
+	return Option.none()
+}
+
+/**
+ * Checks each identity key of a file against its module path, and finds the
+ * text that turns the deterministicKeys rule off. The detail of a finding is
+ * the expected key, so a fix is a copy.
+ */
+const identityKeys = (
+	file: string,
+	code: string,
+	program: Node,
+): ReadonlyArray<Omit<Finding, "file">> => {
+	const off = Arr.map(
+		Arr.fromIterable(Str.matchAll(new RegExp(keysOff, "g"))(code)),
+		(match): Omit<Finding, "file"> => ({
+			line: Str.split(Str.slice(0, match.index!)(code), "\n").length,
+			rule: "identity-key",
+			detail: `remove ${keysOff}`,
+		}),
+	)
+	return [
+		...off,
+		...Option.match(modulePath(file), {
+			onNone: () => [],
+			onSome: ({ pkg, path }) => {
+				const base = Arr.lastNonEmpty(
+					Str.split(path, "/") as Arr.NonEmptyReadonlyArray<string>,
+				)
+				return Arr.flatMap(withAncestors(program), ([node, above]) =>
+					Option.match(keySite(node), {
+						onNone: (): ReadonlyArray<Omit<Finding, "file">> => [],
+						onSome: ({ kind, argument }) => {
+							const finding = (
+								detail: string,
+							): ReadonlyArray<Omit<Finding, "file">> => [
+								{ line: lineOf(node), rule: "identity-key", detail },
+							]
+							if (kind === "brand") {
+								const brand = new RegExp(
+									`^@openbot-build/${pkg}/[A-Z][A-Za-z0-9]*$`,
+								)
+								return argument.type === "Literal" &&
+									Predicate.isString(argument.value) &&
+									brand.test(argument.value)
+									? []
+									: finding(`@openbot-build/${pkg}/<Name>`)
+							}
+							if (argument.type === "TemplateLiteral") {
+								const start = `@openbot-build/${pkg}/${path}/`
+								return Str.startsWith(start)(
+									argument.quasis[0]?.value.cooked ?? "",
+								)
+									? []
+									: finding(`${start}...`)
+							}
+							return Option.match(declaredName(above), {
+								onNone: () => finding("a key of a class or a const"),
+								onSome: (name) => {
+									const expected = `@openbot-build/${pkg}/${path}${name === base ? "" : `/${name}`}`
+									return argument.type === "Literal" &&
+										argument.value === expected
+										? []
+										: finding(expected)
+								},
+							})
+						},
+					}),
+				)
+			},
+		}),
+	]
+}
+
+/** Blanks out the comments of a file and keeps every place where it is. */
+const withoutComments = (code: string): string => {
+	const comments: Array<Acorn.Comment> = []
+	Arr.fromIterable(
+		Acorn.tokenizer(code, {
+			ecmaVersion: "latest",
+			sourceType: "module",
+			onComment: comments,
+		}),
+	)
+	return Arr.reduce(
+		comments,
+		code,
+		(text, comment) =>
+			Str.slice(0, comment.start)(text) +
+			Str.repeat(comment.end - comment.start)(" ") +
+			Str.slice(comment.end)(text),
+	)
+}
+
+/**
+ * The local names that a file imports from a workspace package or from another
+ * module of its own package, type imports too.
+ */
+const importedNames = (scan: string): HashSet.HashSet<string> =>
+	HashSet.fromIterable(
+		Arr.flatMap(
+			Arr.fromIterable(
+				Str.matchAll(
+					/\bimport\s+(?:type\s+)?([\w$]+\s*,\s*)?(\{[^}]*\}|\*\s*as\s+[\w$]+|[\w$]+)?\s*from\s*["'](?:@openbot-build\/|\.\.?\/)[^"']+["']/g,
+				)(scan),
+			),
+			(match): ReadonlyArray<string> => {
+				const head =
+					match[1] === undefined
+						? []
+						: [Str.trim(Str.replace(",", "")(match[1]))]
+				const clause = match[2] ?? ""
+				if (Str.startsWith("{")(clause))
+					return [
+						...head,
+						...Arr.getSomes(
+							Arr.map(Str.split(Str.slice(1, -1)(clause), ","), (specifier) => {
+								const words = Arr.filter(
+									Str.split(Str.trim(specifier), /\s+/),
+									(word) => word !== "type" && word !== "",
+								)
+								return Arr.last(words)
+							}),
+						),
+					]
+				const star = /^\*\s*as\s+([\w$]+)$/.exec(clause)
+				return [
+					...head,
+					...(star !== null ? [star[1]!] : clause === "" ? [] : [clause]),
+				]
+			},
+		),
+	)
+
+/** The names that a file exports with a declaration, types too. */
+const exportedNames = (scan: string): HashSet.HashSet<string> =>
+	HashSet.fromIterable(
+		Arr.map(
+			Arr.fromIterable(
+				Str.matchAll(
+					/\bexport\s+(?:declare\s+)?(?:abstract\s+)?(?:const|let|function\*?|class|interface|type|enum)\s+([\w$]+)/g,
+				)(scan),
+			),
+			(match) => match[1]!,
+		),
+	)
+
+/** The first name of `a.b.c`, when the whole expression is only names. */
+const rootName = (node: Node): Option.Option<string> =>
+	node.type === "Identifier"
+		? Option.some(node.name)
+		: node.type === "MemberExpression" && !node.computed
+			? rootName(node.object)
+			: Option.none()
+
+/**
+ * Finds a symbol of another module that a module exports again, and a second
+ * name for a symbol. The client bundle entries re-export on purpose.
+ */
+const reexports = (
+	file: string,
+	code: string,
+	program: Node,
+): ReadonlyArray<Omit<Finding, "file">> => {
+	if (
+		!/^packages\/[^/]+\/src\//.test(file) ||
+		/^packages\/client\/src\/[^/]+\.ts$/.test(file)
+	)
+		return []
+	const scan = withoutComments(code)
+	const imported = importedNames(scan)
+	const exported = exportedNames(scan)
+	const lineAt = (index: number) =>
+		Str.split(Str.slice(0, index)(code), "\n").length
+	const aliasOf = (name: string, self: string) =>
+		HashSet.has(imported, name) ||
+		(name !== self && HashSet.has(exported, name))
+	const body = program.type === "Program" ? program.body : []
+	const fromTree = Arr.flatMap(
+		body,
+		(node): ReadonlyArray<Omit<Finding, "file">> => {
+			const found = (detail: string): ReadonlyArray<Omit<Finding, "file">> => [
+				{ line: lineOf(node), rule: "no-reexport", detail },
+			]
+			if (
+				(node.type === "ExportNamedDeclaration" ||
+					node.type === "ExportAllDeclaration") &&
+				node.source !== null &&
+				node.source !== undefined &&
+				Predicate.isString(node.source.value) &&
+				Str.startsWith("@openbot-build/")(node.source.value)
+			)
+				return found(node.source.value)
+			if (node.type !== "ExportNamedDeclaration") return []
+			const specifiers = Arr.flatMap(node.specifiers, (specifier) => {
+				const local =
+					specifier.local.type === "Identifier"
+						? specifier.local.name
+						: String(specifier.local.value)
+				const name = Option.getOrElse(exportedName(specifier), () => local)
+				if (name !== local && name !== "default")
+					return found(`${local} as ${String(name)}`)
+				return node.source === null && HashSet.has(imported, local)
+					? found(local)
+					: []
+			})
+			const declarations =
+				node.declaration?.type === "VariableDeclaration"
+					? Arr.flatMap(node.declaration.declarations, (declarator) => {
+							if (declarator.init === null || declarator.init === undefined)
+								return []
+							const self =
+								declarator.id.type === "Identifier" ? declarator.id.name : ""
+							return Option.match(rootName(declarator.init), {
+								onNone: () => [],
+								onSome: (root) =>
+									aliasOf(root, self)
+										? found(`${self || "{..}"} = ${root}`)
+										: [],
+							})
+						})
+					: []
+			return [...specifiers, ...declarations]
+		},
+	)
+	const typeReexports = Arr.map(
+		Arr.fromIterable(
+			Str.matchAll(
+				/\bexport\s+type\s*\{[^}]*\}\s*from\s*["'](@openbot-build\/[^"']+)["']/g,
+			)(scan),
+		),
+		(match): Omit<Finding, "file"> => ({
+			line: lineAt(match.index!),
+			rule: "no-reexport",
+			detail: match[1]!,
+		}),
+	)
+	const typeAliases = Arr.flatMap(
+		Arr.fromIterable(
+			Str.matchAll(
+				/\bexport\s+type\s+([\w$]+)\s*=\s*([\w$]+)((?:\s*\.\s*[\w$]+)*)\s*(?=[\n;]|$)/g,
+			)(scan),
+		),
+		(match): ReadonlyArray<Omit<Finding, "file">> =>
+			aliasOf(match[2]!, match[1]!)
+				? [
+						{
+							line: lineAt(match.index!),
+							rule: "no-reexport",
+							detail: `type ${match[1]!} = ${match[2]!}${Str.replace(/\s+/g, "")(match[3] ?? "")}`,
+						},
+					]
+				: [],
+	)
+	return [...fromTree, ...typeReexports, ...typeAliases]
+}
+
+/** The packages with a layout rule: every package except the docs site. */
+const PackageManifest = Schema.fromJsonString(
+	Schema.Struct({
+		exports: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+	}),
+)
+
+/**
+ * Checks the layout of each package: flat modules in `src`, folders only in a
+ * contract of several plugins, and each exports key at its own source file.
+ */
+const packageLayout = Effect.fn("EffectRules.packageLayout")(function* (
+	packages: ReadonlyArray<string>,
+	files: ReadonlyArray<string>,
+) {
+	const fs = yield* FileSystem.FileSystem
+	const checked = Arr.filter(
+		packages,
+		(name) => name !== "docs" && name !== "template",
+	)
+	const perPackage = yield* Effect.forEach(checked, (pkg) =>
+		Effect.gen(function* () {
+			const manifest = `packages/${pkg}/package.json`
+			const exports = (yield* fs.exists(manifest))
+				? ((yield* fs
+						.readFileString(manifest)
+						.pipe(Effect.flatMap(Schema.decodeUnknownEffect(PackageManifest))))
+						.exports ?? {})
+				: {}
+			const modules = Arr.getSomes(
+				Arr.map(files, (file) =>
+					pipe(
+						modulePath(file),
+						Option.filter((place) => place.pkg === pkg && place.root === "src"),
+						Option.map((place) => ({ file, path: place.path })),
+					),
+				),
+			)
+			const nested = Arr.filter(modules, ({ path }) => Str.includes("/")(path))
+			const folders = Arr.dedupe(
+				Arr.map(nested, ({ path }) => Str.split(path, "/")[0]!),
+			)
+			const finding = (file: string, detail: string): Finding => ({
+				file,
+				line: 1,
+				rule: "package-layout",
+				detail,
+			})
+			const layout: ReadonlyArray<Finding> =
+				isContractPackage(pkg) && Arr.isReadonlyArrayNonEmpty(folders)
+					? [
+							...(Arr.length(folders) < 2
+								? [finding(manifest, "a contract with one folder must be flat")]
+								: []),
+							...Arr.map(
+								Arr.filter(modules, ({ path }) => !Str.includes("/")(path)),
+								({ file }) =>
+									finding(
+										file,
+										"a contract with folders has no module at the root of src",
+									),
+							),
+							...Arr.map(
+								Arr.filter(
+									nested,
+									({ path }) => Arr.length(Str.split(path, "/")) > 2,
+								),
+								({ file }) => finding(file, "one folder level only"),
+							),
+							...Arr.map(
+								Arr.filter(
+									folders,
+									(folder) => !Arr.contains(packages, `plugin-${folder}`),
+								),
+								(folder) =>
+									finding(
+										manifest,
+										`folder ${folder} is not the id of a plugin package`,
+									),
+							),
+						]
+					: Arr.map(nested, ({ file }) =>
+							finding(file, "move the module to the root of src"),
+						)
+			const clashes = pipe(
+				Arr.groupBy(modules, ({ path }) => Str.toLowerCase(path)),
+				Rec.values,
+				Arr.filter((group) => Arr.length(group) > 1),
+				Arr.map((group) =>
+					finding(
+						group[0]!.file,
+						`names that differ only in case: ${Arr.join(
+							Arr.map(group, ({ path }) => path),
+							", ",
+						)}`,
+					),
+				),
+			)
+			const keys = Arr.flatMap(
+				Rec.toEntries(exports),
+				([key, target]): ReadonlyArray<Finding> => {
+					if (
+						(pkg === "protocol" && key === "./testing") ||
+						(pkg === "server-testing" && key === ".")
+					)
+						return []
+					const path = key === "." ? "index" : Str.slice(2)(key)
+					return target === `./dist/${path}.js` &&
+						Arr.some(modules, (module) => module.path === path)
+						? []
+						: [
+								finding(
+									manifest,
+									`${key} must point to ./dist/${path}.js, built from src/${path}.ts`,
+								),
+							]
+				},
+			)
+			return [...layout, ...clashes, ...keys]
+		}),
+	)
+	return Arr.flatten(perPackage)
+})
+
+/** The import paths in the code blocks of a docs page. */
+const docsImports = (page: string): ReadonlyArray<string> =>
+	Arr.flatMap(
+		Arr.fromIterable(Str.matchAll(/```[^\n]*\n([\s\S]*?)```/g)(page)),
+		(block) =>
+			Arr.map(
+				Arr.fromIterable(
+					Str.matchAll(/["'](@openbot-build\/[^"']+)["']/g)(block[1]!),
+				),
+				(match) => match[1]!,
+			),
+	)
+
+/** The files of the docs pages. */
+const docsPages = (
+	folder: string,
+): Effect.Effect<
+	ReadonlyArray<string>,
+	PlatformError.PlatformError,
+	FileSystem.FileSystem | Path.Path
+> =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem
+		const path = yield* Path.Path
+		const names = yield* fs.readDirectory(folder)
+		const lists = yield* Effect.forEach(names, (name) => {
+			const file = path.join(folder, name)
+			return fs
+				.stat(file)
+				.pipe(
+					Effect.flatMap((info) =>
+						info.type === "Directory"
+							? docsPages(file)
+							: Effect.succeed(Str.endsWith(".mdx")(name) ? [file] : []),
+					),
+				)
+		})
+		return Arr.flatten(lists)
+	})
+
+/**
+ * Finds an exports key of a server package or of the host that no other
+ * package imports and no docs page shows. The `.` key of a plugin stays: the
+ * host loads the plugin by its name.
+ */
+const unusedEntries = Effect.fn("EffectRules.unusedEntries")(function* (
+	files: ReadonlyArray<string>,
+	served: Entries,
+) {
+	const fs = yield* FileSystem.FileSystem
+	const owners = Arr.getSomes(
+		Arr.map(files, (file) => {
+			const owner =
+				/^(?:packages\/([^/]+)|(protocol-test))\/(?:src|test)\//.exec(file)
+			return owner === null
+				? Option.none()
+				: Option.some([file, owner[1] ?? owner[2]!] as const)
+		}),
+	)
+	const uses = yield* Effect.forEach(owners, ([file, owner]) =>
+		Effect.map(fs.readFileString(file), (code) => {
+			const mocked = Arr.map(
+				Arr.fromIterable(
+					Str.matchAll(/\bvi\.mock\(\s*["']([^"']+)["']/g)(code),
+				),
+				(match) => match[1]!,
+			)
+			return Arr.map(
+				[...Arr.map(referencesOf(code), ({ target }) => target), ...mocked],
+				(target) => [target, owner] as const,
+			)
+		}),
+	).pipe(Effect.map(Arr.flatten))
+	const pages = yield* docsPages("packages/docs/content/docs")
+	const shown = yield* Effect.forEach(pages, (page) =>
+		Effect.map(fs.readFileString(page), docsImports),
+	).pipe(Effect.map(Arr.flatten))
+	const used = (pkg: string, specifier: string) =>
+		Arr.contains(shown, specifier) ||
+		Arr.some(uses, ([target, owner]) => owner !== pkg && target === specifier)
+	return Arr.flatMap(Rec.toEntries(served), ([pkg, keys]) =>
+		Arr.getSomes(
+			Arr.map(keys, (key): Option.Option<Finding> => {
+				if (key === "." && isPluginPackage(pkg)) return Option.none()
+				const specifier =
+					key === "."
+						? `@openbot-build/${pkg}`
+						: `@openbot-build/${pkg}/${Str.slice(2)(key)}`
+				return used(pkg, specifier)
+					? Option.none()
+					: Option.some({
+							file: `packages/${pkg}/package.json`,
+							line: 1,
+							rule: "unused-entry",
+							detail: key,
+						})
+			}),
+		),
+	)
+})
+
+/** The project setting that makes the language service fail on a wrong key. */
+const deterministicKeysSetting = Effect.fn(
+	"EffectRules.deterministicKeysSetting",
+)(function* () {
+	const fs = yield* FileSystem.FileSystem
+	const config = yield* fs.readFileString("tsconfig.base.json")
+	return /"deterministicKeys"\s*:\s*"error"/.test(config)
+		? []
+		: [
+				{
+					file: "tsconfig.base.json",
+					line: 1,
+					rule: "identity-key" as const,
+					detail: 'set "deterministicKeys": "error"',
+				},
+			]
+})
+
 const checkFile = Effect.fn("EffectRules.checkFile")(function* (
 	file: string,
 	served: Entries,
@@ -1170,6 +1746,8 @@ const checkFile = Effect.fn("EffectRules.checkFile")(function* (
 			...graftImports(file, code),
 			...pluginEntry(file, code, parsed.success),
 			...kernelKeys(file, parsed.success),
+			...identityKeys(file, code, parsed.success),
+			...reexports(file, code, parsed.success),
 		],
 		(finding): Finding => ({
 			file,
@@ -1222,18 +1800,9 @@ const program = Effect.gen(function* () {
 	const files = yield* Effect.forEach(roots, sourceFiles).pipe(
 		Effect.map(Arr.flatten),
 	)
-	const served = yield* readEntries()
 	const fs = yield* FileSystem.FileSystem
-	// A server or plugin package that is missing from `serverPackages` would
-	// miss the checks of its entries and its layer.
-	const unlisted = Arr.filter(
-		yield* fs.readDirectory("packages"),
-		(name) =>
-			(isPluginPackage(name) ||
-				Str.startsWith("server-")(name) ||
-				Str.endsWith("-contract")(name)) &&
-			!isServerPackage(name),
-	)
+	const packages = yield* fs.readDirectory("packages")
+	const served = yield* readEntries(packages)
 	const codeFindings = yield* Effect.forEach(
 		files,
 		(file) => checkFile(file, served),
@@ -1241,12 +1810,9 @@ const program = Effect.gen(function* () {
 	).pipe(Effect.map(Arr.flatten))
 	const findings: ReadonlyArray<Finding> = [
 		...codeFindings,
-		...Arr.map(unlisted, (name): Finding => ({
-			file: `packages/${name}/package.json`,
-			line: 1,
-			rule: "package-layer",
-			detail: `packages/${name} is not in serverPackages of scripts/effect-rules.ts`,
-		})),
+		...(yield* packageLayout(packages, files)),
+		...(yield* unusedEntries(files, served)),
+		...(yield* deterministicKeysSetting()),
 		...(yield* ServiceContracts.check(
 			Arr.map(files, (file) => path.resolve(file)),
 		)),

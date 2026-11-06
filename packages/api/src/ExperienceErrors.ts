@@ -1,14 +1,9 @@
-import { HttpApiSchema } from "effect/http-api"
 import {
 	ExperienceInputInvalid,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
-} from "@openbot-build/domain"
-export {
-	ExperienceInputInvalid,
-	ExperienceNotFound,
-	ExperienceStorageUnavailable,
-} from "@openbot-build/domain"
+} from "@openbot-build/domain/ExperienceErrors"
+import { HttpApiSchema } from "effect/http-api"
 export const ExperienceErrors = [
 	ExperienceInputInvalid.pipe(HttpApiSchema.status(400)),
 	ExperienceNotFound.pipe(HttpApiSchema.status(404)),

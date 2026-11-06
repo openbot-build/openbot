@@ -45,7 +45,8 @@ description: OpenBot 如何记录失败，以及如何把它们发送到你自�
 `requestId`。用它可以找到请求失败的原因。
 
 Turn 失败时，客户端只得到一条简短的消息。模型错误，比如对模型来说太大的输入，会保留它的消息，代码是
-`model_error`。其他所有失败，比如数据库错误，代码是
+`model_error`。一个限制或预算停止 Turn 时，代码是
+`limited`。在限制改变之前不要再试。其他所有失败，比如数据库错误，代码是
 `internal_error`，消息是固定的文字。完整的原因在一行级别为 `Warn`、消息为
 `A Turn failed` 的日志中。它和错误日志有相同的 `chatId` 和 `turnId`。
 

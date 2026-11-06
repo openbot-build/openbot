@@ -64,5 +64,4 @@ export class BotRecords extends Context.Service<
 			key: string,
 		) => Effect.Effect<void, BotsApi.BotStorageUnavailable>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/bots/BotRecords") {}
+>()("@openbot-build/conversation-contract/bots/BotRecords") {}

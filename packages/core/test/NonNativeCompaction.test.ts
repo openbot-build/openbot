@@ -270,9 +270,7 @@ it.effect(
 										summarySelection.model,
 									)
 									assert.strictEqual(
-										Option.getOrThrow(
-											yield* Effect.serviceOption(ContextWindow.CurrentWindow),
-										).prompt.content.length,
+										(yield* ContextWindow.CurrentWindow).prompt.content.length,
 										0,
 									)
 									const source = yield* json(options.prompt).pipe(Effect.orDie)

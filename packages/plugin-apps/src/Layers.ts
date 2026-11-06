@@ -7,7 +7,7 @@ import {
 	RobotsPolicy,
 } from "@openbot-build/protocol"
 import { Effect, Layer } from "effect"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
 import * as ActionPolicy from "./ActionPolicy.ts"
 import * as AppHost from "./AppHost.ts"
 import * as AuthorizationCommands from "./AuthorizationCommands.ts"
@@ -21,7 +21,6 @@ import * as IndexStore from "./IndexStore.ts"
 import * as IndexWork from "./IndexWork.ts"
 import * as Lifecycle from "./Lifecycle.ts"
 import * as ProtocolStores from "./ProtocolStores.ts"
-import { IndexSources, IndexWorkOptions } from "./Wiring.ts"
 
 /**
  * App connections and authorization. The workflows of Apps come later. It
@@ -43,24 +42,20 @@ export const layerApps = Layer.mergeAll(
 
 /**
  * The App Index, the work that reads App Catalogs into it, and its store. It
- * reads its sources, its work options and its namespace from the references
- * of `Wiring.ts` and `IndexNamespace`.
+ * reads the timing of its work from the config of the plugin (`Timing`), and
+ * its namespace from the instance settings (`instanceNamespace`).
  */
 export const layerIndex = Layer.unwrap(
 	Effect.gen(function* () {
-		const sources = yield* IndexSources
-		const options = yield* IndexWorkOptions
-		const namespace = yield* IndexNamespace
+		const options = (yield* IndexWork.Timing) ?? {}
+		const namespace = yield* instanceNamespace
 		const indexing = PublicIndexing.layerInspection.pipe(
 			Layer.provide(CatalogDiscovery.layerRules),
 			Layer.provide(RobotsPolicy.layer),
 		)
 		const work = IndexWork.layer(options).pipe(Layer.provide(indexing))
 		return Layer.merge(
-			AppIndex.layer({
-				simulated: namespace === "development",
-				...(sources === undefined ? {} : { providers: sources }),
-			}),
+			AppIndex.layer({ simulated: namespace === "development" }),
 			work,
 		).pipe(Layer.provideMerge(IndexStore.layer))
 	}),

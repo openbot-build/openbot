@@ -1,18 +1,16 @@
-import {
-	OpenBotApi,
-	type OrganizationApi,
-	type VaultsApi,
-} from "@openbot-build/api"
+import type { AuditAction } from "@openbot-build/domain/Organizations"
+import type { SecretProvider, Vault } from "@openbot-build/domain/Vaults"
+import { type Caller, Identity } from "@openbot-build/domain/Identity"
+import { OpenBotApi } from "@openbot-build/api"
 
-import { type Caller, Identity } from "@openbot-build/domain"
 import { Effect, type Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import {
 	secretProviderKey,
 	vaultKey,
-} from "@openbot-build/identity-contract/audit/Resources"
+} from "@openbot-build/domain/AuditResources"
 import { SecretProviders } from "./SecretProviders.ts"
 import { Vaults } from "@openbot-build/apps-contract/vaults/Vaults"
 import { unavailable } from "./Vaults.ts"
@@ -37,8 +35,8 @@ export const layerProviders = HttpApiBuilder.group(
 			const audit = yield* AuditLog
 			const record = (
 				caller: Caller,
-				action: OrganizationApi.AuditAction,
-				provider: Pick<VaultsApi.SecretProvider, "id" | "owner">,
+				action: AuditAction,
+				provider: Pick<SecretProvider, "id" | "owner">,
 				details: Schema.JsonObject,
 			) =>
 				audit
@@ -108,8 +106,8 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "vaults", (handlers) =>
 		const audit = yield* AuditLog
 		const record = (
 			caller: Caller,
-			action: OrganizationApi.AuditAction,
-			vault: Pick<VaultsApi.Vault, "id" | "owner">,
+			action: AuditAction,
+			vault: Pick<Vault, "id" | "owner">,
 			details: Schema.JsonObject,
 		) =>
 			audit
@@ -134,7 +132,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "vaults", (handlers) =>
 		const recordIn = (
 			caller: Caller,
 			vaultId: string,
-			action: OrganizationApi.AuditAction,
+			action: AuditAction,
 			details: Schema.JsonObject,
 		) =>
 			Effect.flatMap(vaults.get(caller, vaultId), (vault) =>

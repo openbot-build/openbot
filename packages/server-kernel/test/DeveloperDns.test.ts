@@ -6,7 +6,7 @@ import { Array as Arr, Effect } from "effect"
 import {
 	DomainControl,
 	layer,
-} from "@openbot-build/server-kernel/apps/DomainControl"
+} from "@openbot-build/server-kernel/DomainControl"
 
 // The test talks to a real UDP server, so it uses the real clock.
 it.layer(layer, { excludeTestServices: true })((it) => {

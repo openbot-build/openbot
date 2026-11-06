@@ -1,16 +1,14 @@
-import * as Imported from "@openbot-build/server-execution/imported/Executions"
-import * as ImportedHistory from "@openbot-build/apps-contract/apps/ImportedHistory"
+import type { Caller } from "@openbot-build/domain/Identity"
+import { ExperienceNotFound } from "@openbot-build/domain/ExperienceErrors"
 import { AppCommands } from "@openbot-build/apps-contract/apps/AppCommands"
 import { CallInput, Submitted } from "./CodeCall.ts"
 import { type Chat } from "@openbot-build/core"
 import {
 	Authorization,
-	type Caller,
 	Execution,
-	ExperienceNotFound,
 	CodeRuns as Domain,
 } from "@openbot-build/domain"
-import { and, asc, eq, or } from "drizzle-orm"
+import { and, asc, eq } from "drizzle-orm"
 import {
 	Array as Arr,
 	Effect,
@@ -30,7 +28,7 @@ import {
 import {
 	Store,
 	transactionFailures,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import { CodeCommands } from "@openbot-build/apps-contract/code/CodeCommands"
 
@@ -38,7 +36,6 @@ import { CodeCommands } from "@openbot-build/apps-contract/code/CodeCommands"
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const checks = yield* Check.make
-	const history = yield* ImportedHistory.make
 	const work = yield* CodeCommands
 	const apps = yield* AppCommands
 	const store = yield* Store
@@ -48,11 +45,7 @@ export const make = Effect.gen(function* () {
 	) {
 		const found = Arr.head(
 			yield* db
-				.select({
-					id: executions.id,
-					namespace: executions.namespace,
-					workflow: executions.workflow,
-				})
+				.select({ id: executions.id, namespace: executions.namespace })
 				.from(executions)
 				.where(
 					and(
@@ -69,16 +62,14 @@ export const make = Effect.gen(function* () {
 			namespace: found.value.namespace,
 			id: Execution.Id.make(found.value.id),
 		}
-		const old = found.value.workflow === Imported.workflowName
-		if (!old) yield* work.authorize(key, caller, "read")
-		return { key, old }
+		yield* work.authorize(key, caller, "read")
+		return key
 	}, transactionFailures)
 	const read = Effect.fn("CodeQueries.read")(function* (
 		caller: Caller,
 		id: Domain.CodeRunId,
 	) {
-		const { key, old } = yield* locate(caller, id)
-		if (old) return yield* history.code(key, caller)
+		const key = yield* locate(caller, id)
 		const calls = yield* Effect.forEach(
 			Arr.filter(yield* store.calls(key), (call) =>
 				Str.startsWith("code:")(call.step),
@@ -162,14 +153,7 @@ export const make = Effect.gen(function* () {
 					eq(executions.namespace, ownerKey(caller)),
 					eq(executions.organizationId, caller.organizationId),
 					eq(executions.resourceKind, "CodeRun"),
-					or(
-						eq(toolExecutions.chat, chat),
-						and(
-							eq(executions.workflow, Imported.workflowName),
-							eq(executions.contextKind, "Chat"),
-							eq(executions.contextId, chat),
-						),
-					),
+					eq(toolExecutions.chat, chat),
 				),
 			)
 			.orderBy(asc(executions.createdAt), asc(executions.id))

@@ -1,14 +1,14 @@
+import { BotId as BotIdModel } from "@openbot-build/domain/BotId"
+import type { Auth } from "@openbot-build/domain/Authorization"
+import type { Caller } from "@openbot-build/domain/Identity"
 import type { Config } from "@openbot-build/core"
 import { Bots as BotsApi } from "@openbot-build/domain"
-import { type Caller } from "@openbot-build/domain"
 import { Array as Arr, Clock, Effect, Layer, Option, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
-import {
-	botResource,
-	rootOf,
-} from "@openbot-build/identity-contract/authorization/Resources"
+import { rootOf } from "@openbot-build/domain/AuditResources"
+import { botResource } from "@openbot-build/identity-contract/authorization/Resources"
 import {
 	BotRecords,
 	type Keys,
@@ -21,16 +21,9 @@ import {
 	type Subject,
 	Bots,
 } from "@openbot-build/conversation-contract/bots/Bots"
-export { Bots } from "@openbot-build/conversation-contract/bots/Bots"
-export type {
-	Failure,
-	Action,
-	Subject,
-} from "@openbot-build/conversation-contract/bots/Bots"
-
 /** A person who uses a shared Bot, with the shared Bot. */
 const Membership = Schema.Struct({
-	bot: BotsApi.BotId,
+	bot: BotIdModel,
 	...BotsApi.BotMember.fields,
 })
 
@@ -51,7 +44,7 @@ const keys = (organizationId: string, bot: Bot): Keys<RecordStatus> => ({
 export const make: Effect.Effect<
 	typeof Bots.Service,
 	never,
-	BotRecords | SecureRandom.SecureRandom | Check.Services
+	BotRecords | SecureRandom.SecureRandom | Auth
 > = Effect.gen(function* () {
 	const records = yield* BotRecords
 	const crypto = yield* SecureRandom.SecureRandom
@@ -59,7 +52,7 @@ export const make: Effect.Effect<
 	const newId = crypto.uuidV7({ format: "bytes" }).pipe(
 		// A platform without secure random numbers is broken.
 		Effect.orDie,
-		Effect.map((uuid) => BotsApi.BotId.make("bot_" + Hex.encode(uuid))),
+		Effect.map((uuid) => BotIdModel.make("bot_" + Hex.encode(uuid))),
 	)
 	const bots = records.collection("bot", BotsApi.Bot, RecordStatus)
 	/** The members of shared Bots, kept in the organization of each shared Bot. */

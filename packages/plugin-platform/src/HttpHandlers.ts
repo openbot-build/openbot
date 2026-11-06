@@ -1,54 +1,57 @@
+import { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import {
+	PlatformUnavailable,
+	OrganizationNotFound,
+} from "@openbot-build/domain/Platform"
+import { SettingsInvalid } from "@openbot-build/domain/Settings"
+import {
+	ModelProviderNotFound,
+	ModelNotFound,
+	ModelProviderInvalid,
+} from "@openbot-build/domain/Models"
+import { type AccountCaller, Account } from "@openbot-build/domain/Identity"
 import { Schema } from "effect"
 import { CreditConflict } from "@openbot-build/domain/Billing"
 import { Access } from "@openbot-build/identity-contract/access/Access"
-import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
+import { ProviderOAuth } from "@openbot-build/models-contract/ProviderOAuth"
 import { Mail } from "@openbot-build/identity-contract/mail/Mail"
 import { Model, Provider } from "@openbot-build/core"
 import { Redacted } from "effect"
-import {
-	ModelProvidersApi,
-	OpenBotApi,
-	PlatformApi,
-	Settings as SettingsApi,
-} from "@openbot-build/api"
+import { OpenBotApi } from "@openbot-build/api"
 
-import { Account, type AccountCaller } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option, Stream, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import {
 	Billing,
 	type BillingStorageError,
 	type OrganizationMissing,
-} from "@openbot-build/server-billing/billing/Billing"
+} from "@openbot-build/server-billing/Billing"
 import {
 	organizationKey,
 	platformKey,
-} from "@openbot-build/identity-contract/audit/Resources"
-import { checkUnused } from "@openbot-build/models-contract/models/ProviderUseHttp"
+} from "@openbot-build/domain/AuditResources"
+import { checkUnused } from "@openbot-build/models-contract/ProviderUseHttp"
 import {
 	ModelProviders,
 	platformOwner,
 	view,
-} from "@openbot-build/models-contract/models/ModelProviders"
+} from "@openbot-build/models-contract/ModelProviders"
 import {
 	Models,
 	view as modelView,
-} from "@openbot-build/models-contract/models/Models"
+} from "@openbot-build/models-contract/Models"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
-import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import {
-	filesOf,
-	type PlatformDocument,
-} from "@openbot-build/server-kernel/settings/Documents"
+import { hint, Secrets } from "@openbot-build/server-kernel/Secrets"
+import { type PlatformDocument } from "@openbot-build/server-kernel/Documents"
 import {
 	bindings,
 	changeFiles,
 	changeMail,
-} from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as Views from "@openbot-build/server-kernel/settings/Views"
+} from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import * as Views from "@openbot-build/server-kernel/Views"
 import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
 
 /** Platform actions go to this audit log, apart from the logs of organizations. */
@@ -56,7 +59,7 @@ export const platformLog = "platform"
 
 /** Logs an inside failure, then fails with `PlatformUnavailable` in its place. */
 const unavailable = (message: string) =>
-	Failures.replace(message, () => PlatformApi.PlatformUnavailable.make({}))
+	Failures.replace(message, () => PlatformUnavailable.make({}))
 /**
  * The same for one failure that `Effect.catchTag` takes out, so the other
  * failures, such as a missing organization, keep their meaning.
@@ -66,7 +69,7 @@ const unavailableFailure =
 	<E>(error: E) =>
 		Effect.fail(error).pipe(unavailable(message))
 
-const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
+export const layer = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 	Effect.gen(function* () {
 		const settings = yield* Settings
 		const access = yield* Access
@@ -87,9 +90,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 			effect.pipe(
 				Effect.catchTags({
 					OrganizationMissing: () =>
-						Effect.fail(
-							PlatformApi.OrganizationNotFound.make({ organizationId }),
-						),
+						Effect.fail(OrganizationNotFound.make({ organizationId })),
 					BillingStorageError: unavailableFailure(message),
 				}),
 			)
@@ -115,15 +116,13 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 				})
 				.pipe(unavailable("Could not write the audit log"))
 		const current = settings.platform.pipe(
-			Effect.flatMap(
-				Effect.fromOption(() => SettingsApi.SettingsUnavailable.make({})),
-			),
+			Effect.flatMap(Effect.fromOption(() => SettingsUnavailable.make({}))),
 		)
 		const findProvider = (providerId: string) =>
 			providers.get(platformOwner, providerId).pipe(
 				Effect.flatMap(
 					Effect.fromOption(() =>
-						ModelProvidersApi.ModelProviderNotFound.make({
+						ModelProviderNotFound.make({
 							providerId: Provider.Id.make(providerId),
 						}),
 					),
@@ -133,7 +132,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 			models.get(platformOwner, modelId).pipe(
 				Effect.flatMap(
 					Effect.fromOption(() =>
-						ModelProvidersApi.ModelNotFound.make({
+						ModelNotFound.make({
 							modelId: Model.Id.make(modelId),
 						}),
 					),
@@ -238,7 +237,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 								.validateProvider(payload.registration.provider)
 								.pipe(
 									Failures.replace("The role mappings are invalid.", () =>
-										SettingsApi.SettingsInvalid.make({
+										SettingsInvalid.make({
 											message: "The role mappings are invalid.",
 										}),
 									),
@@ -283,11 +282,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 									const files =
 										filesInput === undefined
 											? document.files
-											: yield* changeFiles(
-													secrets,
-													filesOf(document),
-													filesInput,
-												)
+											: yield* changeFiles(secrets, document.files, filesInput)
 									const mail =
 										mailInput === undefined
 											? document.mail
@@ -307,7 +302,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 									Effect.catchTag("SecretStorageError", (error) =>
 										Effect.fail(error).pipe(
 											Failures.replace("Could not seal a platform secret", () =>
-												SettingsApi.SettingsUnavailable.make({}),
+												SettingsUnavailable.make({}),
 											),
 										),
 									),
@@ -339,7 +334,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 						return Views.platform(updated)
 					}).pipe(
 						Effect.catchTag("SetupRequired", () =>
-							Effect.fail(SettingsApi.SettingsUnavailable.make({})),
+							Effect.fail(SettingsUnavailable.make({})),
 						),
 					),
 				{ uninterruptible: true },
@@ -538,7 +533,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 						if (
 							!Arr.some(provider.models, (link) => link.model === payload.model)
 						)
-							return yield* ModelProvidersApi.ModelProviderInvalid.make({
+							return yield* ModelProviderInvalid.make({
 								message: "The provider does not offer this model.",
 							})
 						const price = yield* billing
@@ -626,5 +621,3 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 			)
 	}),
 )
-
-export const layer = group

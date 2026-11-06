@@ -1,4 +1,4 @@
-import { type DelegationsApi } from "@openbot-build/api"
+import type { DelegationId } from "@openbot-build/domain/DelegationId"
 import { type Execution } from "@openbot-build/domain"
 import { Effect, type PlatformError } from "effect"
 import { SecureRandom } from "effect/crypto"
@@ -7,7 +7,7 @@ import { prepare, type Command } from "./Command.ts"
 
 /** A cancel receipt starts resource release. Follow its execution to the end. */
 export const cancel = Effect.fn("Delegations.cancel")(function* (
-	delegationId: DelegationsApi.DelegationId,
+	delegationId: DelegationId,
 	commandKey?: Execution.CommandKey,
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,

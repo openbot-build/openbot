@@ -2,9 +2,8 @@ import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Execution } from "@openbot-build/domain"
 import { Array as Arr, Config, Effect, Layer, Schedule } from "effect"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Permits from "@openbot-build/server-execution/execution/Permits"
-import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
+import * as Permits from "@openbot-build/server-execution/Permits"
+import * as Recovery from "@openbot-build/server-execution/Recovery"
 import * as Fixture from "./ExecutionPermitFixture.ts"
 
 /** A process with its own permit service and scope. The parent sets each fence. */
@@ -113,7 +112,7 @@ const services = Fixture.services.pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
 			Effect.map(Config.Redacted("TEST_DATABASE_URL"), (databaseUrl) =>
-				DatabasePostgres.layer({ databaseUrl }),
+				PgClient.layer({ url: databaseUrl }),
 			),
 		),
 	),

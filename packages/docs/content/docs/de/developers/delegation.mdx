@@ -148,7 +148,7 @@ jedes Ergebnis für sich zurück, sobald es fertig ist.
 Eine Person kann in einem beendeten Task-Chat eine neue Runde starten. Der
 Nachrichtenbefehl legt eine neue Delegation und einen neuen Turn in derselben
 Datenbanktransaktion an. Ein Versuch mit demselben Befehlsschlüssel gibt
-denselben Turn zurück. Die alte Arbeit behält ihr Ergebnis. Die neue Runde
+denselben Turn zurück. Die beendete Arbeit behält ihr Ergebnis. Die neue Runde
 behält die Grenzen des ersten Aufrufers und Tokens sowie aller späteren
 Eingaben. Vor jedem neuen externen Aufruf prüft OpenBot die aktuellen Rechte. Am
 Ende bekommt auch der übergeordnete Chat das Ergebnis.
@@ -173,11 +173,11 @@ Ein Bot gibt die Grenzen in `limits` von `openbot_delegate`, zum Beispiel
 `{ "timeMs": 1800000, "steps": 40 }`. Sie haben dieselbe Form wie die `limits`
 der Arbeit, die du [liest](#die-arbeit-beobachten): `timeMs` von 1 Sekunde bis
 30 Tage, und `steps` und `budgetMicros` ab 1. Arbeit von einem
-[Trigger](/de/developers/triggers) und Arbeit von vor den Grenzen haben keine
-eigenen Grenzen. Sie bekommen die Zeitgrenze `delegationTimeLimitMs` der
-[Organization](/de/organization#einstellungen) und keine anderen Grenzen. Ein
-Modell ohne Preis kostet 0, also verbraucht es nie ein Budget. Siehe
-[Nutzung](/de/usage#preise).
+[Trigger](/de/developers/triggers) hat keine eigenen Grenzen. Arbeit von einem
+Bot, der keine `limits` gibt, hat auch keine. Beide bekommen die Zeitgrenze
+`delegationTimeLimitMs` der [Organization](/de/organization#einstellungen) und
+keine anderen Grenzen. Ein Modell ohne Preis kostet 0, also verbraucht es nie
+ein Budget. Siehe [Nutzung](/de/usage#preise).
 
 OpenBot prüft die Schritte und das Budget vor jedem Modellschritt. Die Zeit
 prüft es am Ende der Zeit, auch wenn gerade kein Schritt läuft. Dann:
@@ -264,8 +264,7 @@ einem [Trigger](/de/developers/triggers) hat `trigger` und einen `parent` ohne
 `limits` enthält die Grenzen: `timeMs`, und `steps` und `budgetMicros`, wenn die
 Arbeit sie hat. Ein Budget ist in Mikro-USD: ein US-Dollar sind 1.000.000
 Mikro-USD. `usage` ist, was die Arbeit seit ihrem Start genutzt hat. Ihr
-`costMicros` sind die Kosten, als OpenBot sie zuletzt geprüft hat. Arbeit von
-vor den Grenzen hat keines der beiden Felder.
+`costMicros` sind die Kosten, als OpenBot sie zuletzt geprüft hat.
 
 Pausierte Arbeit hat `pause`:
 

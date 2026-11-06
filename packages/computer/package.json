@@ -19,6 +19,7 @@
 		"@effect/platform-node": "4.1.2",
 		"@lydell/node-pty": "1.2.0-beta.18",
 		"@openbot-build/api": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
 		"effect": "4.1.2"
 	},
 	"devDependencies": {

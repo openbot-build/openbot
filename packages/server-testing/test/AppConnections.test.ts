@@ -1,9 +1,15 @@
-import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
+import { FetchHttpClient } from "effect/http"
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
+import { Identity } from "@openbot-build/domain/Identity"
+import type { Caller } from "@openbot-build/domain/Identity"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
+import * as IndexCommandsFixture from "../src/IndexCommandsFixture.ts"
 import { IndexWork } from "@openbot-build/apps-contract/apps/IndexWork"
 import { assert, layer } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
-import { ConnectionsApi as Api, Identity } from "@openbot-build/api"
-import type { Caller } from "@openbot-build/domain"
+import { ConnectionsApi as Api } from "@openbot-build/api"
 import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
 import {
 	AppConnections,
@@ -28,20 +34,17 @@ import {
 } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Governance from "@openbot-build/plugin-apps/Governance"
-import * as OrganizationFixture from "./OrganizationFixture.ts"
+import * as OrganizationFixture from "../src/OrganizationFixture.ts"
 import * as Connections from "@openbot-build/plugin-apps/Connections"
 import * as AppHost from "@openbot-build/plugin-apps/AppHost"
 import * as ProtocolStores from "@openbot-build/plugin-apps/ProtocolStores"
-import { Probe } from "@openbot-build/plugin-apps/Probe"
+import { Probe } from "@openbot-build/apps-contract/apps/Probe"
 import { eq } from "drizzle-orm"
 import { appRecords } from "@openbot-build/server-database/Schema"
 import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import { DatabasePostgres as Database } from "@openbot-build/openbot"
-import * as Postgres from "./PostgresTest.ts"
-import * as Fixture from "./AppFixture.ts"
-import * as BrowserHost from "./BrowserHost.ts"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as Fixture from "../src/AppFixture.ts"
 import * as Db from "@openbot-build/server-database/Database"
 
 const encryptionKey = Redacted.make("test:" + Str.repeat(32)("11"))
@@ -59,10 +62,15 @@ const asOwner = <A, E, R>(operation: Effect.Effect<A, E, R>, owner = alice) =>
 	Effect.provideService(operation, Identity, owner)
 const toJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect("App checks and saves the same card after one refresh", () =>
 		Effect.gen(function* () {
-			const database = yield* Postgres.start
+			const database = yield* TestDatabase.start
 			const publisher = yield* Fixture.start()
 			const source = yield* Discovery.Discovery.pipe(
 				Effect.provide(publisher.discovery),
@@ -83,7 +91,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				Layer.provide(CatalogDiscovery.layerRules),
 				Layer.provide(AppConnections.layerConnectionScopes),
 				Layer.provide(
-					Layer.succeed(AppHost.AppNetwork, {
+					Layer.succeed(AppNetwork, {
 						layer: () =>
 							Layer.effect(
 								Network.Network,
@@ -107,12 +115,12 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				),
 				Layer.provide(Secrets.layer(encryptionKey)),
 				Layer.provideMerge(
-					Database.layer({ databaseUrl: Redacted.make(database.url) }),
+					PgClient.layer({ url: Redacted.make(database.url) }),
 				),
 				Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 			)
 			yield* Effect.gen(function* () {
-				yield* Database.migrate
+				yield* Migrations.migrate
 				const host = (yield* AppHost.AppHost).bind(
 					ownerKey(alice),
 					Client.InvocationPolicy.of({ check: () => Effect.void }),
@@ -148,11 +156,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 		"confirmed App connections save encrypted configuration, reject changes, and keep accounts apart",
 		() =>
 			Effect.gen(function* () {
-				const database = yield* Postgres.start
+				const database = yield* TestDatabase.start
 				const publisher = yield* Fixture.start()
 				const storage = Layer.merge(
 					Secrets.layer(encryptionKey),
-					Database.layer({ databaseUrl: Redacted.make(database.url) }),
+					PgClient.layer({ url: Redacted.make(database.url) }),
 				).pipe(Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)))
 				const app = Connections.layer.pipe(
 					Layer.provide(
@@ -173,7 +181,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					Layer.provideMerge(storage),
 				)
 				const id = yield* Effect.gen(function* () {
-					yield* Database.migrate
+					yield* Migrations.migrate
 					const sql = yield* SqlClient.SqlClient
 					const connections = yield* Connections.Connections
 					const draft = yield* asOwner(
@@ -418,13 +426,13 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 		"connection limits stay atomic across concurrent database pools and storage failures stay failures",
 		() =>
 			Effect.gen(function* () {
-				const database = yield* Postgres.start
+				const database = yield* TestDatabase.start
 				const storage = () =>
 					IndexCommandsFixture.layer.pipe(
 						Layer.provideMerge(
 							Layer.merge(
 								Secrets.layer(encryptionKey),
-								Database.layer({ databaseUrl: Redacted.make(database.url) }),
+								PgClient.layer({ url: Redacted.make(database.url) }),
 							),
 						),
 						Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
@@ -432,7 +440,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// Each build has its own database pool.
 				const first = yield* Layer.build(storage())
 				const second = yield* Layer.build(storage())
-				yield* Effect.provideContext(Database.migrate, first)
+				yield* Effect.provideContext(Migrations.migrate, first)
 				const save = (services: typeof first, id: string) =>
 					Effect.gen(function* () {
 						const db = yield* Db.make

@@ -8,12 +8,18 @@ import {
 	Layer,
 	Option,
 	Path,
+	Record as Rec,
+	Result,
 	Schema,
 } from "effect"
-import { Entry } from "@graftland/loader"
-import * as InspectPlugins from "../src/app/InspectPlugins.ts"
-import * as PluginsFile from "../src/app/PluginsFile.ts"
-import * as Preset from "../src/app/Preset.ts"
+import * as InspectPlugins from "../src/InspectPlugins.ts"
+import * as PluginsFile from "../src/PluginsFile.ts"
+import * as Preset from "../src/Preset.ts"
+
+/** The ids of the preset plugins that are off until the plugins file turns them on. */
+const offByDefault = Arr.filterMap(Preset.entries, (entry) =>
+	entry.disabled === true ? Result.succeed(entry.id) : Result.failVoid,
+)
 
 /** Writes a plugins file in a new folder that goes away with the scope. */
 const writeFile = (text: string) =>
@@ -40,20 +46,20 @@ layer(withSecret)((it) => {
 			assert.strictEqual(report.file, null)
 			assert.deepStrictEqual(
 				Arr.map(report.entries, (entry) => entry.id),
-				[...Preset.ids],
+				Rec.keys(Preset.plugins),
 			)
 			assert.isTrue(
 				Arr.every(
 					report.entries,
 					(entry) =>
 						entry.source === "preset" &&
-						entry.disabled === Arr.contains(Preset.offByDefault, entry.id) &&
+						entry.disabled === Arr.contains(offByDefault, entry.id) &&
 						entry.changed.length === 0,
 				),
 			)
 			assert.strictEqual(
 				report.manifestHash,
-				yield* PluginsFile.manifestHash(PluginsFile.presetEntries),
+				yield* PluginsFile.manifestHash(Preset.entries),
 			)
 		}),
 	)
@@ -71,7 +77,7 @@ layer(withSecret)((it) => {
 						Arr.findFirst(report.entries, (entry) => entry.id === "triggers"),
 						Option.some<InspectPlugins.ReportEntry>({
 							id: "triggers",
-							name: Preset.nameOf("triggers"),
+							name: Preset.plugins["triggers"].name,
 							disabled: true,
 							source: "preset",
 							changed: ["disabled"],
@@ -100,7 +106,7 @@ layer(withSecret)((it) => {
 					Arr.findFirst(report.entries, (entry) => entry.id === "turn-limiter"),
 					Option.some<InspectPlugins.ReportEntry>({
 						id: "turn-limiter",
-						name: Preset.nameOf("turn-limiter"),
+						name: Preset.plugins["turn-limiter"].name,
 						disabled: false,
 						config: { maxSteps: 40 },
 						source: "preset",
@@ -112,12 +118,12 @@ layer(withSecret)((it) => {
 	)
 
 	it.effect(
-		"config on a preset plugin is refused, and no value of !env shows",
+		"config on a preset plugin is refused, and no value of the file shows",
 		() =>
 			Effect.scoped(
 				Effect.gen(function* () {
 					const file = yield* writeFile(
-						"- id: models\n  config:\n    token: !env OPENBOT_TOKEN\n",
+						`- id: models\n  config:\n    token: ${secret}\n`,
 					)
 					const error = yield* Effect.flip(
 						InspectPlugins.report(Option.some(file)),
@@ -160,7 +166,7 @@ layer(withSecret)((it) => {
 	)
 
 	it.effect(
-		"the shown config has the name of an !env variable, not its value",
+		"the shown config redacts strings and values that are not plain data",
 		() =>
 			Effect.sync(() => {
 				const entries = [
@@ -168,17 +174,16 @@ layer(withSecret)((it) => {
 						id: "probe",
 						name: "probe-plugin",
 						config: {
-							token: new Entry.Env({ name: "OPENBOT_TOKEN" }),
+							token: secret,
 							other: new (class Other {})(),
 						},
 					},
 				]
 				const shown = PluginsFile.canonical(PluginsFile.show(entries))
-				assert.include(shown, '{"env":"OPENBOT_TOKEN"}')
+				assert.include(shown, '"token":"<redacted>"')
 				// A value that is not plain data is redacted too.
 				assert.include(shown, '"other":"<redacted>"')
 				assert.notInclude(shown, secret)
-				assert.notInclude(PluginsFile.canonical(entries), secret)
 			}),
 	)
 })

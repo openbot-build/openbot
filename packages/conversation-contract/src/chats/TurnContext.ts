@@ -1,9 +1,6 @@
+import type { ExecutionIdentity } from "@openbot-build/domain/Identity"
 import type { Chat, Turn } from "@openbot-build/core"
-import {
-	Bots as BotDomain,
-	Execution,
-	type ExecutionIdentity,
-} from "@openbot-build/domain"
+import { Bots as BotDomain, Execution } from "@openbot-build/domain"
 import { Context, Effect, Schema } from "effect"
 import { Work } from "../capabilities/Work.ts"
 import { type OrganizationUnavailable } from "@openbot-build/identity-contract/organization/Organization"
@@ -34,5 +31,4 @@ export class TurnContext extends Context.Service<
 			readonly turn: Turn.Id
 		}) => Effect.Effect<typeof Work.Service, Failure>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/chats/TurnContext") {}
+>()("@openbot-build/conversation-contract/chats/TurnContext") {}

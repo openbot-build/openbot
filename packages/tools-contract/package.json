@@ -10,13 +10,11 @@
 		"src"
 	],
 	"exports": {
-		"./chats/HostTools": "./dist/chats/HostTools.js",
-		"./chats/ToolDefinitions": "./dist/chats/ToolDefinitions.js",
-		"./plugins/Registration": "./dist/plugins/Registration.js",
-		"./plugins/ToolEntry": "./dist/plugins/ToolEntry.js",
-		"./plugins/ToolJson": "./dist/plugins/ToolJson.js",
-		"./plugins/work/Todos": "./dist/plugins/work/Todos.js",
-		"./computers/ComputerFiles": "./dist/computers/ComputerFiles.js"
+		"./HostTools": "./dist/HostTools.js",
+		"./ToolDefinitions": "./dist/ToolDefinitions.js",
+		"./Registration": "./dist/Registration.js",
+		"./ToolEntry": "./dist/ToolEntry.js",
+		"./ToolJson": "./dist/ToolJson.js"
 	},
 	"scripts": {
 		"build": "tsdown",

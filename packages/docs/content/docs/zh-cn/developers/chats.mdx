@@ -110,9 +110,9 @@ OpenBot 保存命令后返回 `202`：
 回执包含已保存的执行和 Turn，即使输入仍需等待。相同的命令键和内容返回相同回执。相同键配上不同内容会返回
 `409` 和 `ExecutionKeyConflict`。
 
-新消息命令包含 `inputId`。它指向 `ChatView.queuedInputs`
+消息命令包含 `inputId`。它指向 `ChatView.queuedInputs`
 中的一条已保存输入；Bot 读到输入后，同一 ID 会成为
-`ChatItem.id`。较早保存的命令可能没有该字段，OpenBot 不会为它们补造输入 ID。消息命令保存的
+`ChatItem.id`。发给任务 Chat 的消息可能没有该字段。OpenBot 不会补造输入 ID。消息命令保存的
 `Checkpoint` 也包含这个输入 ID。 `receipt.sequence`
 是执行事件日志中的位置，不是 Item 序号或 Chat 修订号。
 
@@ -324,6 +324,15 @@ Turn 记录包含
 `id`、`seq`（它在历史中的位置）、`content` 和
 `origin`（`chat`、`turn`、`step`，通知还有 `notice`）。
 
+`Failed` 状态有一个 `message` 和一个 `code`。Turn 的 response 在 `error.code`
+中有同样的代码：
+
+| 代码             | Turn 为什么失败                                             |
+| ---------------- | ----------------------------------------------------------- |
+| `model_error`    | 模型没有给出完整的回答。                                    |
+| `limited`        | 一个限制或预算停止了 Turn。只有在限制改变之后才能再试一次。 |
+| `internal_error` | 其他任何失败。日志中有原因。                                |
+
 要跟踪工作，请使用已保存的 `executionId`。事件带有序号。断线后把最后一个序号作为
 `afterSequence`
 发送。关闭流只停止观察。取消工作需要提交明确的执行命令。旧的 Chat 等待路由和本地
@@ -474,8 +483,8 @@ Bot 可以用工具 `openbot_remind` 之后再回到某件事上。它给出 `se
 ## 模型和执行模式
 
 新的 Chat（包括评审 Chat）使用 Bot 的
-`model`。测试或开发平台可以在 Bot 没有模型时提供
-`builtinModels.defaultModel`。关联 Bot 的模型在接收组织中不可用时，也使用这个默认值。没有有效模型时，创建失败，不留下 Chat 或 Turn。实时 Chat 使用专用的实时模型目录。已保存的评审在重放时保留模型；每次新调用仍检查当前模型权限。`GET /v1/chats/:chatId/models`
+`model`。测试或开发平台可以在 Bot 没有模型时提供 `BuiltinModels` 中的
+`defaultModel`。关联 Bot 的模型在接收组织中不可用时，也使用这个默认值。没有有效模型时，创建失败，不留下 Chat 或 Turn。实时 Chat 使用专用的实时模型目录。已保存的评审在重放时保留模型；每次新调用仍检查当前模型权限。`GET /v1/chats/:chatId/models`
 显示你可以选择的模型：
 
 ```json
@@ -580,20 +589,3 @@ Chat 被删除后，那个聊天里的下一条消息会开始一个新的 Chat�
 
 只结算供应商确认的用量。未知用量保留未知标记。全部字段见
 [Chats 参考](/api/operations/tags/chats/)。
-
-## 旧版本中的 Chat
-
-数据升级会保留 Chat
-ID、Item 和历史 Turn，也会保留旧工具结果。工具列表和读取路由将这些记录返回为
-`_tag: "Imported"`。它们包含 `chat`、`turn`、`kind` 和 `endedAt`，但不含
-`position`、`deadline` 或 `detached`，因为旧记录没有保存这些信息。通过关联执行的
-`status` 和 `failure`
-查看状态。旧的待处理请求和委派会保留在历史中，但不计入活动工作，也不会出现在模型等待结果的工作列表中。
-
-旧工作没有原始 token 的凭据，因此升级不会再次运行它。待处理输入会移出活动收件箱，并保留在加密历史中。旧任务 Chat 仅保留为历史；请通过父 Chat 提交新工作。
-
-如果直接 Chat 的旧 Turn 处于
-`outcome_unknown`，请检查已保存的调用，并通过执行决策路由为每个未知调用提交
-`stop`。这会记录你的决定，但不会撤销外部操作。在该执行结束前，新输入会返回 `409`
-和
-`ChatConflict`。之后，新输入会使用当前调用人的权限启动新 Turn。它不会复用原调用人的权限，也不会运行旧的未完成调用。

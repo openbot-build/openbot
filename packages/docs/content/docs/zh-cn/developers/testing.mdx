@@ -75,38 +75,70 @@ CLI 检查会启动构建出的命令。计算机检查包含真实终端。协�
 ## 在代码中测试服务器
 
 包 `@openbot-build/server-testing`
-提供 OpenBot 的测试辅助工具。它是 TypeScript 源码，不是构建后的代码，所以只有运行 TypeScript 的测试才能使用它。它的各个部分在任何版本中都可能改变。启动数据库或整个服务器的服务器测试也在这个包中，位于
-`packages/server-testing/test`。
+提供 OpenBot 的测试辅助工具。它是一个私有的 TypeScript 源码包，不是构建后的代码，所以只有运行 TypeScript 的测试才能使用它。它的各个部分在任何版本中都可能改变。辅助工具在
+`packages/server-testing/src`
+中。包的根入口把每个辅助工具作为一个命名空间给出，名字就是它的文件名，例如
+`TestHost`、`BrowserHost` 和
+`DevelopmentTesting`。启动整个服务器或使用多个插件的服务器测试也在这个包中，位于
+`packages/server-testing/test`。只检查一个包的测试放在那个包的 `test`
+文件夹中，即使它启动数据库也是如此。它通过源文件路径导入自己包的模块。
+`@openbot-build/server-database/Testing`
+为这样的测试提供短期使用的 PostgreSQL 数据库和迁移文件夹。
 
-| 辅助工具                        | 作用                                                                                                                                  |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `TestHost.makeSettings`         | 启动一个新的 PostgreSQL 数据库，它随作用域一起停止。它给出这个数据库上一个服务器的设置：固定的密钥、地址 `127.0.0.1` 和一个空闲端口。 |
-| `TestHost.migrate(settings)`    | 在新数据库中创建表。                                                                                                                  |
-| `TestHost.layerPlatform`        | 测试服务器的平台服务：Node.js 服务、加密和 fetch HTTP 客户端。                                                                        |
-| `TestHost.layerOutside(fakes)`  | 外部服务。测试给出的每个假服务代替一个真实服务。把它作为 `outside` 选项交给 `Host.layer`。                                            |
-| `TestHost.layer(settings)`      | 带有自己 HTTP 服务器的裸插件宿主。它接受修改过的插件条目列表，它的启动错误保持类型化。它不提供插件的服务。                            |
-| `TestHost.launch(server)`       | 在一个单独的作用域中启动服务器。测试可以停止它，并在同一个数据库上再次启动它。                                                        |
-| `TestHost.layerShared(options)` | 只有共享服务：数据库连接池、密钥、共享设置和错误记录。                                                                                |
-| `TestHost.layerApi`             | 契约的每个分组以及它的登录和权限中间件，但没有插件宿主。测试给出分组的服务，常常是假的服务。                                          |
-| `BrowserHost.start(options)`    | 一个完整的服务器，带有测试身份提供方、模拟的模型和已经登录的测试账户。                                                                |
-| `PostgresTest.start`            | 一个短期使用的 PostgreSQL 数据库。                                                                                                    |
+插件的 HTTP 路由和中间件没有公开入口。只检查一个插件路由的测试放在那个插件中。它自己给出路由的中间件，例如一个假的
+`BotAuth`，为每个测试令牌说出调用者。auth 插件测试真实的登录中间件。需要真实登录和多个插件路由的测试用
+`BrowserHost.start` 启动整个宿主。
+
+这些辅助工具只使用 `@openbot-build/openbot`
+的公开宿主。测试宿主的插件控制只在这个包中，它不是 `Host` 的选项。
+
+| 辅助工具                           | 作用                                                                                                                                                                                                                                                                          |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TestHost.outside(fakes)`          | 一个带有外部服务假实现的 Layer，用于 `Host.layer` 的 `outside` 选项。对于没有给出的服务，宿主保留真实的服务。                                                                                                                                                                 |
+| `TestHost.layer(options)`          | 在自己 HTTP 服务器上的 `Host.layerApp`，地址是 `127.0.0.1` 和一个空闲端口，使用固定的密钥，没有平台设置的检查。它接受数据库、插件条目、插件、假服务和探针。没有给出数据库时，它启动一个带有表的新数据库，这个数据库随它一起停止。它的启动错误保持类型化。它不提供插件的服务。 |
+| `TestHost.services(keys)`          | 一个探针，按插件现在提供的样子给出这些键的服务。                                                                                                                                                                                                                              |
+| `TestHost.control`                 | 一个探针，给出插件的控制：加载器（打开和关闭插件、修改它们的配置）、fork 树和 `stable`。                                                                                                                                                                                      |
+| `TestHost.startWith(keys, server)` | 启动一个带有这些键的探针的服务器，并给出一个函数，用服务器的服务和这些键的服务运行一个 Effect。                                                                                                                                                                               |
+| `TestHost.launch(server)`          | 在一个单独的作用域中启动服务器。测试可以停止它，并在同一个数据库上再次启动它。                                                                                                                                                                                                |
+| `BrowserHost.start(options)`       | 一个完整的服务器，带有测试身份提供方、模拟的模型和已经登录的测试账户。它的 `run` 提供内核的服务，以及 `src/PluginServices.ts` 列出的插件服务。                                                                                                                                |
+| `TestDatabase.start`               | 一个短期使用的 PostgreSQL 数据库，来自 `@openbot-build/server-database/Testing`。                                                                                                                                                                                             |
+| `TestDatabase.migrated`            | 和 `TestDatabase.start` 一样，并且创建 OpenBot 的表。当两个服务器使用同一个数据库，或者测试要读取数据库时，把它交给 `TestHost.layer`。                                                                                                                                        |
+
+探针是测试加入宿主条目的一个小插件。把它放在 `TestHost.layer` 的 `probes`
+中，或者自己把它的 `entry` 和 `plugins` 加入 `Host.layer`
+的选项。探针像任何插件一样，等待它需要的键。它的值和它的 fork 存在同样长的时间：当它需要的某个插件重新启动时，探针也重新启动，`value`
+给出新的服务。当测试关闭一些插件时，也必须关闭每个需要它们的插件。需要某个已关闭插件的键的探针会使启动停止。
 
 要使用固定登录配置的服务器，请使用公开的 `Host.layer` 和 `auth`
 选项。请看[登录](/zh-cn/server#登录)。
 
-下面的测试启动裸插件宿主，并在同一个数据库上再次启动它：
+下面的测试启动一个宿主，关闭 `triggers`
+插件，并在同一个数据库上再次启动这个宿主：
 
 ```ts
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
+import * as TestDatabase from "@openbot-build/server-database/Testing"
 import { TestHost } from "@openbot-build/server-testing"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/http"
 
 const program = Effect.gen(function* () {
-	const settings = yield* TestHost.makeSettings
-	yield* TestHost.migrate(settings)
-	const server = yield* TestHost.launch(TestHost.layer(settings))
+	const database = yield* TestDatabase.migrated
+	const control = yield* TestHost.control
+	const server = yield* TestHost.launch(
+		TestHost.layer({ database, probes: [control] }),
+	)
+	const plugins = yield* control.value
+	yield* plugins.loader.update("triggers", { disabled: true })
+	yield* plugins.stable
 	yield* server.restart
 	return yield* server.address
-}).pipe(Effect.scoped, Effect.provide(TestHost.layerPlatform))
+}).pipe(
+	Effect.scoped,
+	Effect.provide(
+		Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	),
+)
 ```
 
 ## 真实模型检查
@@ -181,11 +213,11 @@ devenv shell -- node --disable-warning=ExperimentalWarning packages/server-testi
 命令将证据以 JSON 形式写入标准输出。使用 `--strict`
 时，如果论文的预期规则不满足，命令会以非零退出码结束。检查会先确认测试数据和访问规则已就绪。缺少数据不能让检查通过。
 
-论文 06 的检查把 Ana 和 Bob 的来源组合成一条记忆。早期运行表明，两人都能读取结果，却不能读取对方的来源。现在的检查要求能读取每个来源。两人都不能单独读取结果。能读取两个来源的群组可以读取结果。其他用户和组织仍被阻止访问。这条规则使用来源读取者的交集，也就是只有所有来源共有的读取者才能读取结果。无法证明来源访问权限的旧记忆会保持隐藏，直到重建。
+论文 06 的检查把 Ana 和 Bob 的来源组合成一条记忆。早期运行表明，两人都能读取结果，却不能读取对方的来源。现在的检查要求能读取每个来源。两人都不能单独读取结果。能读取两个来源的群组可以读取结果。其他用户和组织仍被阻止访问。这条规则使用来源读取者的交集，也就是只有所有来源共有的读取者才能读取结果。
 
 论文 12 的检查把上限设为 1,000
 microUSD。一个 microUSD 是一百万分之一美元。早期运行在第一次调用的费用变为未知时释放了它占用的估算金额。第二次调用花掉了释放出的额度。第一次调用的回执迟到，使最终费用达到 2,000
-microUSD。现在的检查要求 OpenBot 保留占用并阻止第二次调用。已确认的回执会用实际费用替换占用金额。再次发送同一份回执不得增加费用。对于占用已丢失的旧未知调用，在费用确认前，必须阻止受影响的硬预算下的新调用。预算进入新周期后，也必须保留未知费用的占用。
+microUSD。现在的检查要求 OpenBot 保留占用并阻止第二次调用。已确认的回执会用实际费用替换占用金额。再次发送同一份回执不得增加费用。预算进入新周期后，也必须保留未知费用的占用。
 
 这些检查必须通过，才能认为修复完成。它们不能证明提供方的最终扣费有硬上限。论文 12 的界限假设每个占用金额都是该调用费用的已验证上限。OpenBot 使用按输入大小和固定输出额度计算的估算。实际费用可能超过估算。参见[预算](/zh-cn/usage#预算)。
 

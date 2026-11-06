@@ -46,25 +46,25 @@ import * as tables from "@openbot-build/server-database/AuthSchema"
 import { Auth } from "@openbot-build/identity-contract/auth/Auth"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
 import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import {
 	type Connection as SsoConnection,
 	connectionFor,
 	Sso,
 } from "@openbot-build/identity-contract/sso/Sso"
 import { developmentLogin } from "./DevelopmentLogin.ts"
-import { ResolvedConfiguration } from "@openbot-build/server-kernel/auth/Configuration"
+import { ResolvedConfiguration } from "@openbot-build/server-kernel/AuthConfiguration"
 import {
 	AuthUnavailable,
 	CredentialRejected,
 	AuthConfigurationError,
-} from "@openbot-build/server-kernel/auth/Model"
-import * as Background from "@openbot-build/server-kernel/execution/Background"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
-import type { Records } from "@openbot-build/server-kernel/errors/Records"
+} from "@openbot-build/server-kernel/AuthModel"
+import * as Background from "@openbot-build/server-kernel/Background"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import * as Report from "@openbot-build/server-kernel/Report"
+import type { Records } from "@openbot-build/server-kernel/Records"
 
 /**
  * The Better Auth provider ID of the platform provider. Its callback is

@@ -1,21 +1,29 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
 import {
 	BrowserHost,
 	Caller,
-	Policies,
 	Chats,
+	Policies,
 } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
 import { Item } from "@openbot-build/core"
 import { Authorization } from "@openbot-build/domain"
-import { ChatSummary, ChatView, UserTokensApi } from "@openbot-build/api"
-import { Array as Arr, Effect, Order, Schema } from "effect"
+import { ChatsApi } from "@openbot-build/api"
+import { Array as Arr, Effect, Order, Schema, Layer } from "effect"
 
 const publicOrigin = "https://chat-reads.example.com"
 const Items = Schema.Struct({
 	items: Schema.Array(Item.Record),
 	next: Schema.NullOr(Item.Seq),
 })
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"Chat reads use saved data and list only the records allowed to a token",
 		() =>
@@ -35,10 +43,10 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 							when: ($) => $.eq("id", first),
 						})
 					}),
-				}).pipe(Effect.flatMap(Caller.json(UserTokensApi.CreatedToken, 201)))
+				}).pipe(Effect.flatMap(Caller.json(CreatedToken, 201)))
 				const keyed = Caller.withToken(address)
 				const list = yield* keyed(token.secret, "/v1/chats").pipe(
-					Effect.flatMap(Caller.json(Schema.Array(ChatSummary))),
+					Effect.flatMap(Caller.json(Schema.Array(ChatsApi.ChatSummary))),
 				)
 				assert.deepStrictEqual(
 					Arr.map(list, (entry) => entry.chat.id),
@@ -46,7 +54,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(list[0]?.executionId, null)
 				const all = yield* cookie(member.session, "/v1/chats").pipe(
-					Effect.flatMap(Caller.json(Schema.Array(ChatSummary))),
+					Effect.flatMap(Caller.json(Schema.Array(ChatsApi.ChatSummary))),
 				)
 				assert.deepStrictEqual(
 					Arr.sort(
@@ -56,7 +64,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					[first, second],
 				)
 				const current = yield* keyed(token.secret, `/v1/chats/${first}`).pipe(
-					Effect.flatMap(Caller.json(ChatView)),
+					Effect.flatMap(Caller.json(ChatsApi.ChatView)),
 				)
 				assert.strictEqual(current.status, "Idle")
 				assert.strictEqual(current.executionId, null)
@@ -87,7 +95,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					404,
 				)
 				const empty = yield* keyed(token.secret, "/v1/chats?kind=task").pipe(
-					Effect.flatMap(Caller.json(Schema.Array(ChatSummary))),
+					Effect.flatMap(Caller.json(Schema.Array(ChatsApi.ChatSummary))),
 				)
 				assert.deepStrictEqual(empty, [])
 				// No Bot or model was made. Reading these Chats cannot start model work.
@@ -97,7 +105,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					publicOrigin,
 				})
 				const saved = yield* after(member.session, `/v1/chats/${first}`).pipe(
-					Effect.flatMap(Caller.json(ChatView)),
+					Effect.flatMap(Caller.json(ChatsApi.ChatView)),
 				)
 				assert.deepStrictEqual(saved, current)
 				yield* after(

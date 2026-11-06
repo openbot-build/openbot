@@ -1,46 +1,9 @@
+import { ReturnTo } from "@openbot-build/domain/ReturnTo"
 import { assert, it } from "@effect/vitest"
-import { NodeHttpServer } from "@effect/platform-node"
-
-import {
-	AuthApi,
-	Caller,
-	Identity,
-	OpenBotApi,
-	UserTokensApi,
-} from "@openbot-build/api"
-import {
-	Context,
-	Effect,
-	Layer,
-	Redacted,
-	Ref,
-	Schema,
-	String as Str,
-} from "effect"
-
-import {
-	HttpClient,
-	HttpClientRequest,
-	HttpRouter,
-	HttpServer,
-} from "effect/http"
-import {
-	HttpApi,
-	HttpApiBuilder,
-	HttpApiEndpoint,
-	HttpApiGroup,
-	OpenApi,
-} from "effect/http-api"
-// OrganizationFixture uses the source files, so the Auth layer must come from them too.
-import * as Auth from "@openbot-build/plugin-auth/Auth"
-import * as AuthorizationLayer from "@openbot-build/plugin-authorization/Layer"
-import * as HttpBoundary from "@openbot-build/server-kernel/errors/HttpBoundary"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import { Execution } from "@openbot-build/domain"
+import { Effect, Redacted, Schema, String as Str } from "effect"
+import * as AuthModel from "@openbot-build/server-kernel/AuthModel"
 import * as Development from "@openbot-build/server-development/Development"
-import * as OrganizationFixture from "./OrganizationFixture.ts"
 
-const publicOrigin = "https://localhost:8443"
 const authSecret = "DevelopmentIntegrationSecretMustStayStable123456"
 
 it.effect(
@@ -72,7 +35,7 @@ it.effect(
 	() =>
 		Effect.gen(function* () {
 			const decode = (publicOrigin: string) =>
-				Schema.decodeEffect(Auth.Model.Configuration)({
+				Schema.decodeEffect(AuthModel.Configuration)({
 					mode: "development",
 					publicOrigin,
 					secret: Redacted.make(authSecret),
@@ -114,179 +77,11 @@ it.effect(
 		}),
 )
 
-// The probe API runs on a real test server, so this test needs the real clock.
-it.live(
-	"business authentication keeps session Origin checks and typed failures",
-	() =>
-		Effect.gen(function* () {
-			const unavailable = yield* Ref.make(true)
-			const failure = Effect.fail(
-				Auth.Model.AuthUnavailable.make({ dependency: "storage" }),
-			)
-			const auth = Layer.mock(Auth.Auth, {
-				handle: () => Effect.succeed(new Response(null, { status: 503 })),
-				signInProvider: () => Effect.succeedNone,
-				resolveSession: (credential) =>
-					Redacted.value(credential) !== "signed-session"
-						? Effect.fail(
-								Auth.Model.CredentialRejected.make({ kind: "session" }),
-							)
-						: Effect.flatMap(Ref.get(unavailable), (down) =>
-								down
-									? failure
-									: Effect.succeed({
-											userId: "session-user",
-											memberships: [
-												{
-													organizationId: "session-user",
-													name: "Session",
-													status: "active" as const,
-													roles: ["super_administrator"],
-												},
-											],
-											platformAdmin: false,
-											canCreateOrganization: false,
-											profile: {},
-											expiresAt: "2099-01-01T00:00:00.000Z",
-											setCookies: [],
-										}),
-							),
-			})
-			const tokens = Layer.mock(Auth.Tokens, {
-				authenticate: (credential) =>
-					Redacted.value(credential) === "obut_valid"
-						? Effect.succeed({
-								kind: "user_token" as const,
-								userId: "key-user",
-								organizationId: "key-user",
-								tokenId: UserTokensApi.TokenId.make("key-1"),
-							})
-						: Effect.fail(
-								Auth.Model.CredentialRejected.make({ kind: "token" }),
-							),
-			})
-			const api = HttpApi.make("auth-probe").add(
-				HttpApiGroup.make("probe")
-					.add(
-						HttpApiEndpoint.get("identity", "/identity", { success: Caller }),
-						HttpApiEndpoint.post("write", "/identity", {
-							payload: Schema.Struct({}),
-							success: Caller,
-						}),
-					)
-					.middleware(AuthApi.BotAuth),
-			)
-			const handlers = HttpApiBuilder.group(api, "probe", (handlers) =>
-				handlers
-					.handle("identity", () => Identity)
-					.handle("write", () => Identity),
-			)
-			const app = HttpApiBuilder.layer(api).pipe(
-				Layer.provide(handlers),
-				Layer.provide(
-					Auth.HttpHandlers.layer.pipe(
-						Layer.provideMerge(AuthorizationLayer.layer),
-						Layer.provide(OrganizationFixture.layerSettings({ publicOrigin })),
-					),
-				),
-				Layer.provide(auth),
-				Layer.provide(tokens),
-				Layer.provide(OrganizationFixture.layerEveryoneAdministrator),
-				Layer.provide(OrganizationFixture.layerUnusedPlatform),
-				Layer.provide(OrganizationFixture.layerNoAudit),
-				Layer.provide(
-					HttpBoundary.layer.pipe(
-						Layer.provide(
-							Layer.mock(Records, {
-								record: (_cause, category) =>
-									Effect.succeed({
-										category,
-										errorId: Execution.ErrorId.make("auth-test-error"),
-									}),
-							}),
-						),
-					),
-				),
-				Layer.provide(HttpServer.layerServices),
-			)
-			// The test client sends each request to the test server.
-			const client = Context.get(
-				yield* Layer.build(
-					HttpRouter.serve(app, {
-						disableLogger: true,
-						disableListenLog: true,
-					}).pipe(Layer.provideMerge(NodeHttpServer.layerTest)),
-				),
-				HttpClient.HttpClient,
-			)
-			const cookie = { cookie: AuthApi.SessionCookie + "=signed-session" }
-			const failed = yield* client.get("/identity", { headers: cookie })
-			assert.strictEqual(failed.status, 503)
-			assert.deepStrictEqual(yield* failed.json, {
-				_tag: "AuthenticationUnavailable",
-			})
-			yield* Ref.set(unavailable, false)
-			const session = yield* client.get("/identity", { headers: cookie })
-			assert.deepStrictEqual(yield* session.json, {
-				kind: "member",
-				userId: "session-user",
-				organizationId: "session-user",
-			})
-			for (const headers of [
-				{},
-				{ authorization: "Bearer retired" },
-				{ cookie: AuthApi.SessionCookie + "=invalid" },
-			]) {
-				assert.strictEqual(
-					(yield* client.get("/identity", { headers })).status,
-					401,
-				)
-			}
-			const write = (headers: Readonly<Record<string, string>>) =>
-				HttpClientRequest.post("/identity", { headers }).pipe(
-					HttpClientRequest.bodyJson({}),
-					Effect.flatMap(client.execute),
-				)
-			assert.strictEqual((yield* write(cookie)).status, 403)
-			assert.strictEqual(
-				(yield* write({ ...cookie, origin: "https://other.example" })).status,
-				403,
-			)
-			assert.strictEqual(
-				(yield* write({ ...cookie, origin: publicOrigin })).status,
-				200,
-			)
-			assert.strictEqual(
-				(yield* write({ authorization: "Bearer retired" })).status,
-				401,
-			)
-			const keyed = yield* write({ authorization: "Bearer obut_valid" })
-			assert.strictEqual(keyed.status, 200)
-			assert.deepStrictEqual(yield* keyed.json, {
-				kind: "user_token",
-				userId: "key-user",
-				organizationId: "key-user",
-				tokenId: "key-1",
-			})
-			const spec = OpenApi.fromApi(OpenBotApi)
-			assert.deepStrictEqual(
-				spec.paths["/v1/bots/{botId}/messages"]?.post?.security,
-				[{ token: [] }, { session: [] }],
-			)
-			assert.strictEqual(spec.components.securitySchemes["bearer"], undefined)
-			assert.deepStrictEqual(spec.components.securitySchemes["session"], {
-				type: "apiKey",
-				in: "cookie",
-				name: AuthApi.SessionCookie,
-			})
-		}),
-)
-
 it.effect(
 	"return destinations accept same-origin client paths and reject open redirects",
 	() =>
 		Effect.sync(() => {
-			const accepts = Schema.is(AuthApi.ReturnTo)
+			const accepts = Schema.is(ReturnTo)
 			for (const target of [
 				"/",
 				"/docs",

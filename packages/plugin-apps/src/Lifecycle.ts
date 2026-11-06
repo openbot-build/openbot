@@ -1,3 +1,4 @@
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
 import {
 	type Authorization,
 	AppConnections as ProtocolConnections,
@@ -10,7 +11,7 @@ import {
 	OAuthAuthorization,
 	Store as Protocol,
 } from "@openbot-build/protocol"
-import { AppConnections, ConnectionId, Execution } from "@openbot-build/domain"
+import { AppConnections, Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
@@ -29,8 +30,8 @@ import {
 import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import { capabilityLists, pages } from "./Capabilities.ts"
 import * as ManualConnection from "./ManualConnection.ts"
-import { Probe } from "./Probe.ts"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { Probe } from "@openbot-build/apps-contract/apps/Probe"
+import { Records } from "@openbot-build/server-kernel/Records"
 import { type Input, type Prepared } from "./ConnectionCommands.ts"
 import { jsonObject } from "@openbot-build/apps-contract/apps/AppResults"
 
@@ -60,8 +61,7 @@ export interface Service {
 }
 
 export class Lifecycle extends Context.Service<Lifecycle, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-apps/Lifecycle",
+	"@openbot-build/plugin-apps/Lifecycle",
 ) {}
 
 export const make = Effect.gen(function* () {

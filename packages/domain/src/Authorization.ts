@@ -316,15 +316,11 @@ const Principal = Schema.Struct({
  * The type of the domain. It is an interface, so that other packages can name
  * it in their declaration files.
  */
-export interface OpenBotDomain extends Domain.Domain<
-	typeof Principal,
-	Resources
-> {}
-export const OpenBot: OpenBotDomain = Domain.make({
+export interface OpenBot extends Domain.Domain<typeof Principal, Resources> {}
+export const OpenBot: OpenBot = Domain.make({
 	principal: Principal,
 	resources,
 })
-export type OpenBot = OpenBotDomain
 
 /** The name of a kind of resource, such as `Bot`. */
 export type Kind = Domain.Kind<OpenBot>
@@ -510,12 +506,14 @@ export const resourceInfo: ReadonlyArray<ResourceInfo> = Arr.map(
 	},
 )
 
-/** A policy of OpenBot. It is an interface for the same reason as {@link OpenBotDomain}. */
-export interface OpenBotPolicy extends PolicyTree.Policy<OpenBotDomain> {}
-const PolicyCodec: Schema.Codec<OpenBotPolicy, string> =
+/** A policy of OpenBot. It is an interface for the same reason as {@link OpenBot}. */
+export interface Policy extends PolicyTree.Policy<OpenBot> {}
+/**
+ * The JSON text of a policy. Decoding checks every kind, action and field
+ * against the resources of OpenBot.
+ */
+export const PolicySchema: Schema.Codec<Policy, string> =
 	PolicyTree.schema(OpenBot)
-/** A policy of OpenBot. */
-export type Policy = OpenBotPolicy
 
 const countRules = (node: PolicyTree.Node): number => {
 	switch (node._tag) {
@@ -556,16 +554,10 @@ export const maxRules = 100
 export const maxDepth = 8
 
 /**
- * The JSON text of a policy. Decoding checks every kind, action and field
- * against the resources of OpenBot.
- */
-export const PolicySchema = PolicyCodec
-
-/**
  * A policy in a request. It may have at most 100 rules and may be at most 8
  * levels deep. These request limits do not apply to stored policies.
  */
-export const PolicyInput = PolicyCodec.check(
+export const PolicyInput = PolicySchema.check(
 	Schema.makeFilter((policy: Policy) =>
 		countRules(policy.node) > maxRules
 			? `A policy may have at most ${maxRules} rules`

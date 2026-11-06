@@ -1,18 +1,19 @@
+import { IndexStore } from "@openbot-build/protocol"
 import { type PlatformError, Context, Effect, Option, Schema } from "effect"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import {
 	type ServiceExecution,
 	type Key,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import { AppIndex, Execution } from "@openbot-build/domain"
-import { Discovery, Index, Indexing } from "@openbot-build/protocol"
+import { Discovery, Indexing } from "@openbot-build/protocol"
 import { appIndexJobs } from "@openbot-build/server-database/Schema"
 
 export const CheckInput = Schema.Struct({
 	cardUrl: Schema.String,
 	sources: Schema.Array(Discovery.Source),
-	previous: Schema.NullOr(Index.Entry),
+	previous: Schema.NullOr(IndexStore.Entry),
 })
 
 export type CheckInput = typeof CheckInput.Type
@@ -80,7 +81,7 @@ export interface Service {
 			input: {
 				cardUrl: string
 				sources: readonly Discovery.Source[]
-				previous: Index.Entry | null
+				previous: IndexStore.Entry | null
 			}
 		},
 		| Execution.Conflict
@@ -109,7 +110,7 @@ export interface Service {
 				readonly url: string
 				readonly issue: string
 		  }
-		| { _tag: "Indexed"; entry: Index.Entry }
+		| { _tag: "Indexed"; entry: IndexStore.Entry }
 		| { _tag: "Excluded" | "Withdrawn"; cardUrl: string; reason: string },
 		Indexing.IndexingError | Execution.StorageError
 	>
@@ -129,6 +130,5 @@ export interface Service {
 }
 
 export class IndexWork extends Context.Service<IndexWork, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/apps-contract/apps/IndexWork",
+	"@openbot-build/apps-contract/apps/IndexWork",
 ) {}

@@ -1,4 +1,8 @@
-import { ComputersApi } from "@openbot-build/api"
+import {
+	ToConnector,
+	FromConnector,
+	type ConnectorReply,
+} from "@openbot-build/domain/Computers"
 import {
 	Cause,
 	Duration,
@@ -19,11 +23,9 @@ import * as Machine from "./Machine.ts"
 import * as Sessions from "./Sessions.ts"
 
 const decodeMessage = Schema.decodeUnknownEffect(
-	Schema.fromJsonString(ComputersApi.ToConnector),
+	Schema.fromJsonString(ToConnector),
 )
-const encodeMessage = Schema.encodeEffect(
-	Schema.fromJsonString(ComputersApi.FromConnector),
-)
+const encodeMessage = Schema.encodeEffect(Schema.fromJsonString(FromConnector))
 
 /** The WebSocket address for an OpenBot origin: `https` becomes `wss`, and `http` becomes `ws`. */
 export const socketUrl = (origin: string): string => {
@@ -136,7 +138,7 @@ export const connect = (options: {
 			const writer = yield* socket.writer
 			// The connector makes each message itself from the same schema, so a message
 			// that cannot be encoded is a bug here, not a failure of the connection.
-			const send = (message: ComputersApi.FromConnector) =>
+			const send = (message: FromConnector) =>
 				encodeMessage(message).pipe(Effect.orDie, Effect.flatMap(writer.write))
 			yield* send({ _tag: "Hello", hello: Machine.hello() })
 			yield* events.connected
@@ -208,7 +210,7 @@ export const connect = (options: {
 										"A call from OpenBot failed.",
 										Cause.die(defect),
 									).pipe(
-										Effect.as<ComputersApi.ConnectorReply>({
+										Effect.as<ConnectorReply>({
 											id: message.call.id,
 											result: {
 												_tag: "Failed",

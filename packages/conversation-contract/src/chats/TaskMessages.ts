@@ -1,18 +1,18 @@
-import { ChatStoreRepository, Store as CoreStore } from "@openbot-build/core"
+import { DelegationId } from "@openbot-build/domain/DelegationId"
 import {
-	Delegations as Domain,
-	Execution,
-	executionCallers,
 	restrictExecution,
-} from "@openbot-build/domain"
+	executionCallers,
+} from "@openbot-build/domain/Identity"
+import { ChatStoreRepository, Store as CoreStore } from "@openbot-build/core"
+import { Execution } from "@openbot-build/domain"
 import { Clock, Effect, Option, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import * as Db from "@openbot-build/server-database/Database"
-import { Store } from "@openbot-build/server-execution/execution/Store"
+import { Store } from "@openbot-build/server-execution/Store"
 import { Delegations } from "../bots/Delegations.ts"
 import * as DelegationSource from "../bots/DelegationSource.ts"
 import * as DelegationUsage from "../bots/DelegationUsage.ts"
-import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
+import * as Todos from "../work/Todos.ts"
 import * as ChatHost from "./ChatHost.ts"
 import * as StoredChats from "./StoredChats.ts"
 import { InputCommands, Message } from "./InputCommands.ts"
@@ -84,7 +84,7 @@ export const make = Effect.gen(function* () {
 						delegationId: previous.stored.delegation.id,
 						parentExecutionId: previous.origin.key.id,
 					})
-					const id = Domain.DelegationId.make(
+					const id = DelegationId.make(
 						"dlg_" + (yield* crypto.uuidV7().pipe(Effect.orDie)),
 					)
 					// A new person command owns this round. It is not a child of the old, ended round.
@@ -101,9 +101,7 @@ export const make = Effect.gen(function* () {
 								task: "Continue with the new message.",
 								reason: "The person added work to the task Chat.",
 								previous: previous.stored.delegation.id,
-								...(previous.input.limits === undefined
-									? {}
-									: { limits: previous.input.limits }),
+								limits: previous.input.limits,
 								source: {
 									_tag: "Message",
 									previousExecutionId: previousKey.id,
@@ -128,9 +126,7 @@ export const make = Effect.gen(function* () {
 						bot: host.bot,
 						task: "Continue with the new message.",
 						reason: "The person added work to the task Chat.",
-						...(previous.input.limits === undefined
-							? {}
-							: { limits: previous.input.limits }),
+						limits: previous.input.limits,
 						status: "running",
 					})
 					yield* chats.modifyEffect({

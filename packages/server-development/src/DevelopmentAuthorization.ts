@@ -21,8 +21,8 @@ import {
 	UrlParams,
 } from "effect/http"
 import * as ClientMetadata from "@openbot-build/plugin-apps/ClientMetadata"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import { Scenarios, type Mode } from "./DevelopmentScenarios.ts"
 
 const origin = "https://app.development.test"
@@ -101,8 +101,7 @@ export class Authorization extends Context.Service<
 		) => Effect.Effect<string, Network.NetworkError>
 	}
 >()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/server-development/DevelopmentAuthorization/Authorization",
+	"@openbot-build/server-development/DevelopmentAuthorization/Authorization",
 ) {}
 
 /**

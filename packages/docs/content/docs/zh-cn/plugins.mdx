@@ -33,35 +33,34 @@ OpenBot 是一个插件宿主上的一组插件。本页列出这些插件。它
 
 OpenBot 有 27 个插件。三个限制插件一开始是关闭的。“必需”一列为“是”的六个插件永远不能关闭。“需要”一列列出一个插件使用的其他插件。只有当一个插件需要的每个插件都打开时，它才会启动。
 
-| 插件            | 它提供什么                                                | 必需 | 需要                                                                                                            |
-| --------------- | --------------------------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------- |
-| `audit`         | 每个组织的审计日志。                                      | 是   |                                                                                                                 |
-| `mail`          | 平台发出的邮件，使用平台的 SMTP 设置。                    |      |                                                                                                                 |
-| `platform`      | 平台管理员和平台设置。                                    | 是   | `access`、`audit`、`auth`、`authorization`、`mail`、`models`、`organization`                                    |
-| `organization`  | 组织、组织成员和邀请。                                    | 是   | `audit`、`auth`、`authorization`、`mail`、`models`、`platform`                                                  |
-| `access`        | 谁可以加入平台，以及怎样加入。                            | 是   | `auth`、`authorization`                                                                                         |
-| `sso`           | 组织的登录连接。                                          |      | `access`、`audit`、`auth`、`authorization`                                                                      |
-| `auth`          | 登录、用户令牌，以及对每个调用方的检查。                  | 是   | `access`、`audit`、`authorization`、`mail`、`organization`、`platform`、`sso`                                   |
-| `authorization` | 角色，以及对每个调用方权限的检查。                        | 是   | `auth`、`organization`、`platform`                                                                              |
-| `models`        | 模型提供方、模型和模型注册表。                            |      | `audit`、`auth`、`authorization`                                                                                |
-| `files`         | 存储的文件和它们的工作。                                  |      | `auth`、`authorization`                                                                                         |
-| `artifacts`     | 固定文件、保存的来源和引用。                              |      | `apps`, `auth`, `authorization`, `computers`, `files`, `imported`, `organization`                               |
-| `bots`          | Bots、它们的记忆，以及它们之间的委托。                    |      | `audit`、`auth`、`authorization`、`capabilities`、`chats`、`imported`、`mail`、`models`、`organization`、`work` |
-| `capabilities`  | Grants、Rules、请求，以及对它们的检查。                   |      | `apps`、`audit`、`auth`、`authorization`、`bots`、`chats`、`imported`、`models`                                 |
-| `work`          | 提醒，以及 Bots 的工作工具。                              |      | `bots`、`chats`                                                                                                 |
-| `imported`      | 在另一个程序中开始的执行。                                |      | `authorization`、`bots`                                                                                         |
-| `chats`         | Chats、Turns、工具和 Live 连接。                          |      | `auth`、`authorization`、`bots`、`capabilities`、`channels`、`files`、`imported`、`models`、`organization`      |
-| `channels`      | Channels、它们的消息，以及 Bots 的 Channel 工具。         |      | `audit`、`auth`、`authorization`、`bots`、`capabilities`、`chats`、`imported`、`models`、`organization`         |
-| `apps`          | App 连接、App Index，以及 Bots 的 App 工具。              |      | `auth`、`authorization`、`bots`、`capabilities`、`chats`、`code`、`imported`、`models`、`vaults`                |
-| `code`          | Bots 在沙箱中运行代码。                                   |      | `apps`、`auth`、`authorization`、`chats`、`imported`、`vaults`                                                  |
-| `vaults`        | Vaults，以及它们读取的机密提供方。                        |      | `audit`、`auth`、`authorization`、`bots`                                                                        |
-| `computers`     | Computers、它们的配对和会话，以及 Bots 的 Computer 工具。 |      | `audit`、`auth`、`authorization`、`bots`、`chats`                                                               |
-| `triggers`      | 启动 Turns 的触发器，以及它们的 webhook。                 |      | `audit`、`auth`、`authorization`、`bots`、`chats`、`models`                                                     |
-| `billing`       | 组织的钱包、用量和预算。                                  |      | `audit`、`auth`、`authorization`、`organization`                                                                |
-| `settings`      | 每个成员的设置。                                          |      | `auth`、`authorization`、`bots`                                                                                 |
-| `turn-limiter`  | 限制每个 Turn 的模型步数。一开始关闭。                    |      |                                                                                                                 |
-| `time-limiter`  | 限制每个 Turn 的时间。一开始关闭。                        |      |                                                                                                                 |
-| `token-limiter` | 限制每个 Turn 的输入和输出 token。一开始关闭。            |      |                                                                                                                 |
+| 插件            | 它提供什么                                                | 必需 | 需要                                                                                                |
+| --------------- | --------------------------------------------------------- | ---- | --------------------------------------------------------------------------------------------------- |
+| `audit`         | 每个组织的审计日志。                                      | 是   |                                                                                                     |
+| `mail`          | 平台发出的邮件，使用平台的 SMTP 设置。                    |      |                                                                                                     |
+| `platform`      | 平台管理员和平台设置。                                    | 是   | `access`、`audit`、`auth`、`authorization`、`mail`、`models`、`organization`                        |
+| `organization`  | 组织、组织成员和邀请。                                    | 是   | `audit`、`auth`、`authorization`、`mail`、`models`、`platform`                                      |
+| `access`        | 谁可以加入平台，以及怎样加入。                            | 是   | `auth`、`authorization`                                                                             |
+| `sso`           | 组织的登录连接。                                          |      | `access`、`audit`、`auth`、`authorization`                                                          |
+| `auth`          | 登录、用户令牌，以及对每个调用方的检查。                  | 是   | `access`、`audit`、`authorization`、`mail`、`organization`、`platform`、`sso`                       |
+| `authorization` | 角色，以及对每个调用方权限的检查。                        | 是   | `auth`、`organization`、`platform`                                                                  |
+| `models`        | 模型提供方、模型和模型注册表。                            |      | `audit`、`auth`、`authorization`                                                                    |
+| `files`         | 存储的文件和它们的工作。                                  |      | `auth`、`authorization`                                                                             |
+| `artifacts`     | 固定文件、保存的来源和引用。                              |      | `apps`, `auth`, `authorization`, `computers`, `files`, `organization`                               |
+| `bots`          | Bots、它们的记忆，以及它们之间的委托。                    |      | `audit`、`auth`、`authorization`、`capabilities`、`chats`、`mail`、`models`、`organization`、`work` |
+| `capabilities`  | Grants、Rules、请求，以及对它们的检查。                   |      | `audit`、`auth`、`authorization`、`bots`、`chats`、`models`                                         |
+| `work`          | 提醒，以及 Bots 的工作工具。                              |      | `bots`、`chats`                                                                                     |
+| `chats`         | Chats、Turns、工具和 Live 连接。                          |      | `auth`、`authorization`、`bots`、`capabilities`、`channels`、`files`、`models`、`organization`      |
+| `channels`      | Channels、它们的消息，以及 Bots 的 Channel 工具。         |      | `audit`、`auth`、`authorization`、`bots`、`capabilities`、`chats`、`models`、`organization`         |
+| `apps`          | App 连接、App Index，以及 Bots 的 App 工具。              |      | `auth`、`authorization`、`bots`、`capabilities`、`chats`、`code`、`models`、`vaults`                |
+| `code`          | Bots 在沙箱中运行代码。                                   |      | `apps`、`auth`、`authorization`、`chats`、`vaults`                                                  |
+| `vaults`        | Vaults，以及它们读取的机密提供方。                        |      | `audit`、`auth`、`authorization`、`bots`                                                            |
+| `computers`     | Computers、它们的配对和会话，以及 Bots 的 Computer 工具。 |      | `audit`、`auth`、`authorization`、`bots`、`chats`                                                   |
+| `triggers`      | 启动 Turns 的触发器，以及它们的 webhook。                 |      | `audit`、`auth`、`authorization`、`bots`、`chats`、`models`                                         |
+| `billing`       | 组织的用量和预算。                                        |      | `audit`、`auth`、`authorization`、`organization`                                                    |
+| `settings`      | 每个成员的设置。                                          |      | `auth`、`authorization`、`bots`                                                                     |
+| `turn-limiter`  | 限制每个 Turn 的模型步数。一开始关闭。                    |      |                                                                                                     |
+| `time-limiter`  | 限制每个 Turn 的时间。一开始关闭。                        |      |                                                                                                     |
+| `token-limiter` | 限制每个 Turn 的输入和输出 token。一开始关闭。            |      |                                                                                                     |
 
 一个插件在启动的后面步骤中才使用另一个插件。所以两个插件可以互相需要，例如
 `bots` 和 `chats`。
@@ -75,8 +74,8 @@ OpenBot 有 27 个插件。三个限制插件一开始是关闭的。“必需�
   `models`。必需插件使用它们，所以没有它们 OpenBot 不会启动。
 - 其他插件互相需要。要关闭其中一个，你也必须关闭需要它的每个插件。
 
-当一个插件关闭而一个打开的插件需要它时，启动以 `PluginsInactive`
-失败。这个错误写出正在等待的插件，以及它们等待的服务。
+当一个插件关闭而一个打开的插件需要它时，启动以 `Launch.StartFailed` 失败，原因是
+`PluginsInactive`。这个错误写出正在等待的插件，以及它们等待的服务。
 
 ---
 
@@ -121,48 +120,45 @@ OpenBot 有 27 个插件。三个限制插件一开始是关闭的。“必需�
     maxTokens: 200000
 ```
 
-| 插件            | 配置字段      | 值                                                                                                                            |
-| --------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `turn-limiter`  | `maxSteps`    | 从 1 开始的整数。一个 Turn 的每次模型请求是一步。第一次请求也算。                                                             |
-| `time-limiter`  | `maxDuration` | 毫秒数，例如 `600000`，或文本，例如 `10 minutes`。`openbot-inspect plugins` 把文本显示为 `"<redacted>"`，所以数字更容易检查。 |
-| `token-limiter` | `maxTokens`   | 从 1 开始的整数。它计算一个 Turn 所有模型请求的输入和输出 token。                                                             |
+| 插件            | 配置字段      | 值                                                                |
+| --------------- | ------------- | ----------------------------------------------------------------- |
+| `turn-limiter`  | `maxSteps`    | 从 1 开始的整数。一个 Turn 的每次模型请求是一步。第一次请求也算。 |
+| `time-limiter`  | `maxDuration` | 毫秒数，例如 `600000`。                                           |
+| `token-limiter` | `maxTokens`   | 从 1 开始的整数。它计算一个 Turn 所有模型请求的输入和输出 token。 |
 
-- 打开的限制插件需要它的配置。没有正确的配置时，插件失败，启动以
-  `PluginsInactive` 停止。
+- 打开的限制插件需要它的配置。没有正确的配置时，插件失败，启动停止，原因是
+  `PluginsInactive`。
 - 只有 `config` 不会打开限制。有 `config` 但没有 `disabled` 的条目是错误：“This
   plugin is off. Add "disabled: false" to turn it on.”
-- 限制不能使用 `!env`。给每台服务器相同的限制。配置在清单哈希中，但 `!env`
-  的值不在。
+- 给每台服务器相同的限制。配置在清单哈希中。
 - 每个 Turn 保留它开始时打开的限制，服务器重新启动后也一样。新的限制只对新的 Turn 生效。
 - 时间从 Turn 开始时计算，Turn 等待时也计算，例如等待服务器重新启动时。
 - 到达限制的 Turn 以失败结束。它的错误记录有
   `BotFeatureStopped`，以及限制的错误，例如
-  `ModelStepLimitExceeded`。API 显示失败类别 `unavailable`。
-- 关闭一个限制插件后，用它开始的 Turn 会等待，直到它再次打开。要去掉一个限制，先设一个很高的限制。只在没有 Turn 运行时关闭插件。
+  `ModelStepLimitExceeded`。API 显示失败类别
+  `limited`。只有在限制改变后，客户端才再次尝试这个 Turn。
+- Turn 保留它已经用掉的步数、token 和开始时间，服务器重新启动后也一样。所以重新启动不会给 Turn 更多的步数、token 或时间。
+- 关闭一个限制插件后，用它开始的 Turn 不带这个限制继续运行。它不等待这个插件。
 
 ### 给插件配置
 
-一个条目可以有
-`config`，也就是一个插件的设置。现在只有三个限制插件接受配置。给 OpenBot 的其他插件写
-`config` 是错误，启动会以 “This plugin takes no
-config.” 停止。这样，没有插件读取的值不会看起来像是生效了。
+一个条目可以有 `config`，也就是一个插件的设置。三个限制插件和 `apps`
+接受配置。给 OpenBot 的其他插件写 `config` 是错误，启动会以 “This plugin takes
+no
+config.” 停止。这样，没有插件读取的值不会看起来像是生效了。新的配置会让插件重新启动。
 
-### 来自环境的值
-
-一个值可以用 `!env` 标签来自环境变量：
+`apps` 的配置设定 App Index 后台任务的时间。`intervalMs`
+是一次成功运行后的等待时间，`retryMs`
+是一次失败运行后的等待时间，单位都是毫秒。默认值是一小时和一分钟。
 
 ```yaml
-- id: some-plugin
+- id: apps
   config:
-    token: !env SOME_TOKEN
+    intervalMs: 600000
+    retryMs: 30000
 ```
 
-文件中只有变量的名字。插件启动时才读取这个值，而且只交给这个插件。OpenBot 从不把它写进日志，`openbot-inspect plugins`
-从不打印它，它也不在清单哈希中。和其他变量一样，它也可以来自文件
-`/run/secrets/<NAME>`。请看[以文件形式提供机密](/zh-cn/configuration#以文件形式提供机密)。
-
-文件只读取一次，但插件每次启动时都会再次读取这个值。机密只能放在 `!env`
-中，永远不要以纯文本写在文件里。
+配置只包含普通值，并且在每台服务器上都相同。它不包含机密。机密放在[平台设置](/zh-cn/configuration)中。
 
 ### 规则
 
@@ -178,11 +174,9 @@ OpenBot 在启动前检查整个文件。它一次给出所有问题，并写出
 | 关闭一个必需插件                                 | 错误。“This plugin is needed, so it can not be turned off.” |
 | 给不接受配置的 OpenBot 插件 `config`             | 错误。“This plugin takes no config.”                        |
 | 给保持关闭的限制插件 `config`                    | 错误。请加上 `disabled: false`。                            |
-| 在限制插件的配置中使用 `!env`                    | 错误。“The config of this plugin can not use !env.”         |
 | 有新的 id 但没有 `name`                          | 错误。新条目需要名字。                                      |
 | 有新的 id，名字不是 OpenBot 自带的插件           | 错误。只有 OpenBot 自带的插件可以运行。                     |
 | 有新的 id，名字已经作为另一个条目运行            | 错误。请改那个条目。                                        |
-| `!env` 后面不是环境变量的名字                    | 错误。请用大写字母、数字和 `_`。                            |
 | YAML 无效，或有 OpenBot 不认识的 YAML 标签       | 错误，并写出行和列。                                        |
 
 每个可以运行的插件都在镜像中。OpenBot 从不从外部加载插件。OpenBot 自带的所有插件都已经作为条目运行，所以现在新条目总是错误。
@@ -241,12 +235,11 @@ openbot-inspect plugins --file /etc/openbot/plugins.yml
 
 - `source` 对 OpenBot 的插件是 `preset`，对新条目是 `file`。
 - `changed` 写出文件改变了什么：`disabled`、`config`，或两者。
-- 只有条目有配置时才有 `config`。`!env` 的值显示为
-  `{ "env": "NAME" }`。其他每个文本值显示为 `"<redacted>"`。
+- 只有条目有配置时才有 `config`。每个文本值都显示为 `"<redacted>"`。
 - 没有设置文件时，`file` 为 `null`。
 
 在 Docker 镜像中，运行
-`/usr/local/bin/node /app/dist/app/Inspect.mjs plugins`。文件不正确时，程序打印问题，并以退出码 1 结束。
+`/usr/local/bin/node /app/dist/Inspect.mjs plugins`。文件不正确时，程序打印问题，并以退出码 1 结束。
 
 ---
 

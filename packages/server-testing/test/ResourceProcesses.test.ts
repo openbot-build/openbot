@@ -1,3 +1,5 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { NodeHttpClient, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
@@ -12,10 +14,8 @@ import {
 } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Resource from "@openbot-build/server-execution/resources/Resource"
+import * as Resource from "@openbot-build/server-execution/Resource"
 import * as Network from "./ResourceNetwork.ts"
-import * as PostgresTest from "./PostgresTest.ts"
 
 const modes = [
 	"owner exit",
@@ -40,17 +40,17 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 			`two resource processes keep the close result after ${mode}`,
 			() =>
 				Effect.gen(function* () {
-					const database = yield* PostgresTest.start
+					const database = yield* TestDatabase.start
 					const physical = yield* Network.physical
 					const databaseProxy = yield* Network.proxy(
 						Number(new URL(database.url).port),
 					)
-					const ownerPort = yield* PostgresTest.freePort
-					const clientPort = yield* PostgresTest.freePort
+					const ownerPort = yield* TestDatabase.freePort
+					const clientPort = yield* TestDatabase.freePort
 					const rpcProxy = yield* Network.proxy(ownerPort)
 					const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 					const run = Effect.gen(function* () {
-						yield* DatabasePostgres.migrate
+						yield* Migrations.migrate
 						const sql = yield* PgClient.PgClient
 						yield* sql`create table resource_test_nodes (runner integer primary key, port integer not null)`
 						yield* sql`create table resource_test_close (hold boolean not null)`
@@ -205,8 +205,8 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 					}).pipe(
 						Effect.provide(
 							Layer.merge(
-								DatabasePostgres.layer({
-									databaseUrl: Redacted.make(database.url),
+								PgClient.layer({
+									url: Redacted.make(database.url),
 								}),
 								NodeHttpClient.layerUndici,
 							),

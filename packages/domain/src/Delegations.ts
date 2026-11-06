@@ -5,7 +5,6 @@ import { CapabilityRequestId } from "./CapabilityRequestId.ts"
 import { TriggerId } from "./TriggerId.ts"
 import { BotId } from "./BotId.ts"
 import { DelegationId } from "./DelegationId.ts"
-export { DelegationId } from "./DelegationId.ts"
 
 /** The status of a Delegation that has ended. */
 export const DelegationResultStatus = Schema.Literals([
@@ -107,9 +106,8 @@ export const Delegation = Schema.Struct({
 	reason: Schema.optionalKey(Schema.String),
 	/** The last answer of the work. It is `null` until the work ends. */
 	result: Schema.NullOr(Schema.String),
-	/** Missing on work from before limits. */
-	limits: Schema.optionalKey(DelegationLimits),
-	usage: Schema.optionalKey(DelegationUsage),
+	limits: DelegationLimits,
+	usage: DelegationUsage,
 	/** Set while the work is `paused`. */
 	pause: Schema.optionalKey(DelegationPause),
 	createdAt: Schema.Finite,

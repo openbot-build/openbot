@@ -1,13 +1,16 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
+import { Domain, SsoConnection } from "@openbot-build/domain/Sso"
+import {
+	Model,
+	ModelProvider,
+	ModelCatalog,
+} from "@openbot-build/domain/Models"
+import { SecretProvider } from "@openbot-build/domain/Vaults"
 import { BrowserHost, Caller, Outside } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
-import {
-	ModelProvidersApi,
-	SsoApi,
-	UserTokensApi,
-	VaultsApi,
-} from "@openbot-build/api"
-import { Array as Arr, Effect, Ref, Schema, String as Str } from "effect"
-import type { HttpMethod } from "effect/http"
+import { Array as Arr, Effect, Ref, Schema, String as Str, Layer } from "effect"
+import { type HttpMethod, FetchHttpClient } from "effect/http"
 
 const publicOrigin = "https://admin-api.example.com"
 const Failure = Schema.Struct({ _tag: Schema.String })
@@ -39,12 +42,12 @@ const callers = Effect.fn("AdminApiE2E.callers")(function* (
 	const cookie = Caller.withCookie({ address, publicOrigin })
 	const token = Caller.withToken(address)
 	const aliceToken = yield* Caller.read(
-		UserTokensApi.CreatedToken,
+		CreatedToken,
 		cookie(alice.session, "/v1/user/tokens", "POST", { name: "Admin test" }),
 		201,
 	)
 	const bobToken = yield* Caller.read(
-		UserTokensApi.CreatedToken,
+		CreatedToken,
 		cookie(bob.session, "/v1/user/tokens", "POST", { name: "Other test" }),
 		201,
 	)
@@ -73,7 +76,12 @@ const callers = Effect.fn("AdminApiE2E.callers")(function* (
 })
 
 // The tests send real HTTP requests to a server with a new PostgreSQL database.
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"cookies and tokens manage SSO while secrets and other organizations stay private",
 		() =>
@@ -105,13 +113,13 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						"SsoConnectionInvalid",
 					)
 					const domain = yield* Caller.read(
-						SsoApi.Domain,
+						Domain,
 						send("/v1/organization/domains", "POST", { domain: domainName }),
 					)
 					yield* Ref.set(records, [domain.recordValue])
 					yield* status(send(domainPath + "/verify", "POST"), 200)
 					const created = yield* send(connections, "POST", input)
-					const value = yield* Caller.json(SsoApi.SsoConnection, 200)(created)
+					const value = yield* Caller.json(SsoConnection, 200)(created)
 					assert.isFalse(Str.includes(secret)(yield* created.text))
 					assert.deepStrictEqual(value.clientSecret, {
 						set: true,
@@ -122,14 +130,10 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						publicOrigin + "/auth/callback/" + value.id,
 					)
 					const path = connections + "/" + value.id
-					const read = yield* Caller.read(
-						SsoApi.SsoConnection,
-						other(path),
-						200,
-					)
+					const read = yield* Caller.read(SsoConnection, other(path), 200)
 					assert.strictEqual(read.name, input.name)
 					const listed = yield* Caller.read(
-						Schema.Struct({ items: Schema.Array(SsoApi.SsoConnection) }),
+						Schema.Struct({ items: Schema.Array(SsoConnection) }),
 						send(connections),
 					)
 					assert.deepStrictEqual(
@@ -147,7 +151,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					yield* status(foreign(path, "DELETE"), 404)
 					yield* failure(send(domainPath, "DELETE"), 409, "DomainInUse")
 					const updated = yield* Caller.read(
-						SsoApi.SsoConnection,
+						SsoConnection,
 						send(path, "PATCH", {
 							expectedVersion: value.version,
 							name: "Changed company",
@@ -164,7 +168,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						"SsoConnectionConflict",
 					)
 					assert.strictEqual(
-						(yield* Caller.read(SsoApi.SsoConnection, other(path))).name,
+						(yield* Caller.read(SsoConnection, other(path))).name,
 						"Changed company",
 					)
 					yield* status(send(path, "DELETE"), 204)
@@ -188,7 +192,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					const providers = "/v1/organization/model_providers"
 					const catalogPath = "/v1/organization/model_catalog"
 					const model = yield* Caller.read(
-						ModelProvidersApi.Model,
+						Model,
 						send(models, "POST", {
 							id: "admin-" + name,
 							name: "Small model",
@@ -207,23 +211,17 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						apiKey: secret,
 						models: [{ model: model.id, modelOwner: "organization" }],
 					})
-					const provider = yield* Caller.json(
-						ModelProvidersApi.ModelProvider,
-						200,
-					)(created)
+					const provider = yield* Caller.json(ModelProvider, 200)(created)
 					assert.isFalse(Str.includes(secret)(yield* created.text))
 					assert.deepStrictEqual(provider.apiKey, { set: true, hint: "…1234" })
 					const path = providers + "/" + provider.id
-					const read = yield* Caller.read(
-						ModelProvidersApi.ModelProvider,
-						other(path),
-					)
+					const read = yield* Caller.read(ModelProvider, other(path))
 					assert.strictEqual(read.name, provider.name)
 					assert.deepStrictEqual(read.apiKey, provider.apiKey)
 					const listResponse = yield* send(providers)
 					const listed = yield* Caller.json(
 						Schema.Struct({
-							items: Schema.Array(ModelProvidersApi.ModelProvider),
+							items: Schema.Array(ModelProvider),
 						}),
 					)(listResponse)
 					assert.isFalse(Str.includes(secret)(yield* listResponse.text))
@@ -231,10 +229,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						Arr.map(listed.items, (entry) => entry.id),
 						[provider.id],
 					)
-					const catalog = yield* Caller.read(
-						ModelProvidersApi.ModelCatalog,
-						other(catalogPath),
-					)
+					const catalog = yield* Caller.read(ModelCatalog, other(catalogPath))
 					assert.deepStrictEqual(
 						Arr.map(catalog.models, (entry) => [
 							entry.provider,
@@ -252,14 +247,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						yield* status(foreign(resource, "DELETE"), 404)
 					}
 					assert.deepStrictEqual(
-						(yield* Caller.read(
-							ModelProvidersApi.ModelCatalog,
-							foreign(catalogPath),
-						)).models,
+						(yield* Caller.read(ModelCatalog, foreign(catalogPath))).models,
 						[],
 					)
 					const changedModel = yield* Caller.read(
-						ModelProvidersApi.Model,
+						Model,
 						send(modelPath, "PATCH", {
 							expectedVersion: model.version,
 							name: "Changed model",
@@ -275,7 +267,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						"ModelConflict",
 					)
 					const changed = yield* Caller.read(
-						ModelProvidersApi.ModelProvider,
+						ModelProvider,
 						send(path, "PATCH", {
 							expectedVersion: provider.version,
 							name: "Changed provider",
@@ -297,10 +289,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					yield* status(send(modelPath, "DELETE"), 204)
 					yield* status(other(modelPath), 404)
 					assert.deepStrictEqual(
-						(yield* Caller.read(
-							ModelProvidersApi.ModelCatalog,
-							other(catalogPath),
-						)).models,
+						(yield* Caller.read(ModelCatalog, other(catalogPath))).models,
 						[],
 					)
 				}
@@ -340,10 +329,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 							name: kind + " " + name,
 							credentials,
 						})
-						const value = yield* Caller.json(
-							VaultsApi.SecretProvider,
-							201,
-						)(created)
+						const value = yield* Caller.json(SecretProvider, 201)(created)
 						assert.isFalse(Str.includes(secret)(yield* created.text))
 						assert.strictEqual(value.kind, kind)
 						assert.deepStrictEqual(value.credentials.token, {
@@ -351,15 +337,12 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 							hint: "…1234",
 						})
 						const path = providers + "/" + value.id
-						const read = yield* Caller.read(
-							VaultsApi.SecretProvider,
-							other(path),
-						)
+						const read = yield* Caller.read(SecretProvider, other(path))
 						assert.strictEqual(read.name, value.name)
 						const listResponse = yield* send(providers)
-						const list = yield* Caller.json(
-							Schema.Array(VaultsApi.SecretProvider),
-						)(listResponse)
+						const list = yield* Caller.json(Schema.Array(SecretProvider))(
+							listResponse,
+						)
 						assert.isFalse(Str.includes(secret)(yield* listResponse.text))
 						assert.deepStrictEqual(
 							Arr.map(list, (entry) => entry.id),
@@ -367,7 +350,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						)
 						assert.deepStrictEqual(
 							yield* Caller.read(
-								Schema.Array(VaultsApi.SecretProvider),
+								Schema.Array(SecretProvider),
 								foreign(providers),
 							),
 							[],
@@ -387,7 +370,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 							credentials: { ...credentials, token: nextSecret },
 						})
 						const changed = yield* Caller.json(
-							VaultsApi.SecretProvider,
+							SecretProvider,
 							200,
 						)(changedResponse)
 						assert.isFalse(
@@ -407,8 +390,8 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 							"VaultConflict",
 						)
 						assert.deepStrictEqual(
-							(yield* Caller.read(VaultsApi.SecretProvider, other(path)))
-								.credentials.token,
+							(yield* Caller.read(SecretProvider, other(path))).credentials
+								.token,
 							{ set: true, hint: "…5678" },
 						)
 						yield* status(send(path, "DELETE"), 204)

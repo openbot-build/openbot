@@ -1,8 +1,5 @@
-import type {
-	AppConnections,
-	ConnectionId,
-	Execution,
-} from "@openbot-build/domain"
+import type { ConnectionId } from "@openbot-build/domain/ConnectionId"
+import type { AppConnections, Execution } from "@openbot-build/domain"
 import { Effect, type PlatformError } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Client, type ClientError } from "./Client.ts"

@@ -1,14 +1,14 @@
+import { Identity } from "@openbot-build/domain/Identity"
 import { OpenBotApi } from "@openbot-build/api"
-import { Identity } from "@openbot-build/domain"
 import { Effect, pipe, String as Str } from "effect"
 import { HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
-import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
+import * as HttpErrors from "@openbot-build/server-execution/HttpErrors"
 import { Artifacts } from "./Artifacts.ts"
 
-/** Keep the saved name in UTF-8 and use plain ASCII for older clients. */
+/** Keep the saved name in UTF-8 in `filename*`, and plain ASCII in `filename` for clients that read only that field. */
 const disposition = (filename: string) => {
-	const fallback = Str.replace(/[^A-Za-z0-9._-]/g, "_")(filename)
+	const ascii = Str.replace(/[^A-Za-z0-9._-]/g, "_")(filename)
 	const encoded = pipe(
 		encodeURIComponent(filename.toWellFormed()),
 		Str.replaceAll("!", "%21"),
@@ -17,7 +17,7 @@ const disposition = (filename: string) => {
 		Str.replaceAll(")", "%29"),
 		Str.replaceAll("*", "%2A"),
 	)
-	return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`
+	return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`
 }
 
 export const layer = HttpApiBuilder.group(OpenBotApi, "artifacts", (handlers) =>

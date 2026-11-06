@@ -13,7 +13,7 @@ import {
 	String as Str,
 } from "effect"
 import { TestClock } from "effect/testing"
-import * as Composition from "../src/app/Composition.ts"
+import * as Composition from "../src/Composition.ts"
 import * as Feature from "@openbot-build/server-plugin/Feature"
 
 class Given extends Context.Service<Given, { readonly value: string }>()(

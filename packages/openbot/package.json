@@ -16,8 +16,7 @@
 		"openbot-inspect": "./dist/Inspect.js"
 	},
 	"exports": {
-		".": "./dist/index.js",
-		"./Parts": "./dist/Parts.js"
+		".": "./dist/index.js"
 	},
 	"scripts": {
 		"build": "tsdown",
@@ -52,7 +51,6 @@
 		"@openbot-build/plugin-code": "workspace:*",
 		"@openbot-build/plugin-computers": "workspace:*",
 		"@openbot-build/plugin-files": "workspace:*",
-		"@openbot-build/plugin-imported": "workspace:*",
 		"@openbot-build/plugin-mail": "workspace:*",
 		"@openbot-build/plugin-models": "workspace:*",
 		"@openbot-build/plugin-organization": "workspace:*",
@@ -67,10 +65,10 @@
 		"@openbot-build/plugin-work": "workspace:*",
 		"@openbot-build/protocol": "workspace:*",
 		"@openbot-build/server-billing": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
 		"@openbot-build/server-execution": "workspace:*",
 		"@openbot-build/server-kernel": "workspace:*",
 		"@openbot-build/server-plugin": "workspace:*",
-		"@openbot-build/server-upgrade": "workspace:*",
 		"@openbot-build/tools-contract": "workspace:*",
 		"effect": "4.1.2",
 		"yaml": "2.9.1",

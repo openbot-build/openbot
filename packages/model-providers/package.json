@@ -10,16 +10,15 @@
 		"src"
 	],
 	"exports": {
-		"./providers/ToolImages": "./dist/providers/ToolImages.js",
-		"./providers/anthropic/AnthropicProvider": "./dist/providers/anthropic/AnthropicProvider.js",
-		"./providers/chatgpt/ChatGptProvider": "./dist/providers/chatgpt/ChatGptProvider.js",
-		"./providers/chatgpt/OAuth": "./dist/providers/chatgpt/OAuth.js",
-		"./providers/openai-compat/OpenAiCompatProvider": "./dist/providers/openai-compat/OpenAiCompatProvider.js",
-		"./providers/openai/OpenAiProvider": "./dist/providers/openai/OpenAiProvider.js",
-		"./providers/openai/OpenAiRealtime": "./dist/providers/openai/OpenAiRealtime.js",
-		"./providers/openai/Request": "./dist/providers/openai/Request.js",
-		"./providers/openai/ResponsesCompaction": "./dist/providers/openai/ResponsesCompaction.js",
-		"./providers/typesafe/TypeSafeProvider": "./dist/providers/typesafe/TypeSafeProvider.js"
+		"./AnthropicProvider": "./dist/AnthropicProvider.js",
+		"./ChatGptOAuth": "./dist/ChatGptOAuth.js",
+		"./ChatGptProvider": "./dist/ChatGptProvider.js",
+		"./OpenAiCompatProvider": "./dist/OpenAiCompatProvider.js",
+		"./OpenAiProvider": "./dist/OpenAiProvider.js",
+		"./OpenAiRealtime": "./dist/OpenAiRealtime.js",
+		"./ResponsesCompaction": "./dist/ResponsesCompaction.js",
+		"./ToolImages": "./dist/ToolImages.js",
+		"./TypeSafeProvider": "./dist/TypeSafeProvider.js"
 	},
 	"scripts": {
 		"build": "tsdown",
@@ -39,8 +38,10 @@
 	},
 	"devDependencies": {
 		"@effect/platform-node": "4.1.2",
+		"@effect/sql-pg": "4.1.2",
 		"@effect/vitest": "4.1.2",
 		"@openbot-build/server-billing": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
 		"vitest": "5.0.5"
 	},
 	"repository": {

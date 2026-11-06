@@ -1,20 +1,23 @@
-import * as ModelFailure from "@openbot-build/models-contract/models/ModelFailure"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
+import * as ModelFailure from "@openbot-build/models-contract/ModelFailure"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"
-import * as Send from "@openbot-build/server-execution/execution/Send"
-import * as Admission from "@openbot-build/server-execution/execution/Admission"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
+import * as Send from "@openbot-build/server-execution/Send"
+import * as Admission from "@openbot-build/server-execution/Admission"
+import * as Observation from "@openbot-build/server-execution/Observation"
 import * as AppCall from "@openbot-build/apps-contract/apps/AppCall"
 import { Client } from "@openbot-build/protocol"
-import { ConnectionId } from "@openbot-build/domain"
-import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
+import { CallContext } from "@openbot-build/server-execution/CallContext"
 import {
 	entry,
 	Idempotent,
 	Local,
 	SavedResult,
-} from "@openbot-build/tools-contract/plugins/ToolEntry"
-import * as ModelCalls from "@openbot-build/models-contract/models/ModelCalls"
+} from "@openbot-build/tools-contract/ToolEntry"
+import * as ModelCalls from "@openbot-build/models-contract/ModelCalls"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -63,38 +66,36 @@ import {
 	Tool,
 	Toolkit,
 } from "effect/ai"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Calls from "@openbot-build/server-execution/execution/Calls"
-import * as CallRecovery from "@openbot-build/server-execution/execution/CallRecovery"
+import * as Records from "@openbot-build/server-kernel/Records"
+import * as Report from "@openbot-build/server-kernel/Report"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as Calls from "@openbot-build/server-execution/Calls"
+import * as CallRecovery from "@openbot-build/server-execution/CallRecovery"
 import { SqlError } from "effect/sql"
-import * as Runner from "@openbot-build/server-execution/execution/Runner"
-import * as RunScope from "@openbot-build/server-execution/execution/RunScope"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import * as Runner from "@openbot-build/server-execution/Runner"
+import * as RunScope from "@openbot-build/server-execution/RunScope"
+import * as Engine from "@openbot-build/server-execution/Engine"
 import { DurableDeferred, WorkflowEngine } from "effect/workflow"
-import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Store from "@openbot-build/server-execution/Store"
 import * as ToolSteps from "@openbot-build/plugin-chats/ToolSteps"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as ModelSteps from "@openbot-build/plugin-chats/ModelSteps"
 import {
 	Billing,
 	BillingStorageError,
-} from "@openbot-build/server-billing/billing/Billing"
+} from "@openbot-build/server-billing/Billing"
 import {
 	CurrentAttribution,
 	meter,
 	meterDecision,
 	CurrentCallIdentity,
-} from "@openbot-build/server-billing/billing/MeteredModel"
+} from "@openbot-build/server-billing/MeteredModel"
 import * as Judge from "@openbot-build/plugin-capabilities/Judge"
 import {
 	ModelRegistry,
 	AnyModel,
-} from "@openbot-build/models-contract/models/ModelRegistry"
+} from "@openbot-build/models-contract/ModelRegistry"
 import * as BotFixture from "./BotFixture.ts"
-import * as PostgresTest from "./PostgresTest.ts"
 
 class Allowed extends Context.Service<Allowed, Ref.Ref<boolean>>()(
 	"@openbot-build/server-testing/test/ExecutionCalls.test/Allowed",
@@ -130,11 +131,11 @@ const registry = Layer.effect(
 		})
 	}),
 )
-const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(PostgresTest.start, (db) =>
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),

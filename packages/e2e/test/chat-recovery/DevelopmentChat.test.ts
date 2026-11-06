@@ -1,10 +1,11 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
 import { Execution } from "@openbot-build/domain"
 import { assert, layer } from "@effect/vitest"
 
 import { Config, Model } from "@openbot-build/core"
 import * as Client from "@openbot-build/client"
 
-import { ChatSummary, ChatView } from "@openbot-build/api"
+import { ChatsApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Context,
@@ -19,7 +20,7 @@ import {
 import { message, settled, sendMessage } from "../support/Development.ts"
 
 import * as Development from "@openbot-build/server-development/Development"
-import { Caller, PostgresTest, DefaultBot } from "@openbot-build/server-testing"
+import { Caller, DefaultBot } from "@openbot-build/server-testing"
 import {
 	browser,
 	signIn,
@@ -40,7 +41,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 		"development assembly streams through the API and keeps the Chat after a restart",
 		() =>
 			Effect.gen(function* () {
-				const database = yield* PostgresTest.start
+				const database = yield* TestDatabase.start
 				const options = settings(database.url)
 				const publicOrigin = options.auth.publicOrigin
 				yield* migrate(options)
@@ -74,7 +75,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 				assert.match(events, /"status":"completed"/)
 				const [summary] = yield* Effect.flatMap(
 					send(`/v1/chats?bot=${defaultBot}`, "GET"),
-					Caller.json(Schema.Array(ChatSummary)),
+					Caller.json(Schema.Array(ChatsApi.ChatSummary)),
 				)
 				assert.ok(summary !== undefined)
 				const id = summary.chat.id
@@ -97,7 +98,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 				)
 				const restored = yield* Effect.flatMap(
 					restartedSend(path, "GET"),
-					Caller.json(ChatView),
+					Caller.json(ChatsApi.ChatView),
 				)
 				assert.deepStrictEqual(restored, saved)
 				assert.deepStrictEqual(
@@ -138,14 +139,14 @@ layer(platform, { excludeTestServices: true })((it) => {
 					)).items.length,
 					savedItems.items.length + 2,
 				)
-				const select = (current: ChatView, name: string) =>
+				const select = (current: ChatsApi.ChatView, name: string) =>
 					restartedSend(path, "PATCH", {
 						expected: current.chat.revision,
 						model: Config.Selection.make({
 							provider: developmentProvider,
 							model: Model.Id.make(name),
 						}),
-					}).pipe(Effect.flatMap(Caller.json(ChatView)))
+					}).pipe(Effect.flatMap(Caller.json(ChatsApi.ChatView)))
 				yield* select(continued, "mock-slow")
 				const slow = yield* sendMessage(
 					restartedSend,

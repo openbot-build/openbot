@@ -1,6 +1,6 @@
 import { AuthApi, Authorization, FailureApi } from "@openbot-build/api"
 import { Effect, Layer } from "effect"
-import { HttpHost } from "@openbot-build/server-kernel/errors/HttpHost"
+import { HttpHost } from "@openbot-build/server-kernel/HttpHost"
 import * as AppAuthorizationHandlers from "./AuthorizationHttpHandlers.ts"
 import * as AppExperienceHandlers from "./ExperienceHttpHandlers.ts"
 import * as AppHandlers from "./HttpHandlers.ts"

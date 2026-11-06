@@ -1,6 +1,7 @@
+import { BotId } from "@openbot-build/domain/BotId"
+import type { ExecutionIdentity } from "@openbot-build/domain/Identity"
 import { assert, describe, it } from "@effect/vitest"
 import { Chat, Item, Turn } from "@openbot-build/core"
-import { Bots, type ExecutionIdentity } from "@openbot-build/domain"
 import { HashSet } from "effect"
 import { Prompt } from "effect/ai"
 import * as Evidence from "../src/MemoryEvidence.ts"
@@ -19,7 +20,7 @@ const chat: Chat.Ref = {
 	createdAt: 0,
 	business: {
 		[chatHostId]: {
-			bot: Bots.BotId.make("bot"),
+			bot: BotId.make("bot"),
 			kind: "direct",
 			chain: { organizationId: "org", userId: "owner", bots: [], chats: [] },
 		},

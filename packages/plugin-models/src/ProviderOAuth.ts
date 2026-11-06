@@ -20,21 +20,18 @@ import {
 	providerOAuthAuthorizations,
 	providerOAuthHosts,
 } from "@openbot-build/server-database/Schema"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import {
 	authorizeUrl,
 	ChatGptOAuth,
 	Credentials,
-} from "@openbot-build/model-providers/providers/chatgpt/OAuth"
+} from "@openbot-build/model-providers/ChatGptOAuth"
 import {
 	type Owner,
 	ownerColumns,
-} from "@openbot-build/models-contract/models/ModelProviders"
-import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
-export { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
-export type { Errors } from "@openbot-build/models-contract/models/ProviderOAuth"
-
+} from "@openbot-build/models-contract/ModelProviders"
+import { ProviderOAuth } from "@openbot-build/models-contract/ProviderOAuth"
 const Pending = Schema.Struct({
 	redirectUri: Schema.String,
 	state: Schema.RedactedFromValue(Schema.String),

@@ -1,3 +1,7 @@
+import {
+	type Invitation,
+	Mail as MailModel,
+} from "@openbot-build/identity-contract/mail/Mail"
 import { assert, it } from "@effect/vitest"
 import { Authorization, Execution } from "@openbot-build/domain"
 import {
@@ -16,13 +20,17 @@ import {
 	type Connection,
 	type Message,
 } from "@openbot-build/identity-contract/mail/Transport"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import type { PlatformDocument } from "@openbot-build/server-kernel/settings/Documents"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import { bindings } from "@openbot-build/server-kernel/settings/Platform"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import {
+	platformDefaults,
+	type PlatformDocument,
+} from "@openbot-build/server-kernel/Documents"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
+import { bindings } from "@openbot-build/server-kernel/Platform"
+import { Records } from "@openbot-build/server-kernel/Records"
 
 const document: PlatformDocument = {
+	...platformDefaults,
 	publicOrigin: "https://openbot.example.com",
 	authSecret: "unused",
 	identityProvider: null,
@@ -40,7 +48,7 @@ const mail = {
 	password: "sealed-password",
 	invitationUrl: null,
 }
-const invitation: Mail.Invitation = {
+const invitation: Invitation = {
 	id: "inv_test",
 	email: "person@example.com",
 	organizationName: "Example Team",
@@ -105,7 +113,7 @@ it.effect(
 		Effect.gen(function* () {
 			const test = yield* fixture
 			yield* Effect.gen(function* () {
-				const service = yield* Mail.Mail
+				const service = yield* MailModel
 				assert.deepStrictEqual(yield* service.invitation(invitation), {
 					status: "disabled",
 				})
@@ -171,7 +179,7 @@ it.effect(
 			yield* Ref.set(test.current, { ...document, mail })
 			yield* Ref.set(test.failed, true)
 			yield* Effect.gen(function* () {
-				const service = yield* Mail.Mail
+				const service = yield* MailModel
 				assert.deepStrictEqual(
 					yield* service.invitation({ ...invitation, botName: "Helper" }),
 					{ status: "failed" },

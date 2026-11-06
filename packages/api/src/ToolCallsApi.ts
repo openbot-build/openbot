@@ -1,3 +1,8 @@
+import {
+	ChatConflict,
+	ChatNotFound,
+	ChatStorageUnavailable,
+} from "@openbot-build/domain/Chats"
 import { ToolExecution } from "@openbot-build/domain"
 import { Schema } from "effect"
 import {
@@ -8,12 +13,7 @@ import {
 } from "effect/http-api"
 import { BotAuth } from "./AuthApi.ts"
 import { Authorize, GroupRequired, own } from "./Authorization.ts"
-import {
-	ChatConflict,
-	ChatNotFound,
-	ChatStorageUnavailable,
-	chatParams,
-} from "./ChatsApi.ts"
+import { chatParams } from "./ChatsApi.ts"
 import { errors as executionErrors } from "./ExecutionsApi.ts"
 
 const errors = [
@@ -28,12 +28,12 @@ export const ToolCallsApi = HttpApiGroup.make("toolCalls")
 	.add(
 		HttpApiEndpoint.get("list", "/v1/chats/:chatId/tool-calls", {
 			params: chatParams,
-			success: Schema.Array(ToolExecution.Summary),
+			success: Schema.Array(ToolExecution.Record),
 			error: errors,
 		}),
 		HttpApiEndpoint.get("get", "/v1/chats/:chatId/tool-calls/:id", {
 			params: { ...chatParams, id: ToolExecution.Id },
-			success: ToolExecution.Result,
+			success: ToolExecution.View,
 			error: errors,
 		}),
 	)

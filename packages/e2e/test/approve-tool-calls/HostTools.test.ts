@@ -1,3 +1,4 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
 import { assert, layer } from "@effect/vitest"
 
 import { Chat, Turn } from "@openbot-build/core"
@@ -7,11 +8,7 @@ import { Array as Arr, Effect, HashMap, Option, Ref, Schema } from "effect"
 
 import { bot, message, model, settled } from "../support/Development.ts"
 
-import {
-	Caller,
-	PostgresTest,
-	DevelopmentTesting,
-} from "@openbot-build/server-testing"
+import { Caller, DevelopmentTesting } from "@openbot-build/server-testing"
 import {
 	signIn,
 	settings,
@@ -29,7 +26,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 		"server assembly keeps extra per-Chat handlers and approvals",
 		() =>
 			Effect.gen(function* () {
-				const database = yield* PostgresTest.start
+				const database = yield* TestDatabase.start
 				const options = settings(database.url)
 				const calls = yield* Ref.make(HashMap.empty<Chat.Id, number>())
 				const assembly = DevelopmentTesting.layerWithConfirmation(

@@ -1,3 +1,4 @@
+import type { BotId } from "@openbot-build/domain/BotId"
 import { type AppCalls } from "@openbot-build/domain"
 import type { Chat, Turn } from "@openbot-build/core"
 import { Requests as RequestDomain } from "@openbot-build/domain"
@@ -70,10 +71,10 @@ export class Requests extends Context.Service<
 		readonly create: (
 			organizationId: string,
 			input: {
-				readonly bot: BotsApi.BotId
+				readonly bot: BotId
 				readonly chain: Chain
 				/** The owner chain of the Bot, from the top, ending with the Bot. */
-				readonly deciders: ReadonlyArray<BotsApi.BotId>
+				readonly deciders: ReadonlyArray<BotId>
 				readonly capability: BotsApi.Capability
 				readonly reason: string
 				readonly chat: Chat.Id
@@ -123,7 +124,7 @@ export class Requests extends Context.Service<
 		readonly pass: (
 			organizationId: string,
 			id: string,
-			from: BotsApi.BotId,
+			from: BotId,
 		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
 		/** Closes one pending request when its time is over. */
 		readonly expireOne: (
@@ -137,7 +138,6 @@ export class Requests extends Context.Service<
 			reason?: string,
 		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/capabilities/Requests") {}
+>()("@openbot-build/conversation-contract/capabilities/Requests") {}
 
 export { type Request }

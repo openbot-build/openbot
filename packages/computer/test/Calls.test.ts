@@ -1,5 +1,9 @@
+import {
+	type ConnectorCall,
+	FileContent,
+	FileEntry,
+} from "@openbot-build/domain/Computers"
 import { NodeServices } from "@effect/platform-node"
-import { ComputersApi } from "@openbot-build/api"
 import { assert, layer } from "@effect/vitest"
 import {
 	Array as Arr,
@@ -14,7 +18,7 @@ import {
 import { Base64 } from "effect/encoding"
 import * as Calls from "../src/Calls.ts"
 
-type Operation = ComputersApi.ConnectorCall["operation"]
+type Operation = ConnectorCall["operation"]
 
 /** The folder where relative paths start. All tests in this file share it. */
 class Home extends Context.Service<Home, string>()(
@@ -90,9 +94,7 @@ layer(home, { excludeTestServices: true })((it) => {
 				_tag: "Read",
 				path: file,
 				encoding: "base64",
-			}).pipe(
-				Effect.flatMap(Schema.decodeUnknownEffect(ComputersApi.FileContent)),
-			)
+			}).pipe(Effect.flatMap(Schema.decodeUnknownEffect(FileContent)))
 			assert.strictEqual(read.content, Base64.encode(bytes))
 		}),
 	)
@@ -118,9 +120,7 @@ layer(home, { excludeTestServices: true })((it) => {
 				},
 			})
 			const entries = yield* done({ _tag: "List", path: folder }).pipe(
-				Effect.flatMap(
-					Schema.decodeUnknownEffect(Schema.Array(ComputersApi.FileEntry)),
-				),
+				Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(FileEntry))),
 			)
 			const byName = HashMap.fromIterable(
 				Arr.map(entries, (entry) => [entry.name, entry] as const),

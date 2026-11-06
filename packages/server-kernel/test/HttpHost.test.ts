@@ -32,11 +32,11 @@ import {
 } from "effect/http"
 import { HttpApiBuilder, HttpApiClient, OpenApi } from "effect/http-api"
 import { Socket } from "effect/socket"
-import { FailureApi, OpenBotApi, service } from "@openbot-build/api"
+import { FailureApi, OpenBotApi, HealthApi } from "@openbot-build/api"
 import { Execution } from "@openbot-build/domain"
-import * as HttpHost from "@openbot-build/server-kernel/errors/HttpHost"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import * as ErrorReporting from "@openbot-build/server-kernel/errors/Reporting"
+import * as HttpHost from "@openbot-build/server-kernel/HttpHost"
+import { Records } from "@openbot-build/server-kernel/Records"
+import * as ErrorReporting from "@openbot-build/server-kernel/Reporting"
 
 /** An error record stub that keeps the route of each record. */
 const recorder = Effect.gen(function* () {
@@ -78,7 +78,7 @@ const health = (
 ) =>
 	HttpApiBuilder.group(OpenBotApi, "health", (handlers) =>
 		handlers
-			.handle("getService", () => Effect.succeed(service))
+			.handle("getService", () => Effect.succeed(HealthApi.service))
 			.handle("getHealth", () => answer),
 	).pipe(Layer.provide(boundary))
 
@@ -247,31 +247,29 @@ it.live(
 		}),
 )
 
-it.live(
-	"HEAD gives raw routes the first chance, then the GET handler of the contract",
-	() =>
-		Effect.gen(function* () {
-			const records = yield* recorder
-			yield* Effect.gen(function* () {
-				const host = yield* HttpHost.HttpHost
-				const auth = yield* open(
-					host.mountRoutes(
-						"auth",
-						HttpRouter.add(
-							"*",
-							"/auth/*",
-							HttpServerResponse.empty({ status: 204 }),
-						),
+it.live("HEAD uses the same route order as GET", () =>
+	Effect.gen(function* () {
+		const records = yield* recorder
+		yield* Effect.gen(function* () {
+			const host = yield* HttpHost.HttpHost
+			const auth = yield* open(
+				host.mountRoutes(
+					"auth",
+					HttpRouter.add(
+						"*",
+						"/auth/*",
+						HttpServerResponse.empty({ status: 204 }),
 					),
-				)
-				const group = yield* open(host.mount(["health"], health()))
-				assert.strictEqual(yield* head("/auth/anything"), 204)
-				assert.strictEqual(yield* head("/health"), 200)
-				assert.strictEqual(yield* head("/docs"), 200)
-				yield* close(group)
-				yield* close(auth)
-			}).pipe(Effect.provide(server(records.layer)))
-		}),
+				),
+			)
+			const group = yield* open(host.mount(["health"], health()))
+			assert.strictEqual(yield* head("/auth/anything"), 204)
+			assert.strictEqual(yield* head("/health"), 200)
+			assert.strictEqual(yield* head("/docs"), 200)
+			yield* close(group)
+			yield* close(auth)
+		}).pipe(Effect.provide(server(records.layer)))
+	}),
 )
 
 it.live(
@@ -390,13 +388,13 @@ it.live("the OpenAPI document is the document of the whole contract", () =>
 	Effect.gen(function* () {
 		const records = yield* recorder
 		yield* Effect.gen(function* () {
-			const document = yield* get(service.openapi)
+			const document = yield* get(HealthApi.service.openapi)
 			assert.strictEqual(document.status, 200)
 			const expected = yield* Schema.encodeEffect(
 				Schema.fromJsonString(Schema.Unknown),
 			)(OpenApi.fromApi(OpenBotApi))
 			assert.strictEqual(document.body, expected)
-			const page = yield* get(service.documentation)
+			const page = yield* get(HealthApi.service.documentation)
 			assert.strictEqual(page.status, 200)
 			assert.include(String(page.headers["content-type"]), "text/html")
 		}).pipe(Effect.provide(server(records.layer)))

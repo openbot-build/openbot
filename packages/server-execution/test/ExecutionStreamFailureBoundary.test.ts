@@ -1,7 +1,8 @@
+import { Identity } from "@openbot-build/domain/Identity"
 import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
 import { AuthApi, ExecutionsApi, FailureApi } from "@openbot-build/api"
-import { Execution, Identity } from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
@@ -21,13 +22,13 @@ import {
 	HttpApiClient,
 	HttpApiMiddleware,
 } from "effect/http-api"
-import * as Boundary from "@openbot-build/server-kernel/errors/HttpBoundary"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import * as Reporting from "@openbot-build/server-kernel/errors/Reporting"
-import { codec, snapshot } from "@openbot-build/server-kernel/errors/Snapshot"
-import { Commands } from "@openbot-build/server-execution/execution/Commands"
-import * as Handlers from "@openbot-build/server-execution/execution/HttpHandlers"
-import * as HttpEvents from "@openbot-build/server-execution/execution/HttpEvents"
+import * as Boundary from "@openbot-build/server-kernel/HttpBoundary"
+import { Records } from "@openbot-build/server-kernel/Records"
+import * as Reporting from "@openbot-build/server-kernel/Reporting"
+import { codec, snapshot } from "@openbot-build/server-kernel/Snapshot"
+import { Commands } from "@openbot-build/server-execution/Commands"
+import * as Handlers from "@openbot-build/server-execution/HttpHandlers"
+import * as HttpEvents from "../src/HttpEvents.ts"
 
 const id = Execution.Id.make("stream-failure-test")
 const errorId = Execution.ErrorId.make("stream-error-test")

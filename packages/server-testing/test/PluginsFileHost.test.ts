@@ -1,34 +1,31 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Plugin as GraftPlugin } from "@graftland/graft"
 import { FailureApi, OpenBotApi } from "@openbot-build/api"
 import { Host, Preset } from "@openbot-build/openbot"
 import {
 	Array as Arr,
-	ConfigProvider,
 	Deferred,
 	Effect,
-	Exit,
 	FileSystem,
 	Layer,
 	Logger,
 	Option,
 	Path,
+	Predicate,
+	Record as Rec,
 	Redacted,
 	References,
+	Result,
 	Schema,
 	Stream,
 	String as Str,
 } from "effect"
 import { FetchHttpClient, HttpClient, HttpServer } from "effect/http"
 import { OpenApi } from "effect/http-api"
-import {
-	Assembly,
-	Composition,
-	HostServices,
-	PluginsFile,
-	PresetPlugins,
-} from "@openbot-build/openbot/Parts"
-import * as TestHost from "./TestHost.ts"
+import * as Feature from "@openbot-build/server-plugin/Feature"
+import * as TestHost from "../src/TestHost.ts"
 
 /** Writes a plugins file in a new folder that goes away with the scope. */
 const writeFile = (text: string) =>
@@ -42,6 +39,18 @@ const writeFile = (text: string) =>
 
 const triggersOff = "- id: triggers\n  disabled: true\n"
 
+/** The part of the cause of a `PluginsFileInvalid` start failure that the test reads. */
+const InvalidFile = Schema.Struct({
+	file: Schema.String,
+	problems: Schema.Array(
+		Schema.Struct({
+			entry: Schema.optionalKey(Schema.Int),
+			id: Schema.optionalKey(Schema.String),
+			reason: Schema.String,
+		}),
+	),
+})
+
 /**
  * A logger that keeps each line as JSON text: its message, its notes and its
  * cause. A logger runs outside of Effect, so it keeps the lines in a plain
@@ -52,7 +61,8 @@ const capture = () => {
 	const logger = Logger.make((line) => {
 		lines = [
 			...lines,
-			PluginsFile.canonical({
+			// A logger runs outside of Effect, so it encodes at once.
+			JSON.stringify({
 				message: line.message,
 				annotations: line.fiber.getRef(References.CurrentLogAnnotations),
 				cause: String(line.cause),
@@ -87,26 +97,69 @@ const expectTriggersOff = Effect.gen(function* () {
 	assert.strictEqual(yield* (yield* get("/openapi.json")).text, contract)
 })
 
-/** Waits on the real clock until every fork of the host is active. */
-const allActive = Effect.gen(function* () {
-	const composition = yield* Composition.Composition
-	while (true) {
-		const trees = yield* Stream.runHead(composition.forks)
-		const forks = Composition.flatten(Option.getOrElse(trees, () => []))
-		if (
-			Arr.isReadonlyArrayNonEmpty(forks) &&
-			Arr.every(forks, (fork) => fork.state._tag === "Active")
+/** The ids of the preset plugins that are off until the plugins file turns them on. */
+const offByDefault = Arr.filterMap(Preset.entries, (entry) =>
+	entry.disabled === true ? Result.succeed(entry.id) : Result.failVoid,
+)
+
+/** The ids of the preset, in the order of the table. */
+const presetIds = Arr.map(Preset.entries, (entry) => entry.id)
+
+/**
+ * The ids of the preset plugins that need one of these plugins, with these
+ * plugins, so a host can run without all of them. A plugin needs another one
+ * when it injects a key that the other one publishes.
+ */
+const withDependents = (
+	ids: ReadonlyArray<Preset.Id>,
+): ReadonlyArray<string> => {
+	const table = Rec.toEntries(Preset.plugins)
+	const keysOf = (id: string) =>
+		Arr.flatMap(table, ([other, plugin]) =>
+			other === id
+				? Arr.map(Feature.keys(plugin.plugin).publishes, (key) => key.key)
+				: [],
 		)
-			return forks
-		yield* Effect.sleep("100 millis")
+	const grow = (current: ReadonlyArray<string>): ReadonlyArray<string> => {
+		const published = Arr.flatMap(current, keysOf)
+		const next = Arr.dedupe([
+			...current,
+			...Arr.filterMap(table, ([id, plugin]) =>
+				Arr.some(Feature.keys(plugin.plugin).inject, (key) =>
+					Arr.contains(published, key.key),
+				)
+					? Result.succeed(id)
+					: Result.failVoid,
+			),
+		])
+		return next.length === current.length ? current : grow(next)
 	}
-}).pipe(Effect.timeout("60 seconds"))
+	return grow(ids)
+}
+
+/** Waits on the real clock until every fork of the host is active. */
+const allActive = (control: TestHost.Control) =>
+	Effect.gen(function* () {
+		while (true) {
+			const trees = yield* Stream.runHead(control.forks)
+			const forks = TestHost.flatten(Option.getOrElse(trees, () => []))
+			if (
+				Arr.isReadonlyArrayNonEmpty(forks) &&
+				Arr.every(forks, (fork) => fork.state._tag === "Active")
+			)
+				return forks
+			yield* Effect.sleep("100 millis")
+		}
+	}).pipe(Effect.timeout("60 seconds"))
 
 // The database is a real server, so these tests use the real clock.
-layer(TestHost.layerPlatform, {
-	excludeTestServices: true,
-	timeout: "240 seconds",
-})((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+		timeout: "240 seconds",
+	},
+)((it) => {
 	it.effect(
 		"a plugins file turns triggers off, and runtime edits never write it",
 		() =>
@@ -114,31 +167,31 @@ layer(TestHost.layerPlatform, {
 				const fs = yield* FileSystem.FileSystem
 				const file = yield* writeFile(triggersOff)
 				const before = yield* fs.readFile(file)
-				const options = yield* TestHost.makeSettings
-				yield* TestHost.migrate(options)
+				const database = yield* TestDatabase.migrated
 				const logs = capture()
+				const control = yield* TestHost.control
 				const context = yield* Layer.build(
-					TestHost.layer({ ...options, pluginsFile: file }),
+					TestHost.layer({ database, pluginsFile: file, probes: [control] }),
 				).pipe(Effect.provide(logs.layer))
 				yield* Effect.gen(function* () {
-					const composition = yield* Composition.Composition
+					const composition = yield* control.value
 					const entries = yield* composition.loader.entries
 					assert.deepStrictEqual(
 						Arr.map(entries, (entry) => entry.id),
-						[...Preset.ids],
+						[...presetIds, control.entry.id],
 					)
 					assert.deepStrictEqual(
 						Arr.filter(entries, (entry) => entry.disabled === true),
-						Arr.map(["triggers", ...Preset.offByDefault], (id) => ({
+						Arr.map(["triggers", ...offByDefault], (id) => ({
 							id,
-							name: Preset.nameOf(id),
+							name: `@openbot-build/plugin-${id}`,
 							disabled: true,
 						})),
 					)
-					const forks = yield* allActive
+					const forks = yield* allActive(composition)
 					assert.isFalse(
 						Arr.some(forks, (fork) =>
-							Str.startsWith(Preset.nameOf("triggers"))(fork.name),
+							Str.startsWith(Preset.plugins.triggers.name)(fork.name),
 						),
 					)
 					yield* expectTriggersOff
@@ -150,18 +203,20 @@ layer(TestHost.layerPlatform, {
 						read[0],
 						'"off":["triggers","turn-limiter","time-limiter","token-limiter"]',
 					)
-					assert.include(read[0], yield* PluginsFile.manifestHash(entries))
+					assert.include(read[0], '"manifestHash":"')
 
 					const refused = yield* composition.loader
 						.update("auth", { disabled: true })
 						.pipe(Effect.flip)
+					const cause = refused._tag === "StoreError" ? refused.cause : refused
+					assert.isTrue(Predicate.isTagged(cause, "RequiredPluginMissing"))
 					assert.deepStrictEqual(
-						refused._tag === "StoreError" ? refused.cause : refused,
-						PresetPlugins.RequiredPluginMissing.make({ ids: ["auth"] }),
+						Predicate.hasProperty(cause, "ids") ? cause.ids : undefined,
+						["auth"],
 					)
 					yield* composition.loader.update("triggers", { disabled: false })
 					yield* composition.loader.ready
-					yield* allActive
+					yield* allActive(composition)
 					const get = yield* client
 					const on = yield* get("/v1/triggers")
 					assert.isUndefined(on.headers[FailureApi.featureHeader])
@@ -172,16 +227,21 @@ layer(TestHost.layerPlatform, {
 
 	it.effect("a bad plugins file stops the start with a clear line", () =>
 		Effect.gen(function* () {
-			const options = yield* TestHost.makeSettings
-			yield* TestHost.migrate(options)
+			const database = yield* TestDatabase.migrated
 			const logs = capture()
 			const file = yield* writeFile("- id: auth\n  disabled: true\n")
 			const invalid = yield* Layer.build(
-				TestHost.layer({ ...options, pluginsFile: file }),
+				TestHost.layer({ database, pluginsFile: file }),
 			).pipe(Effect.provide(logs.layer), Effect.scoped, Effect.flip)
+			assert.strictEqual(
+				invalid._tag === "StartFailed" ? invalid.reason : undefined,
+				"PluginsFileInvalid",
+			)
 			assert.deepStrictEqual(
-				invalid,
-				PluginsFile.PluginsFileInvalid.make({
+				invalid._tag === "StartFailed"
+					? Schema.decodeUnknownOption(InvalidFile)(invalid.cause)
+					: Option.none(),
+				Option.some({
 					file,
 					problems: [
 						{
@@ -201,9 +261,12 @@ layer(TestHost.layerPlatform, {
 				),
 			)
 			const missing = yield* Layer.build(
-				TestHost.layer({ ...options, pluginsFile: `${file}.missing` }),
+				TestHost.layer({ database, pluginsFile: `${file}.missing` }),
 			).pipe(Effect.provide(logs.layer), Effect.scoped, Effect.flip)
-			assert.strictEqual(missing._tag, "PluginsFileUnreadable")
+			assert.strictEqual(
+				missing._tag === "StartFailed" ? missing.reason : undefined,
+				"PluginsFileUnreadable",
+			)
 			assert.isTrue(
 				Arr.some(
 					logs.lines(),
@@ -216,7 +279,7 @@ layer(TestHost.layerPlatform, {
 	)
 
 	it.effect(
-		"a value of !env goes to the plugin and never into a log line",
+		"the config of a new entry goes to the plugin and never into a log line",
 		() =>
 			Effect.gen(function* () {
 				const secret = "value-of-the-token-5432"
@@ -228,42 +291,28 @@ layer(TestHost.layerPlatform, {
 					apply: (config) => Effect.asVoid(Deferred.succeed(got, config.token)),
 				})
 				const file = yield* writeFile(
-					`- id: probe\n  name: "${name}"\n  config:\n    token: !env OPENBOT_TEST_PLUGIN_TOKEN\n`,
+					`- id: probe\n  name: "${name}"\n  config:\n    token: ${secret}\n`,
 				)
-				const options = yield* TestHost.makeSettings
-				yield* TestHost.migrate(options)
+				const database = yield* TestDatabase.migrated
 				const logs = capture()
-				const context = yield* Layer.build(
+				const control = yield* TestHost.control
+				yield* Layer.build(
 					TestHost.layer({
-						...options,
+						database,
 						pluginsFile: file,
 						plugins: { [name]: probe },
+						probes: [control],
 					}),
-				).pipe(
-					Effect.provide(
-						Layer.merge(
-							logs.layer,
-							ConfigProvider.layer(
-								ConfigProvider.fromUnknown({
-									OPENBOT_TEST_PLUGIN_TOKEN: secret,
-								}),
-							),
-						),
-					),
-				)
+				).pipe(Effect.provide(logs.layer))
 				assert.strictEqual(yield* Deferred.await(got), secret)
 				const entries = yield* Effect.flatMap(
-					Composition.Composition,
+					control.value,
 					(composition) => composition.loader.entries,
-				).pipe(Effect.provideContext(context))
+				)
+				const added = Arr.findFirst(entries, (entry) => entry.id === "probe")
 				assert.deepStrictEqual(
-					Arr.last(PluginsFile.show(entries)),
-					Option.some({
-						id: "probe",
-						name,
-						disabled: false,
-						config: { token: { env: "OPENBOT_TEST_PLUGIN_TOKEN" } },
-					}),
+					Option.map(added, (entry): unknown => entry.config),
+					Option.some({ token: secret }),
 				)
 				assert.isTrue(
 					Arr.some(logs.lines(), (line) =>
@@ -277,40 +326,66 @@ layer(TestHost.layerPlatform, {
 	)
 
 	it.effect(
-		"the server of the program starts with a plugin turned off, and Host.layer does not",
+		"Host.layer starts with a plugin turned off, and its routes answer that it is off",
 		() =>
 			Effect.gen(function* () {
 				const file = yield* writeFile(triggersOff)
-				const options = yield* TestHost.makeSettings
-				yield* TestHost.migrate(options)
-				const settings = {
-					...options,
-					pluginsFile: file,
-					auth: {
-						mode: "development" as const,
-						publicOrigin: "https://localhost:8443",
-						secret: Redacted.make(
-							"PluginsFileHostSecretMustRemainStable1234567",
+				const database = yield* TestDatabase.migrated
+				const context = yield* Layer.build(
+					Host.layer({
+						databaseUrl: Redacted.make(database.url),
+						secretKeys: Redacted.make("test:" + Str.repeat(32)("11")),
+						clusterSecret: Redacted.make(
+							"test-cluster-secret-with-at-least-32-characters",
 						),
-					},
-				}
-				yield* Effect.scoped(
-					Effect.gen(function* () {
-						const context = yield* Layer.build(
-							HostServices.provide<never, never>(settings)(
-								Assembly.layerProgram(settings),
+						host: "127.0.0.1",
+						port: 0,
+						pluginsFile: file,
+						auth: {
+							mode: "development" as const,
+							publicOrigin: "https://localhost:8443",
+							secret: Redacted.make(
+								"PluginsFileHostSecretMustRemainStable1234567",
 							),
-						)
-						yield* expectTriggersOff.pipe(Effect.provideContext(context))
+						},
 					}),
 				)
-				// Host.layer gives every service of the plugins, so it needs every plugin.
-				const exit = yield* Layer.build(Host.layer(settings)).pipe(
-					Effect.scoped,
-					Effect.exit,
+				yield* expectTriggersOff.pipe(Effect.provideContext(context))
+			}).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+	)
+
+	it.effect(
+		"the host starts without bots and every plugin that needs bots",
+		() =>
+			Effect.gen(function* () {
+				const off = withDependents(["bots"])
+				// The set holds the plugins that inject a key of bots.
+				assert.include(off, "chats")
+				assert.isFalse(Arr.some(off, (id) => Arr.contains(Preset.required, id)))
+				const file = yield* writeFile(
+					Arr.join(
+						Arr.map(off, (id) => `- id: ${id}\n  disabled: true\n`),
+						"",
+					),
 				)
-				assert.isTrue(Exit.isFailure(exit))
-				assert.include(String(exit), "CaptureMissing")
+				const database = yield* TestDatabase.migrated
+				const control = yield* TestHost.control
+				const context = yield* Layer.build(
+					TestHost.layer({ database, pluginsFile: file, probes: [control] }),
+				)
+				const composition = yield* control.value
+				const forks = yield* allActive(composition)
+				assert.isFalse(
+					Arr.some(forks, (fork) =>
+						Arr.some(off, (id) =>
+							Str.startsWith(`@openbot-build/plugin-${id}`)(fork.name),
+						),
+					),
+				)
+				const get = yield* client.pipe(Effect.provideContext(context))
+				const bots = yield* get("/v1/bots")
+				assert.strictEqual(bots.status, 503)
+				assert.strictEqual(bots.headers[FailureApi.featureHeader], "bots")
 			}).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
 	)
 })

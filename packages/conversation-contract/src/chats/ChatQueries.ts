@@ -1,11 +1,12 @@
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
+import type { Caller } from "@openbot-build/domain/Identity"
+import {
+	ChatStorageUnavailable,
+	type ChatKind,
+} from "@openbot-build/domain/Chats"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
 import * as ChatHost from "./ChatHost.ts"
 import { Chat, type Item, type Turn } from "@openbot-build/core"
-import {
-	Authorization,
-	type Caller,
-	type ChatKind,
-} from "@openbot-build/domain"
+import { Authorization } from "@openbot-build/domain"
 import { Effect } from "effect"
 import { sql } from "drizzle-orm"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
@@ -17,9 +18,8 @@ import * as ChatRecords from "./ChatRecords.ts"
 import * as StoredChats from "./StoredChats.ts"
 import { OpenWork } from "./OpenWork.ts"
 import * as History from "../artifacts/History.ts"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import { ChatStorageUnavailable } from "@openbot-build/domain"
-import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import * as Todos from "../work/Todos.ts"
 
 /** Every entry point uses the caller's current read policy and saved records. */
 export const make = Effect.gen(function* () {

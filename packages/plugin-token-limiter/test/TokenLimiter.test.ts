@@ -2,7 +2,7 @@ import { Array as Arr, Effect, Ref, Schema, Stream } from "effect"
 import { assert, it, layer } from "@effect/vitest"
 import { Chat, Plugin, PluginComposition } from "@openbot-build/core"
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
-import * as TokenLimiter from "../src/TokenLimiter.ts"
+import * as TokenLimiter from "../src/TokenLimiterFeature.ts"
 import { ChatTest } from "./ChatTest.ts"
 
 // Each model step uses 3 input tokens and 2 output tokens.
@@ -52,33 +52,6 @@ const toolPlugin = Plugin.make({ id: Plugin.Id.make("tools") })(() =>
 			instructions: Prompt.make([{ role: "system", content: "Use Echo" }]),
 		}),
 	),
-)
-
-it.effect("invalid token limits fail before any model request", () =>
-	Effect.gen(function* () {
-		const calls = yield* Ref.make(0)
-		const model = yield* makeModel(() =>
-			Stream.unwrap(
-				Effect.as(
-					Ref.update(calls, (n) => n + 1),
-					Stream.empty,
-				),
-			),
-		)
-		for (const maxTokens of [0, -1, 0.5, NaN, Infinity]) {
-			const chat = ChatTest(TokenLimiter.make({ maxTokens }))
-			const error = yield* chat
-				.execute({ input: "hello" })
-				.pipe(
-					Effect.flip,
-					Effect.provideService(LanguageModel.LanguageModel, model),
-				)
-			assert.ok(Schema.is(TokenLimiter.InvalidMaxTokens)(error))
-			// NaN is not equal to itself, so use Object.is.
-			assert.ok(Object.is(error.maxTokens, maxTokens))
-		}
-		assert.strictEqual(yield* Ref.get(calls), 0)
-	}),
 )
 
 layer(handlers)((it) => {

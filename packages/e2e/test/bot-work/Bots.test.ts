@@ -1,3 +1,10 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { BotId } from "@openbot-build/domain/BotId"
+import {
+	OrganizationSettings,
+	MemberSettings,
+} from "@openbot-build/domain/Settings"
+import { Bot, Grant, Rule } from "@openbot-build/domain/Bots"
 import {
 	BrowserHost,
 	Caller,
@@ -5,18 +12,10 @@ import {
 	Wait,
 } from "@openbot-build/server-testing"
 import { PgClient } from "@effect/sql-pg"
-import { Execution } from "@openbot-build/domain"
+import { Execution, BotMemory } from "@openbot-build/domain"
 import { assert, layer } from "@effect/vitest"
 import { Item } from "@openbot-build/core"
-import {
-	BotMemory,
-	BotsApi,
-	ChatInfo,
-	ChatView,
-	DelegationsApi,
-	RequestsApi,
-	Settings,
-} from "@openbot-build/api"
+import { DelegationsApi, RequestsApi, ChatsApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Effect,
@@ -28,9 +27,10 @@ import {
 	Schema,
 	Stream,
 	String as Str,
+	Layer,
 } from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
-import type { HttpMethod } from "effect/http"
+import { type HttpMethod, FetchHttpClient } from "effect/http"
 
 const { until } = Wait
 
@@ -452,7 +452,12 @@ const client = (host: BrowserHost.Host) => {
 }
 
 // The host is a real server with real time.
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"memory commits one cursor when another Turn finishes while learning waits",
 		() =>
@@ -480,7 +485,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const { send, talk } = client(host)
 				const alice = yield* host.login("memory-cursor")
 				const settings = yield* Caller.read(
-					Settings.OrganizationSettings,
+					OrganizationSettings,
 					send(alice.session, "/v1/organization/settings"),
 				)
 				const updated = yield* send(
@@ -568,7 +573,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const bob = yield* host.login("bots-bob")
 				const main = yield* host.defaultBot(alice.session)
 				const programmer = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send(alice.session, "/v1/bots", "POST", {
 						name: "Programmer",
 						role: "Writes code",
@@ -643,7 +648,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// The work ran in its own task Chat.
 				assert.ok(finished.chat !== null)
 				const task = yield* Caller.read(
-					ChatView,
+					ChatsApi.ChatView,
 					send(alice.session, "/v1/chats/" + finished.chat),
 				)
 				assert.strictEqual(task.chat.kind, "task")
@@ -662,7 +667,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				// Task Chats are not in the list of Chats of a person.
 				const listed = yield* Caller.read(
-					Schema.Array(Schema.Struct({ chat: ChatInfo })),
+					Schema.Array(Schema.Struct({ chat: ChatsApi.ChatInfo })),
 					send(alice.session, "/v1/chats"),
 				)
 				assert.deepStrictEqual(
@@ -672,7 +677,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// The decision is kept as a Grant, so the second time needs no request.
 				const grants = yield* Caller.read(
-					Schema.Array(BotsApi.Grant),
+					Schema.Array(Grant),
 					send(alice.session, "/v1/bots/" + main + "/grants"),
 				)
 				assert.strictEqual(grants.length, 1)
@@ -742,7 +747,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const alice = yield* host.login("memory-alice")
 				const bob = yield* host.login("memory-bob")
 				const settings = yield* Caller.read(
-					Settings.OrganizationSettings,
+					OrganizationSettings,
 					send(alice.session, "/v1/organization/settings"),
 				)
 				const configured = yield* send(
@@ -760,7 +765,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(configured.status, 200, yield* configured.text)
 				const shared = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send(alice.session, "/v1/bots", "POST", {
 						name: "Concierge",
 						role: "Helps everyone",
@@ -998,9 +1003,9 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const alice = yield* host.login("bots-carol")
 				const main = yield* host
 					.defaultBot(alice.session)
-					.pipe(Effect.flatMap(Schema.decodeEffect(BotsApi.BotId)))
+					.pipe(Effect.flatMap(Schema.decodeEffect(BotId)))
 				const helper = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send(alice.session, "/v1/bots", "POST", {
 						name: "Helper",
 						role: "Confirms changes",
@@ -1069,11 +1074,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// Each Bot on the way got a Grant with the scope that its decider chose.
 				const mainGrants = yield* Caller.read(
-					Schema.Array(BotsApi.Grant),
+					Schema.Array(Grant),
 					send(alice.session, "/v1/bots/" + main + "/grants?status=active"),
 				)
 				const helperGrants = yield* Caller.read(
-					Schema.Array(BotsApi.Grant),
+					Schema.Array(Grant),
 					send(
 						alice.session,
 						"/v1/bots/" + helper.id + "/grants?status=active",
@@ -1101,7 +1106,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(revoked.status, 204)
 				assert.deepStrictEqual(
 					yield* Caller.read(
-						Schema.Array(BotsApi.Grant),
+						Schema.Array(Grant),
 						send(
 							alice.session,
 							"/v1/bots/" + helper.id + "/grants?status=active",
@@ -1138,10 +1143,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				yield* until(
 					"the helper is still there",
 					Effect.map(
-						Caller.read(
-							BotsApi.Bot,
-							send(alice.session, "/v1/bots/" + helper.id),
-						),
+						Caller.read(Bot, send(alice.session, "/v1/bots/" + helper.id)),
 						(bot) => Option.liftPredicate(bot, (current) => !current.archived),
 					),
 				)
@@ -1162,7 +1164,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const alice = yield* host.login("bots-dana")
 				// The judge reads Rules only with the Rules model of the organization.
 				const settings = yield* Caller.read(
-					Settings.OrganizationSettings,
+					OrganizationSettings,
 					send(alice.session, "/v1/organization/settings"),
 				)
 				const configured = yield* send(
@@ -1182,7 +1184,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const main = yield* host.defaultBot(alice.session)
 				const chat = yield* talk(alice.session, main)
 				const rule = yield* Caller.read(
-					BotsApi.Rule,
+					Rule,
 					send(alice.session, "/v1/bots/" + main + "/rules", "POST", {
 						text: "Assistant may confirm changes with ConfirmChange.",
 					}),
@@ -1199,7 +1201,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					[],
 				)
 				const deny = yield* Caller.read(
-					BotsApi.Grant,
+					Grant,
 					send(alice.session, "/v1/bots/" + main + "/grants", "POST", {
 						capability: { action: "tools.call", target: "ConfirmChange" },
 						effect: "deny",
@@ -1255,7 +1257,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const dave = yield* host.login("bots-dave")
 				const main = yield* host
 					.defaultBot(dave.session)
-					.pipe(Effect.flatMap(Schema.decodeEffect(BotsApi.BotId)))
+					.pipe(Effect.flatMap(Schema.decodeEffect(BotId)))
 				const allow = (request: RequestsApi.CapabilityRequest) =>
 					Caller.read(
 						Execution.Receipt,
@@ -1266,12 +1268,12 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						}),
 					)
 				const bot = (id: string) =>
-					Caller.read(BotsApi.Bot, send(dave.session, "/v1/bots/" + id))
+					Caller.read(Bot, send(dave.session, "/v1/bots/" + id))
 				/** The only Bot that a Bot owns, once there is exactly one. */
 				const onlyOwnedBy = (id: string) =>
 					Effect.map(
 						Caller.read(
-							Schema.Array(BotsApi.Bot),
+							Schema.Array(Bot),
 							send(dave.session, "/v1/bots?bot=" + id),
 						),
 						(list) => (list.length === 1 ? Arr.head(list) : Option.none()),
@@ -1341,7 +1343,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				})
 				assert.strictEqual(mixed.status, 400)
 				const second = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send(dave.session, "/v1/bots", "POST", {
 						name: "Second",
 						role: "Helps the Worker",
@@ -1358,7 +1360,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// Archiving the Worker archives every Bot below it.
 				const current = yield* bot(worker.id)
 				yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send(dave.session, "/v1/bots/" + worker.id, "PATCH", {
 						expected: current.revision,
 						archived: true,
@@ -1370,7 +1372,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// Only a top Bot can be the default Bot.
 				const settings = yield* Caller.read(
-					Settings.MemberSettings,
+					MemberSettings,
 					send(dave.session, "/v1/me/settings"),
 				)
 				const notTop = yield* send(dave.session, "/v1/me/settings", "PATCH", {
@@ -1382,7 +1384,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// An archived Bot does no new work.
 				const top = yield* bot(main)
 				yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send(dave.session, "/v1/bots/" + main, "PATCH", {
 						expected: top.revision,
 						archived: true,
@@ -1413,14 +1415,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const frank = yield* host.login("bots-frank")
 				const erin = yield* host.login("bots-erin")
 				assert.deepStrictEqual(
-					yield* Caller.read(
-						Schema.Array(BotsApi.Bot),
-						send(erin.session, "/v1/bots"),
-					),
+					yield* Caller.read(Schema.Array(Bot), send(erin.session, "/v1/bots")),
 					[],
 				)
 				const settings = yield* Caller.read(
-					Settings.MemberSettings,
+					MemberSettings,
 					send(erin.session, "/v1/me/settings"),
 				)
 				assert.strictEqual(settings.defaultBot, null)
@@ -1430,7 +1429,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(trigger.status, 400, yield* trigger.text)
 
 				const theirs = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send(frank.session, "/v1/bots", "POST", {
 						name: "Private",
 						role: "Works for Frank",
@@ -1451,7 +1450,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(hidden.status, 404, yield* hidden.text)
 
 				const named = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send(erin.session, "/v1/bots", "POST", {
 						name: "Named",
 						role: "Helps Erin",

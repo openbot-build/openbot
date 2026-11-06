@@ -3,7 +3,7 @@ title: 部署
 description: 在你自己的服务器上运行 OpenBot。
 ---
 
-邀请制升级默认值、邮箱登录、审批、组角色及管理员恢复请参阅[账号准入](/zh-cn/access)。
+邀请制默认值、邮箱登录、审批、组角色及管理员恢复请参阅[账号准入](/zh-cn/access)。
 
 面向平台运维人员。这些任务会影响整个部署。请按任务要求准备服务器访问权限或平台管理权限。从[管理员手册](/zh-cn/admin)开始。
 
@@ -54,12 +54,12 @@ TAG=$OPENBOT_RELEASE docker buildx bake -f deploy/docker/docker-bake.hcl --load
 
 OpenBot 镜像包含 Node.js、打包好的服务器、打包好的迁移程序和设置程序，以及数据库迁移文件。它不含构建工具，也不含任何密钥。
 
-| 镜像中的路径                | 是什么                           |
-| --------------------------- | -------------------------------- |
-| `/app/dist/app/Main.mjs`    | 服务器。镜像默认运行它。         |
-| `/app/dist/app/Migrate.mjs` | 迁移程序。它负责准备数据库。     |
-| `/app/dist/app/Setup.mjs`   | 设置程序。它写入最初的平台设置。 |
-| `/app/migrations`           | 数据库迁移文件。                 |
+| 镜像中的路径            | 是什么                           |
+| ----------------------- | -------------------------------- |
+| `/app/dist/Main.mjs`    | 服务器。镜像默认运行它。         |
+| `/app/dist/Migrate.mjs` | 迁移程序。它负责准备数据库。     |
+| `/app/dist/Setup.mjs`   | 设置程序。它写入最初的平台设置。 |
+| `/app/migrations`       | 数据库迁移文件。                 |
 
 镜像中的服务器监听 `0.0.0.0:3000`。镜像带有健康检查，每五秒调用一次 `/health`。
 
@@ -96,24 +96,24 @@ echo "OPENBOT_CLUSTER_SECRET=$(openssl rand -hex 32)" >> openbot.env
 
 ### 准备数据库
 
-迁移程序需要 `OPENBOT_DATABASE_URL` 和
-`OPENBOT_SECRET_KEYS`。运行前停止所有 OpenBot 实例。备份数据库和对象存储键的清单。保留旧密钥，数据转换需要用它们打开旧记录。首次启动服务器和每次发布新版本之前都要运行：
+迁移程序只需要
+`OPENBOT_DATABASE_URL`。运行前停止所有 OpenBot 实例，并备份数据库。首次启动服务器和每次发布新版本之前都要运行：
 
 ```sh
 docker run --rm --env-file openbot.env \
-  openbot:$OPENBOT_RELEASE /app/dist/app/Migrate.mjs
+  openbot:$OPENBOT_RELEASE /app/dist/Migrate.mjs
 ```
 
-同一迁移程序会把支持转换的 UUID 列从文本改为 PostgreSQL 的 `uuid`
-类型，每个 ID 占 16 字节。旧 v4 值不变；新的存储 ID 在时间顺序有帮助时使用 v7。含混合格式或外部 ID 的列保留文本。按上文要求，停止所有服务器后再运行。
+一次运行的所有迁移都在一个事务中。如果其中一个失败，数据库保留原来的表结构。
 
-转换中断后，再运行同一命令。每一批数据与进度一起提交。损坏的记录会停止转换，并留下加密的错误报告。程序检查数量、引用、密钥和状态后，才将数据版本标记为就绪。检查通过前，服务器不能启动。运行中的服务器持有共享数据库锁；转换程序需要独占锁。
+这个版本需要新数据库。它不读取旧版本格式的数据，也不转换这些数据。当数据库中有旧版本的数据时，迁移会以下面的错误停止，并且不做任何修改：
 
-备份保留资源 ID、历史和待处理决策。结果不明的旧外部动作保留为
-`outcome_unknown`。没有安全检查点的工作标记为
-`interrupted`，并保留原因。缺少原始 token 的记录不能变成不受限制的成员调用。
+```text
+This database holds data of an older OpenBot version (...). This version works
+only with a new database. Make a new database and run openbot migrate on it.
+```
 
-恢复流量前可以还原备份。重新执行外部动作后，应向前修复数据。不要还原旧数据并重复这些动作。
+括号中的文字说明迁移发现了什么。请为这个版本创建一个新的空数据库，并在上面运行迁移。
 
 </Step>
 <Step>
@@ -125,7 +125,7 @@ docker run --rm --env-file openbot.env \
 ```sh
 docker run --rm --env-file openbot.env \
   -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
-  /app/dist/app/Setup.mjs \
+  /app/dist/Setup.mjs \
   --config=/run/setup.json
 ```
 
@@ -145,7 +145,7 @@ docker run -d --name openbot --env-file openbot.env \
   -p 127.0.0.1:8080:3000 openbot:$OPENBOT_RELEASE
 ```
 
-服务器启动时，会检查表结构和已完成的数据版本。任一检查失败，它都会停止，并在日志中写入错误。
+服务器启动时，会检查最新的迁移已经运行，并检查每个表都有它的列。任一检查失败，它都会停止，并在日志中写入错误。
 
 </Step>
 <Step>
@@ -208,8 +208,8 @@ Compose 以 `/run/secrets` 中文件的形式提供 `POSTGRES_PASSWORD`、
 `OPENBOT_CLUSTER_SECRET`。这些值来自 `.env.production`。`openbot` 服务还接收
 `OPENBOT_OUTBOUND_ALLOW`、`OPENBOT_CLUSTER_HOST` 和
 `OPENBOT_PLUGINS_FILE`。Compose 把 `deploy/docker/plugins.yml` 以只读方式挂载到
-`/etc/openbot/plugins.yml`。产品设置保存在数据库中。`migrate` 服务需要
-`OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS`。
+`/etc/openbot/plugins.yml`。产品设置保存在数据库中。`migrate` 服务只需要
+`OPENBOT_DATABASE_URL`。
 
 在模板中，`OPENBOT_DATABASE_URL` 使用
 `${POSTGRES_PASSWORD}`，所以密码只需要设置一次。
@@ -271,7 +271,7 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 
 ```sh
 docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
-  run --rm -v "$PWD/setup.json:/run/setup.json:ro" openbot /app/dist/app/Setup.mjs \
+  run --rm -v "$PWD/setup.json:/run/setup.json:ro" openbot /app/dist/Setup.mjs \
   --config=/run/setup.json
 ```
 

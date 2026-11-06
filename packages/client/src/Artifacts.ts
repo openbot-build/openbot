@@ -1,5 +1,11 @@
+import type {
+	PublishArtifactRequest,
+	PublishVersionRequest,
+	CaptureSourceRequest,
+	RecordCitationsRequest,
+} from "@openbot-build/domain/ArtifactCommands"
+import type { ArtifactId } from "@openbot-build/domain/Artifacts"
 import type { Chat } from "@openbot-build/core"
-import type { ArtifactsApi } from "@openbot-build/api"
 import type { Execution } from "@openbot-build/domain"
 import { Effect, type PlatformError } from "effect"
 import { SecureRandom } from "effect/crypto"
@@ -14,7 +20,7 @@ type WithKey<A extends { readonly commandKey: Execution.CommandKey }> = Omit<
 /** Make a publish command. Reuse send when a reply is lost. */
 export const publish = Effect.fn("Artifacts.publish")(function* (
 	chatId: Chat.Id,
-	input: WithKey<ArtifactsApi.PublishArtifactRequest>,
+	input: WithKey<PublishArtifactRequest>,
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
@@ -34,8 +40,8 @@ export const publish = Effect.fn("Artifacts.publish")(function* (
 /** A new version keeps the artifact ID. Old versions keep their bytes. */
 export const publishVersion = Effect.fn("Artifacts.publishVersion")(function* (
 	chatId: Chat.Id,
-	artifactId: ArtifactsApi.ArtifactId,
-	input: WithKey<ArtifactsApi.PublishVersionRequest>,
+	artifactId: ArtifactId,
+	input: WithKey<PublishVersionRequest>,
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
@@ -55,7 +61,7 @@ export const publishVersion = Effect.fn("Artifacts.publishVersion")(function* (
 /** Save the material that a Chat can later cite. */
 export const captureSource = Effect.fn("Artifacts.captureSource")(function* (
 	chatId: Chat.Id,
-	input: WithKey<ArtifactsApi.CaptureSourceRequest>,
+	input: WithKey<CaptureSourceRequest>,
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
@@ -75,7 +81,7 @@ export const captureSource = Effect.fn("Artifacts.captureSource")(function* (
 /** Add saved source references to a saved message. */
 export const cite = Effect.fn("Artifacts.cite")(function* (
 	chatId: Chat.Id,
-	input: WithKey<ArtifactsApi.RecordCitationsRequest>,
+	input: WithKey<RecordCitationsRequest>,
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,

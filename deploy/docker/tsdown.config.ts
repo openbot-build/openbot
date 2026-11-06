@@ -10,10 +10,10 @@ const path = (relative: string) =>
 // so it is its own file next to the server. Its source is in the plugin-code
 // package.
 const entries = [
-	["Main", "openbot", "src/app/Main.ts"],
-	["Migrate", "openbot", "src/app/Migrate.ts"],
-	["Setup", "openbot", "src/app/Setup.ts"],
-	["Inspect", "openbot", "src/app/Inspect.ts"],
+	["Main", "openbot", "src/Main.ts"],
+	["Migrate", "openbot", "src/Migrate.ts"],
+	["Setup", "openbot", "src/Setup.ts"],
+	["Inspect", "openbot", "src/Inspect.ts"],
 	["CodeWorker", "plugin-code", "src/Worker.ts"],
 ] as const
 
@@ -22,9 +22,9 @@ export default defineConfig(
 		defineConfig({
 			cwd: path(`../../packages/${owner}`),
 			entry: { [name]: file },
-			// The server finds the migrations two folders up from this folder, in
+			// The server finds the migrations one folder up from this folder, in
 			// /app/migrations. Keep the depth.
-			outDir: path("../../.devenv/openbot/dist/app"),
+			outDir: path("../../.devenv/openbot/dist"),
 			clean: false,
 			format: "esm",
 			fixedExtension: true,

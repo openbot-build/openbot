@@ -1,13 +1,10 @@
-import type { Check as CheckType } from "@openbot-build/server-execution/execution/Admission"
+import type { ExecutionIdentity, Caller } from "@openbot-build/domain/Identity"
+import type { Check as CheckType } from "@openbot-build/server-execution/Admission"
 import { Chat, type Config } from "@openbot-build/core"
-import {
-	Caller,
-	Execution,
-	type ExecutionIdentity,
-} from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import { Context, Effect } from "effect"
-import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
-import { type Key } from "@openbot-build/server-execution/execution/Store"
+import type { Authorize } from "@openbot-build/server-execution/Engine"
+import { type Key } from "@openbot-build/server-execution/Store"
 
 type Failure = Execution.Forbidden | Execution.NotFound | Execution.StorageError
 
@@ -34,8 +31,7 @@ export interface Service {
 }
 
 export class TurnAccess extends Context.Service<TurnAccess, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/conversation-contract/chats/TurnAccess",
+	"@openbot-build/conversation-contract/chats/TurnAccess",
 ) {}
 
 export { type Failure }

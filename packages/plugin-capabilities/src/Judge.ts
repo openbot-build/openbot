@@ -1,5 +1,8 @@
+import type { Capability } from "@openbot-build/domain/Bots"
+import { AnyModel as RulesModel } from "@openbot-build/models-contract/ModelRegistry"
+import type { Caller } from "@openbot-build/domain/Identity"
 import { Config } from "@openbot-build/core"
-import { Execution, type Caller } from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { Authorization } from "@openbot-build/domain"
 import {
@@ -17,27 +20,18 @@ import {
 } from "effect"
 import { Digest } from "effect/crypto"
 import { Decision, LanguageModel, Prompt, Response } from "effect/ai"
-import {
-	type Capability,
-	hash,
-} from "@openbot-build/conversation-contract/capabilities/Capability"
+import { hash } from "@openbot-build/conversation-contract/capabilities/Capability"
 import {
 	attribute,
 	decisionUsage,
-} from "@openbot-build/server-billing/billing/MeteredModel"
-import {
-	AnyModel,
-	ModelRegistry,
-} from "@openbot-build/models-contract/models/ModelRegistry"
-import * as ModelCalls from "@openbot-build/models-contract/models/ModelCalls"
+} from "@openbot-build/server-billing/MeteredModel"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
+import * as ModelCalls from "@openbot-build/models-contract/ModelCalls"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
-import {
-	Store,
-	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import { Records, category } from "@openbot-build/server-kernel/errors/Records"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
+import { Store, type Fence } from "@openbot-build/server-execution/Store"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import { Records, category } from "@openbot-build/server-kernel/Records"
+import * as Report from "@openbot-build/server-kernel/Report"
 
 /** What the judge model returns. */
 export const Verdict = Schema.Struct({
@@ -54,14 +48,6 @@ const noMatch = (explanation: string): Verdict => ({
 	citations: [],
 	explanation,
 })
-
-/**
- * The model that judges Rules. A language model writes the whole verdict. A
- * decision model only picks from fixed answers, and OpenBot makes the verdict
- * from its picks.
- */
-export type RulesModel = AnyModel
-export const RulesModel = AnyModel
 
 /** OpenBot has no model for its own work right now. */
 export class HelperModelUnavailable extends Schema.TaggedError<
@@ -88,8 +74,7 @@ export class HelperModel extends Context.Service<
 			organizationId: string,
 		) => Effect.Effect<LanguageModel.LanguageModel, HelperModelUnavailable>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-capabilities/Judge/HelperModel") {}
+>()("@openbot-build/plugin-capabilities/Judge/HelperModel") {}
 
 export interface Input {
 	readonly organizationId: string
@@ -109,8 +94,7 @@ export class Judge extends Context.Service<
 	{
 		readonly decide: (input: Input) => Effect.Effect<Verdict>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-capabilities/Judge") {}
+>()("@openbot-build/plugin-capabilities/Judge") {}
 
 /** Keeps only citations that quote the text of a given Rule. Without one, there is no decision. */
 export const check = ({

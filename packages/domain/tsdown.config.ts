@@ -1,52 +1,23 @@
-import { defineConfig } from "tsdown"
 import config from "../../tsdown.config.ts"
+import { readFileSync } from "node:fs"
+import { defineConfig } from "tsdown"
+
+// The keys of `exports` in package.json are the only list of entries. Each
+// key is the path of a source module, such as `./Store`, and `.` is
+// `src/index.ts`. A key that does not point into `dist` is not built.
+const manifest: { readonly exports: Readonly<Record<string, string>> } =
+	JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"))
 
 export default defineConfig({
 	...config,
-	entry: {
-		Access: "src/Access.ts",
-		Email: "src/Email.ts",
-		Mail: "src/Mail.ts",
-		Invitation: "src/Invitation.ts",
-		SettingsErrors: "src/SettingsErrors.ts",
-		Secret: "src/Secret.ts",
-		Roles: "src/Roles.ts",
-		Settings: "src/Settings.ts",
-		Organizations: "src/Organizations.ts",
-		Models: "src/Models.ts",
-		ProviderOAuth: "src/ProviderOAuth.ts",
-		Tokens: "src/Tokens.ts",
-		Sso: "src/Sso.ts",
-		Platform: "src/Platform.ts",
-		Accounts: "src/Accounts.ts",
-		BotSharing: "src/BotSharing.ts",
-
-		AppConnections: "src/AppConnections.ts",
-		AppDiscovery: "src/AppDiscovery.ts",
-		AppAuthorizations: "src/AppAuthorizations.ts",
-		Developers: "src/Developers.ts",
-		Files: "src/Files.ts",
-		Artifacts: "src/Artifacts.ts",
-		ArtifactCommands: "src/ArtifactCommands.ts",
-		index: "src/index.ts",
-		Channels: "src/Channels.ts",
-		Computers: "src/Computers.ts",
-		Live: "src/Live.ts",
-		AppCalls: "src/AppCalls.ts",
-		AppIndex: "src/AppIndex.ts",
-		CodeRuns: "src/CodeRuns.ts",
-		Requests: "src/Requests.ts",
-		Delegations: "src/Delegations.ts",
-		Billing: "src/Billing.ts",
-		Bots: "src/Bots.ts",
-		BotMemory: "src/BotMemory.ts",
-		PlanApproval: "src/PlanApproval.ts",
-		Chats: "src/Chats.ts",
-		Name: "src/Name.ts",
-
-		Authorization: "src/Authorization.ts",
-		Execution: "src/Execution.ts",
-		ToolExecution: "src/ToolExecution.ts",
-		Vaults: "src/Vaults.ts",
-	},
+	entry: Object.fromEntries(
+		Object.entries(manifest.exports)
+			.filter(([, target]) => target.startsWith("./dist/"))
+			.map(([key]) =>
+				key === "."
+					? ["index", "src/index.ts"]
+					: [key.slice(2), `src/${key.slice(2)}.ts`],
+			),
+	),
+	exports: false,
 })

@@ -1,7 +1,7 @@
 import { Array as Arr, Cause, Context, Effect, Layer } from "effect"
 import { AppCalls } from "@openbot-build/domain"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import * as Report from "@openbot-build/server-kernel/Report"
 
 /**
  * Only the organization says which App tools only read, in its `appReadRules`
@@ -15,8 +15,7 @@ export class ActionPolicy extends Context.Service<
 			readonly source: AppCalls.Source
 		}) => Effect.Effect<boolean>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/ActionPolicy") {}
+>()("@openbot-build/plugin-apps/ActionPolicy") {}
 
 export const layer = Layer.effect(
 	ActionPolicy,

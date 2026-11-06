@@ -13,13 +13,13 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { and, asc, eq, inArray, or } from "drizzle-orm"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import {
 	modelProviders,
 	models,
 	providerModels,
 } from "@openbot-build/server-database/Schema"
-import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { hint, Secrets } from "@openbot-build/server-kernel/Secrets"
 import {
 	linkedOwner,
 	ModelProviders,
@@ -28,7 +28,7 @@ import {
 	ownerOf,
 	type Stored,
 	usableBy,
-} from "@openbot-build/models-contract/models/ModelProviders"
+} from "@openbot-build/models-contract/ModelProviders"
 import * as Db from "@openbot-build/server-database/Database"
 
 const Options = Schema.fromJsonString(Schema.Array(Schema.String))

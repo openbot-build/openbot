@@ -1,18 +1,14 @@
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { ChatStorageUnavailable } from "@openbot-build/domain/Chats"
+import { FileInvalid } from "@openbot-build/domain/Files"
+import { type Caller, Identity } from "@openbot-build/domain/Identity"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import * as ChatCommands from "@openbot-build/conversation-contract/chats/ChatCommands"
 import * as ChatQueries from "@openbot-build/conversation-contract/chats/ChatQueries"
 import * as ChatViews from "./ChatViews.ts"
 import * as ChatErrors from "@openbot-build/conversation-contract/chats/ChatErrors"
 import { response } from "./ResponseMapping.ts"
-import {
-	ChatStorageUnavailable,
-	ChatsApi,
-	FilesApi,
-	OpenBotApi,
-	type ChatCommandRequest,
-} from "@openbot-build/api"
+import { OpenBotApi, type ChatsApi } from "@openbot-build/api"
 import { Bots as BotsApi } from "@openbot-build/domain"
-import { Identity, type Caller } from "@openbot-build/domain"
 import type { Chat } from "@openbot-build/core"
 import { Array as Arr, Effect, Option } from "effect"
 import { HttpApiBuilder, type HttpApiEndpoint } from "effect/http-api"
@@ -22,14 +18,14 @@ import { Delegations } from "@openbot-build/conversation-contract/bots/Delegatio
 import { MemoryBot } from "@openbot-build/conversation-contract/bots/MemoryBot"
 import { Files } from "@openbot-build/apps-contract/files/Files"
 import * as TaskMessages from "@openbot-build/conversation-contract/chats/TaskMessages"
-import { Store } from "@openbot-build/server-execution/execution/Store"
-import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
+import { Store } from "@openbot-build/server-execution/Store"
+import * as HttpErrors from "@openbot-build/server-execution/HttpErrors"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import { Item, Turn } from "@openbot-build/core"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 
-type Request<K extends keyof typeof ChatsApi.endpoints> = Omit<
-	HttpApiEndpoint.Request<(typeof ChatsApi.endpoints)[K]>,
+type Request<K extends keyof typeof ChatsApi.ChatsApi.endpoints> = Omit<
+	HttpApiEndpoint.Request<(typeof ChatsApi.ChatsApi.endpoints)[K]>,
 	"endpoint" | "group" | "request"
 >
 /** The work of a caller with one Bot: the caller, and the token when a token calls. */
@@ -44,7 +40,7 @@ const send = (
 	inputs: Effect.Success<typeof TaskMessages.make>,
 	store: Store["Service"],
 	chat: Chat.Id,
-	payload: ChatCommandRequest,
+	payload: ChatsApi.ChatCommandRequest,
 	caller: Caller,
 ) =>
 	Effect.gen(function* () {
@@ -59,12 +55,12 @@ const send = (
 					),
 				FileNotFound: (error) =>
 					Effect.fail(
-						FilesApi.FileInvalid.make({
+						FileInvalid.make({
 							message: `The file ${error.id} is not one of your ready files.`,
 						}),
 					),
 				FilesDisabled: (error) =>
-					Effect.fail(FilesApi.FileInvalid.make({ message: error.message })),
+					Effect.fail(FileInvalid.make({ message: error.message })),
 			}),
 		)
 		const namespace = ownerKey(caller)

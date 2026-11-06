@@ -1,8 +1,8 @@
+import { Caller } from "@openbot-build/domain/Identity"
 import {
 	type AppIndex,
 	Developers,
 	Authorization,
-	Caller,
 	Execution,
 } from "@openbot-build/domain"
 import {
@@ -18,24 +18,24 @@ import {
 	Stream,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import { and, eq } from "drizzle-orm"
 import { developerIndexRequests } from "@openbot-build/server-database/Schema"
 import * as Db from "@openbot-build/server-database/Database"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import {
 	Store,
 	storage,
 	transactionFailures,
 	type Key,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
-import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
+} from "@openbot-build/server-execution/Store"
+import type { Authorize } from "@openbot-build/server-execution/Engine"
+import { Observation } from "@openbot-build/server-execution/Observation"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "@openbot-build/apps-contract/apps/DeveloperRows"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
 import { IndexWork } from "@openbot-build/apps-contract/apps/IndexWork"
 import { Governance } from "./Governance.ts"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
@@ -187,8 +187,7 @@ export interface Service {
 export class DeveloperIndexing extends Context.Service<
 	DeveloperIndexing,
 	Service
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/DeveloperIndexing") {}
+>()("@openbot-build/plugin-apps/DeveloperIndexing") {}
 
 const isUuid = Schema.is(Schema.String.check(Schema.isUUID()))
 
@@ -197,7 +196,7 @@ export const make = Effect.gen(function* () {
 	const checks = yield* Check.make
 	const crypto = yield* SecureRandom.SecureRandom
 	const db = yield* Db.make
-	const namespace = yield* IndexNamespace
+	const namespace = yield* instanceNamespace
 	const store = yield* Store
 	const index = yield* IndexWork
 	const observation = yield* Observation
@@ -239,10 +238,6 @@ export const make = Effect.gen(function* () {
 	) =>
 		Effect.gen(function* () {
 			yield* access.authorize(record.owner, record.cardUrl)
-			if (record.executionId === null)
-				return yield* Effect.die(
-					"The Index request has no execution. Complete the data move first.",
-				)
 			const job = yield* index
 				.job(record.cardUrl, record.generation)
 				.pipe(
@@ -280,7 +275,7 @@ export const make = Effect.gen(function* () {
 		Effect.gen(function* () {
 			if (!isUuid(id)) return yield* Developers.DeveloperNotFound.make({})
 			const record = Arr.head(
-				yield* Rows.stored(
+				yield* transactionFailures(
 					db
 						.select()
 						.from(developerIndexRequests)
@@ -373,7 +368,7 @@ export const make = Effect.gen(function* () {
 	const list = (owner: string, cardUrl?: string) =>
 		Effect.gen(function* () {
 			if (cardUrl !== undefined) yield* access.authorize(owner, cardUrl)
-			const requests = yield* Rows.stored(
+			const requests = yield* transactionFailures(
 				db
 					.select()
 					.from(developerIndexRequests)

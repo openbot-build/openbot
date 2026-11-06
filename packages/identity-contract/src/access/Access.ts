@@ -13,8 +13,8 @@ import {
 	String as Str,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 
 export interface Identity {
 	readonly providerId: string
@@ -138,7 +138,7 @@ export const make = Effect.gen(function* () {
 	const registration = settings.platform.pipe(
 		Effect.flatMap((p) =>
 			Option.isSome(p)
-				? Effect.succeed(p.value.document.registration ?? Model.defaults)
+				? Effect.succeed(p.value.document.registration)
 				: Effect.fail(Model.AccessUnavailable.make({})),
 		),
 	)
@@ -168,7 +168,7 @@ export const make = Effect.gen(function* () {
 				if (
 					Option.isNone(platform) ||
 					platform.value.document.registration?.emailSignIn !== true ||
-					platform.value.document.mail == null
+					platform.value.document.mail === null
 				)
 					return yield* denied("closed")
 				return {
@@ -185,8 +185,7 @@ export const make = Effect.gen(function* () {
 				)
 					return yield* denied("identity")
 				return {
-					access: (platform.value.document.registration ?? Model.defaults)
-						.provider,
+					access: platform.value.document.registration.provider,
 					issuer: platform.value.document.identityProvider.issuer,
 					organizationId: null as string | null,
 				}
@@ -407,7 +406,7 @@ export const make = Effect.gen(function* () {
 					emailSignIn:
 						policy.emailSignIn &&
 						Option.isSome(platform) &&
-						platform.value.document.mail != null,
+						platform.value.document.mail !== null,
 					oidc:
 						(Option.isSome(platform) &&
 							platform.value.document.identityProvider !== null) ||
@@ -604,7 +603,6 @@ export const make = Effect.gen(function* () {
 	}
 })
 export class Access extends Context.Service<Access, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/identity-contract/access/Access",
+	"@openbot-build/identity-contract/access/Access",
 ) {}
 export const layer = Layer.effect(Access, make)

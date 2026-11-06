@@ -1,38 +1,33 @@
+import {
+	ChannelsUnavailable,
+	ChannelNotFound,
+	ChannelIdentityNotFound,
+	ChannelHookDenied,
+	type Channel,
+} from "@openbot-build/domain/Channels"
+import type { AuditAction } from "@openbot-build/domain/Organizations"
+import { type Caller, Identity } from "@openbot-build/domain/Identity"
 import { ChannelRemoval } from "./ChannelRemoval.ts"
 import { ChannelConfig } from "./ChannelConfig.ts"
-import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
-import {
-	ChannelsApi,
-	OpenBotApi,
-	type OrganizationApi,
-} from "@openbot-build/api"
-import { type Caller, Identity } from "@openbot-build/domain"
+import * as HttpErrors from "@openbot-build/server-execution/HttpErrors"
+import { ChannelsApi, OpenBotApi } from "@openbot-build/api"
 import { Array as Arr, Clock, Effect, Option, type Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import {
-	organizationKey,
-	segment,
-} from "@openbot-build/identity-contract/audit/Resources"
-import {
-	Channels,
-	type StoredChannel,
-} from "@openbot-build/conversation-contract/channels/Channels"
+import { organizationKey, segment } from "@openbot-build/domain/AuditResources"
+import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
 import { ChannelQueue } from "./ChannelQueue.ts"
 import { ChannelRegistry } from "./ChannelRegistry.ts"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 
 const channelKey = (organizationId: string, id: string) =>
 	organizationKey(organizationId) + ".channel." + segment(id)
 
 /** The API view of a stored Channel, with the address that its platform calls. */
-const view = (
-	publicOrigin: string,
-	channel: StoredChannel,
-): ChannelsApi.Channel => ({
+const view = (publicOrigin: string, channel: Channel): ChannelsApi.Channel => ({
 	...channel,
 	webhookUrl: `${publicOrigin}/v1/hooks/channels/${channel.id}`,
 })
@@ -47,11 +42,11 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "channels", (handlers) =>
 		const settings = yield* Settings
 		/** The webhook addresses use the public origin of the platform now. */
 		const publicOrigin = Platform.publicOriginOr(settings, () =>
-			ChannelsApi.ChannelsUnavailable.make({}),
+			ChannelsUnavailable.make({}),
 		)
 		const record = (
 			caller: Caller,
-			action: OrganizationApi.AuditAction,
+			action: AuditAction,
 			resource: string,
 			details: Schema.JsonObject,
 		) =>
@@ -66,14 +61,14 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "channels", (handlers) =>
 				.pipe(
 					Failures.replace(
 						"OpenBot could not write the audit entry of a Channel.",
-						() => ChannelsApi.ChannelsUnavailable.make({}),
+						() => ChannelsUnavailable.make({}),
 					),
 				)
 		const found = (caller: Caller, id: string) =>
 			channels.get(caller.organizationId, id).pipe(
 				Effect.flatMap(
 					Option.match({
-						onNone: () => Effect.fail(ChannelsApi.ChannelNotFound.make({ id })),
+						onNone: () => Effect.fail(ChannelNotFound.make({ id })),
 						onSome: Effect.succeed,
 					}),
 				),
@@ -155,8 +150,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "channels", (handlers) =>
 						channelId: params.channelId,
 						externalUserId: params.externalUserId,
 					})
-					if (!removed)
-						return yield* ChannelsApi.ChannelIdentityNotFound.make({})
+					if (!removed) return yield* ChannelIdentityNotFound.make({})
 					yield* record(
 						caller,
 						"channel_identity.unlinked",
@@ -200,7 +194,7 @@ export const layerLinks = HttpApiBuilder.group(
 							.pipe(
 								Failures.replace(
 									"OpenBot could not write the audit entry of a Channel identity.",
-									() => ChannelsApi.ChannelsUnavailable.make({}),
+									() => ChannelsUnavailable.make({}),
 								),
 							)
 						return identity
@@ -220,8 +214,7 @@ export const layerLinks = HttpApiBuilder.group(
 							externalUserId: params.externalUserId,
 							userId: caller.userId,
 						})
-						if (!removed)
-							return yield* ChannelsApi.ChannelIdentityNotFound.make({})
+						if (!removed) return yield* ChannelIdentityNotFound.make({})
 						yield* audit
 							.record({
 								organizationId: caller.organizationId,
@@ -233,7 +226,7 @@ export const layerLinks = HttpApiBuilder.group(
 							.pipe(
 								Failures.replace(
 									"OpenBot could not write the audit entry of a Channel identity.",
-									() => ChannelsApi.ChannelsUnavailable.make({}),
+									() => ChannelsUnavailable.make({}),
 								),
 							)
 					}),
@@ -260,25 +253,21 @@ export const layerHooks = HttpApiBuilder.group(
 					Effect.gen(function* () {
 						const request = yield* HttpServerRequest.HttpServerRequest
 						const found = yield* channels.find(params.channelId)
-						if (
-							Option.isNone(found) ||
-							!found.value.channel.enabled ||
-							found.value.channel.needsAuthorization
-						)
-							return yield* ChannelsApi.ChannelHookDenied.make({})
+						if (Option.isNone(found) || !found.value.channel.enabled)
+							return yield* ChannelHookDenied.make({})
 						const { organizationId, channel: stored } = found.value
 						// A Channel that went away since `find` is denied, like one that is not there.
 						const channel = yield* registry
 							.get(organizationId, stored.id)
 							.pipe(
 								Effect.catchTag("ChannelNotFound", () =>
-									Effect.fail(ChannelsApi.ChannelHookDenied.make({})),
+									Effect.fail(ChannelHookDenied.make({})),
 								),
 							)
 						const body = yield* request.text.pipe(
 							Failures.replace(
 								"OpenBot could not read the body of a Channel webhook",
-								() => ChannelsApi.ChannelHookDenied.make({}),
+								() => ChannelHookDenied.make({}),
 							),
 						)
 						const received = yield* channel
@@ -291,7 +280,7 @@ export const layerHooks = HttpApiBuilder.group(
 								Failures.replaceTag(
 									"ChannelDenied",
 									"A Channel webhook was denied",
-									() => ChannelsApi.ChannelHookDenied.make({}),
+									() => ChannelHookDenied.make({}),
 								),
 							)
 						yield* queue.receive(organizationId, stored.id, received.events)

@@ -1,6 +1,9 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { Bot } from "@openbot-build/domain/Bots"
 import { assert, layer } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
-import { BotsApi, ChannelsApi } from "@openbot-build/api"
+import { ChannelsApi } from "@openbot-build/api"
 import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
@@ -10,6 +13,7 @@ import {
 	Ref,
 	Schema,
 	String as Str,
+	Layer,
 } from "effect"
 import {
 	BrowserHost,
@@ -20,7 +24,79 @@ import {
 
 const { until } = Wait
 const publicOrigin = "https://channel-config.example.com"
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
+	it.effect(
+		"a new Channel links to its configuration work when it is first saved",
+		() =>
+			Effect.gen(function* () {
+				const host = yield* BrowserHost.start({
+					publicOrigin,
+					platformFetch: () =>
+						Effect.succeed(Response.json({ ok: true, result: true })),
+				})
+				const alice = yield* host.login("channel-link")
+				const send = (path: string, method: "GET" | "POST", body?: unknown) =>
+					Effect.flatMap(host.address, (address) =>
+						Caller.withCookie({ address, publicOrigin })(
+							alice.session,
+							path,
+							method,
+							body,
+						),
+					)
+				const bot = yield* Caller.read(
+					Bot,
+					send("/v1/bots", "POST", {
+						name: "Team",
+						role: "Helps people",
+						instructions: "Help the team.",
+						shared: true,
+					}),
+				)
+				const channel = yield* Caller.read(
+					ChannelsApi.Channel,
+					send("/v1/organization/channels", "POST", {
+						commandKey: "link-config",
+						name: "Team",
+						bot: bot.id,
+						credentials: { kind: "telegram", botToken: "123:link-secret" },
+					}),
+					201,
+				)
+				const saved = yield* host.run(
+					ChannelScenarios.configuration(
+						alice.identity.organizationId,
+						channel.id,
+					),
+				)
+				assert.strictEqual(saved.executionId, channel.executionId)
+				assert.strictEqual(saved.workflow, "openbot.channel-configuration")
+				assert.deepStrictEqual(saved.resource, {
+					kind: "ChannelConfiguration",
+					id: channel.id,
+				})
+				// The same command gives the same Channel and the same work.
+				const again = yield* Caller.read(
+					ChannelsApi.Channel,
+					send("/v1/organization/channels", "POST", {
+						commandKey: "link-config",
+						name: "Team",
+						bot: bot.id,
+						credentials: { kind: "telegram", botToken: "123:link-secret" },
+					}),
+					201,
+				)
+				assert.strictEqual(again.id, channel.id)
+				assert.strictEqual(again.executionId, channel.executionId)
+			}),
+		60000,
+	)
+
 	it.effect(
 		"a known Channel refusal waits through restart before one new attempt",
 		() =>
@@ -55,7 +131,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						),
 					)
 				const bot = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send("/v1/bots", "POST", {
 						name: "Team",
 						role: "Helps people",
@@ -141,7 +217,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						),
 					)
 				const bot = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send("/v1/bots", "POST", {
 						name: "Team",
 						role: "Helps people",
@@ -282,7 +358,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						),
 					)
 				const bot = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send("/v1/bots", "POST", {
 						name: "Team",
 						role: "Helps people",

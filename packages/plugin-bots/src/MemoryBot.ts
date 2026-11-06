@@ -1,11 +1,10 @@
+import { BotId } from "@openbot-build/domain/BotId"
 import { MemoryLogs } from "./MemoryLogs.ts"
 import { BotMemory as Api, Bots as BotsApi } from "@openbot-build/domain"
 import { Array as Arr, Effect, Layer, Option, Order, Schema } from "effect"
 import type { Home } from "@openbot-build/conversation-contract/bots/BotMemories"
 import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
 import { MemoryBot } from "@openbot-build/conversation-contract/bots/MemoryBot"
-export { MemoryBot } from "@openbot-build/conversation-contract/bots/MemoryBot"
-
 /** The name of the tool that the Bot uses to confide. The Bot knows it only as a place to talk. */
 export const confideTool = "confide"
 
@@ -22,7 +21,7 @@ export class MemoryBudgetSpent extends Schema.TaggedError<
 	MemoryBudgetSpent,
 	{ readonly brand: unique symbol }
 >()("MemoryBudgetSpent", {
-	home: Schema.Struct({ organizationId: Schema.String, bot: BotsApi.BotId }),
+	home: Schema.Struct({ organizationId: Schema.String, bot: BotId }),
 }) {}
 
 /** The id that the usage of the memory Bot of one pool has. Budgets count by it. */

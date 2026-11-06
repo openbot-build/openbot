@@ -4,7 +4,7 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import {
 	type ChannelEvent,
 	MessageRef,
@@ -21,7 +21,7 @@ import {
 	Schema,
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 import { Channels as Domain, Execution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
@@ -29,7 +29,7 @@ import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
 import * as Db from "@openbot-build/server-database/Database"
 import { channelDeliveries } from "@openbot-build/server-database/Schema"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { ChannelInbox } from "./ChannelInbox.ts"
 
 export const workflowName = "openbot.channel-delivery"
@@ -160,8 +160,7 @@ export interface Service {
 }
 
 export class ChannelQueue extends Context.Service<ChannelQueue, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-channels/ChannelQueue",
+	"@openbot-build/plugin-channels/ChannelQueue",
 ) {}
 
 const make = Effect.gen(function* () {
@@ -227,14 +226,8 @@ const make = Effect.gen(function* () {
 												),
 											)
 											.limit(1))[0]
-							if (previous !== undefined && previous.executionId === null)
-								return yield* Execution.StorageError.make({
-									cause: new Error(
-										"The Channel delivery needs data conversion.",
-									),
-								})
 							const predecessor =
-								previous?.executionId == null
+								previous === undefined
 									? null
 									: yield* store.locate(
 											Execution.Id.make(previous.executionId),
@@ -267,19 +260,12 @@ const make = Effect.gen(function* () {
 									channelId: input.channelId,
 									kind: input.request === undefined ? "notice" : "request",
 									request: input.request ?? null,
-									target: key.id,
-									body: key.id,
-									state: "pending",
-									nextAt: now,
 									updatedAt: now,
 								})
 								.onConflictDoUpdate({
 									target: channelDeliveries.id,
 									set: {
 										executionId: key.id,
-										target: key.id,
-										body: key.id,
-										state: "pending",
 										updatedAt: now,
 									},
 								})
@@ -332,10 +318,7 @@ const make = Effect.gen(function* () {
 						.where(eq(channelDeliveries.id, input.deliveryId))
 				yield* db
 					.update(channelDeliveries)
-					.set({
-						state: outcome.status === "completed" ? "done" : outcome.status,
-						updatedAt: yield* Clock.currentTimeMillis,
-					})
+					.set({ updatedAt: yield* Clock.currentTimeMillis })
 					.where(
 						and(
 							eq(channelDeliveries.id, input.deliveryId),

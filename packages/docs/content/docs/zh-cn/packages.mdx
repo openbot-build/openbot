@@ -16,61 +16,67 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot`
 
 ## 概览
 
-| 包                      | 用途                                                                                                                                                                       |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `openbot`               | 服务器和插件宿主。它会再次导出模型提供方和 Turn 限制插件。它的子路径 `Parts` 把内部部件交给开发服务器和测试辅助工具。它不是稳定的 API。请看[从代码中运行](/zh-cn/server)。 |
-| `server-database`       | 服务器数据库的表、Drizzle 数据库和 SQL 迁移。只有服务器使用它。                                                                                                            |
-| `server-kernel`         | 所有插件共用的服务器部分：错误、密钥、设置、配置、网络规则和 HTTP 宿主。只有服务器使用它。                                                                                 |
-| `identity-contract`     | 登录、访问、角色、组织、邮件、SSO 和审计日志共用的服务标签与类型。只有服务器使用它。                                                                                       |
-| `server-billing`        | 服务器的计费、额度、速率限制和 token 限制，以及它们的 PostgreSQL 存储。只有服务器使用它。                                                                                  |
-| `server-execution`      | 服务器的执行引擎：保存的执行、调用、workflow、资源和私有 RPC。只有服务器使用它。                                                                                           |
-| `tools-contract`        | 工具共用的服务标签与类型：工具条目、工具定义、宿主工具和待办列表。只有服务器使用它。                                                                                       |
-| `models-contract`       | 模型、模型提供方、模型调用和 Live 后端共用的服务标签与类型。只有服务器使用它。                                                                                             |
-| `apps-contract`         | App、Code Mode、文件和 vault 共用的服务标签与类型。只有服务器使用它。                                                                                                      |
-| `conversation-contract` | Bot、Chat、能力、频道和工作共用的服务标签与类型。只有服务器使用它。                                                                                                        |
-| `model-providers`       | 服务器的模型提供方：OpenAI、兼容 OpenAI 的服务、Anthropic、ChatGPT 和 TypeSafe。`openbot` 会再次导出其中一部分。                                                           |
-| `server-plugin`         | 把服务器的一个功能变成 graft 插件的工具包。只有服务器使用它。                                                                                                              |
-| `plugin-audit`          | `audit` 插件：每个组织的审计日志。只有服务器使用它。                                                                                                                       |
-| `plugin-mail`           | `mail` 插件：平台发出的邮件，使用平台的 SMTP 设置。`openbot` 会再次导出它的 SMTP 传输。                                                                                    |
-| `plugin-platform`       | `platform` 插件：平台管理员和平台设置。`openbot` 会再次导出它的管理工具。                                                                                                  |
-| `plugin-organization`   | `organization` 插件：组织、组织成员和邀请。只有服务器使用它。                                                                                                              |
-| `plugin-access`         | `access` 插件：谁可以加入平台，以及怎样加入。只有服务器使用它。                                                                                                            |
-| `plugin-sso`            | `sso` 插件：组织的登录连接。只有服务器使用它。                                                                                                                             |
-| `plugin-auth`           | `auth` 插件：登录、用户令牌，以及对每个调用方的检查。`openbot` 会以 `Auth` 的名字再次导出它的部分内容。                                                                    |
-| `plugin-authorization`  | `authorization` 插件：角色，以及对每个调用方权限的检查。只有服务器使用它。                                                                                                 |
-| `plugin-models`         | `models` 插件：模型提供方、模型和模型注册表。只有服务器使用它。                                                                                                            |
-| `plugin-files`          | `files` 插件：存储的文件和它们的工作。只有服务器使用它。                                                                                                                   |
-| `plugin-artifacts`      | 固定文件、保存的来源和引用。                                                                                                                                               |
-| `plugin-bots`           | `bots` 插件：Bots、它们的记忆，以及它们之间的委托。`openbot` 会以 `BotMemory` 的名字再次导出它的记忆帮助函数。                                                             |
-| `plugin-capabilities`   | `capabilities` 插件：Grants、Rules、请求，以及对它们的检查。只有服务器使用它。                                                                                             |
-| `plugin-work`           | `work` 插件：提醒，以及 Bots 的工作工具。只有服务器使用它。                                                                                                                |
-| `plugin-imported`       | `imported` 插件：在另一个程序中开始的执行。只有服务器使用它。                                                                                                              |
-| `plugin-chats`          | `chats` 插件：Chats、Turns、工具和 Live 连接。只有服务器使用它。                                                                                                           |
-| `plugin-channels`       | `channels` 插件：Channels、它们的消息，以及 Bots 的 Channel 工具。只有服务器使用它。                                                                                       |
-| `plugin-apps`           | `apps` 插件：App 连接、App Index，以及 Bots 的 App 工具。`openbot` 会再次导出它的 `AppHost` 和 `AppTools`。                                                                |
-| `plugin-code`           | `code` 插件：Bots 在沙箱中运行代码。只有服务器使用它。                                                                                                                     |
-| `plugin-vaults`         | `vaults` 插件：Vaults，以及它们读取的机密提供方。只有服务器使用它。                                                                                                        |
-| `plugin-computers`      | `computers` 插件：Computers、它们的配对和会话，以及 Bots 的 Computer 工具。只有服务器使用它。                                                                              |
-| `plugin-triggers`       | `triggers` 插件：启动 Turns 的触发器，以及它们的 webhook。只有服务器使用它。                                                                                               |
-| `plugin-billing`        | `billing` 插件：组织的钱包、用量和预算。只有服务器使用它。                                                                                                                 |
-| `plugin-settings`       | `settings` 插件：每个成员的设置。只有服务器使用它。                                                                                                                        |
-| `plugin-turn-limiter`   | `turn-limiter` 插件：限制每个 Turn 的模型步数。它一开始是关闭的。`openbot` 会再次导出它的 `TurnLimiter`。                                                                  |
-| `plugin-time-limiter`   | `time-limiter` 插件：限制每个 Turn 的时间。它一开始是关闭的。`openbot` 会再次导出它的 `TimeLimiter`。                                                                      |
-| `plugin-token-limiter`  | `token-limiter` 插件：限制每个 Turn 的 token。它一开始是关闭的。`openbot` 会再次导出它的 `TokenLimiter`。                                                                  |
-| `server-upgrade`        | 运行 `server-database` 的 SQL 迁移，并把旧数据移到新表中。`openbot-migrate` 和 `DatabasePostgres.migrate` 使用它。只有服务器使用它。                                       |
-| `server-development`    | 开发服务器：一个本地测试账户、模拟的模型和一个模拟的 App。`pnpm dev` 运行它。永远不要在生产环境中使用它。请看[运行开发服务器](/zh-cn/server#运行开发服务器)。              |
-| `server-testing`        | 服务器的测试辅助工具（TypeScript 源码），以及启动数据库或整个服务器的测试。请看[在代码中测试服务器](/zh-cn/developers/testing#在代码中测试服务器)。                        |
-| `api`                   | 带类型的 HTTP 契约。服务器、客户端和 API 参考都使用它。                                                                                                                    |
-| `client`                | TypeScript 客户端。请看[客户端](/zh-cn/client)。                                                                                                                           |
-| `core`                  | Bot 核心：Bot、Chat、Turn、存储、插件和技能。                                                                                                                              |
-| `protocol`              | OpenBot App Protocol：发布、查找、连接 App，并为 App 建立索引。                                                                                                            |
-| `protocol-test`         | App Protocol 的公开测试服务。请看[协议测试](/zh-cn/protocol-test)。                                                                                                        |
-| `cli`                   | `openbot` 命令。对于 `openbot <name>`，它会运行 `openbot-<name>`。                                                                                                         |
-| `computer`              | `openbot computer` 命令，用来配对和连接你自己的 [Computer](/zh-cn/developers/computers)。                                                                                  |
-| `docs`                  | 本文档网站。                                                                                                                                                               |
+| 包                      | 用途                                                                                                                                                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `openbot`               | 服务器和插件宿主。它只导出 `Host`、`Preset`、`Launch` 和 `Wallets`，以及程序 `openbot-server`、`openbot-migrate`、`openbot-setup` 和 `openbot-inspect`。请看[从代码中运行](/zh-cn/server)。                              |
+| `server-database`       | 服务器数据库的表、Drizzle 数据库、SQL 迁移，以及运行和检查这些迁移的 `Migrations`。`openbot-migrate` 使用它。它的 `Testing` 模块为测试提供一次性的 PostgreSQL 服务器和迁移文件夹；只有测试使用它。只有服务器使用这个包。 |
+| `server-kernel`         | 所有插件共用的服务器部分：错误、密钥、设置、配置、网络规则和 HTTP 宿主。只有服务器使用它。                                                                                                                               |
+| `identity-contract`     | 登录、访问、角色、组织、邮件、SSO 和审计日志共用的服务标签与类型。只有服务器使用它。                                                                                                                                     |
+| `server-billing`        | 服务器的计费、额度、速率限制和 token 限制，以及它们的 PostgreSQL 存储。只有服务器使用它。                                                                                                                                |
+| `server-execution`      | 服务器的执行引擎：保存的执行、调用、workflow、资源和私有 RPC。只有服务器使用它。                                                                                                                                         |
+| `tools-contract`        | 工具共用的服务标签与类型：工具条目、工具定义和宿主工具。只有服务器使用它。                                                                                                                                               |
+| `models-contract`       | 模型、模型提供方、模型调用和 Live 后端共用的服务标签与类型。只有服务器使用它。                                                                                                                                           |
+| `apps-contract`         | App、Code Mode、文件、vault 和 Computer 共用的服务标签与类型。它也包含宿主提供的外部服务的标签：App 连接的检查、Computer 提供方的驱动，以及密钥提供方的读取器。只有服务器使用它。                                        |
+| `conversation-contract` | Bot、Chat、能力、频道和工作共用的服务标签与类型，以及待办列表。只有服务器使用它。                                                                                                                                        |
+| `model-providers`       | 服务器的模型提供方：OpenAI、兼容 OpenAI 的服务、Anthropic、ChatGPT 和 TypeSafe。程序从每个提供方自己的模块导入它。                                                                                                       |
+| `server-plugin`         | 把服务器的一个功能变成 graft 插件的工具包。只有服务器使用它。                                                                                                                                                            |
+| `plugin-audit`          | `audit` 插件：每个组织的审计日志。只有服务器使用它。                                                                                                                                                                     |
+| `plugin-mail`           | `mail` 插件：平台发出的邮件，使用平台的 SMTP 设置。它的 SMTP 传输是宿主默认的邮件服务。                                                                                                                                  |
+| `plugin-platform`       | `platform` 插件：平台管理员和平台设置。程序 `openbot-setup` 和 `openbot-inspect` 使用它的管理工具。                                                                                                                      |
+| `plugin-organization`   | `organization` 插件：组织、组织成员和邀请。只有服务器使用它。                                                                                                                                                            |
+| `plugin-access`         | `access` 插件：谁可以加入平台，以及怎样加入。只有服务器使用它。                                                                                                                                                          |
+| `plugin-sso`            | `sso` 插件：组织的登录连接。只有服务器使用它。                                                                                                                                                                           |
+| `plugin-auth`           | `auth` 插件：登录、用户令牌，以及对每个调用方的检查。只有服务器使用它。                                                                                                                                                  |
+| `plugin-authorization`  | `authorization` 插件：角色，以及对每个调用方权限的检查。只有服务器使用它。                                                                                                                                               |
+| `plugin-models`         | `models` 插件：模型提供方、模型和模型注册表。只有服务器使用它。                                                                                                                                                          |
+| `plugin-files`          | `files` 插件：存储的文件和它们的工作。只有服务器使用它。                                                                                                                                                                 |
+| `plugin-artifacts`      | 固定文件、保存的来源和引用。                                                                                                                                                                                             |
+| `plugin-bots`           | `bots` 插件：Bots、它们的记忆，以及它们之间的委托。只有服务器使用它。                                                                                                                                                    |
+| `plugin-capabilities`   | `capabilities` 插件：Grants、Rules、请求，以及对它们的检查。只有服务器使用它。                                                                                                                                           |
+| `plugin-work`           | `work` 插件：提醒，以及 Bots 的工作工具。只有服务器使用它。                                                                                                                                                              |
+| `plugin-chats`          | `chats` 插件：Chats、Turns、工具和 Live 连接。只有服务器使用它。                                                                                                                                                         |
+| `plugin-channels`       | `channels` 插件：Channels、它们的消息，以及 Bots 的 Channel 工具。只有服务器使用它。                                                                                                                                     |
+| `plugin-apps`           | `apps` 插件：App 连接、App Index，以及 Bots 的 App 工具。它在插件文件中的配置设定 App Index 后台任务的时间。只有服务器使用它。                                                                                           |
+| `plugin-code`           | `code` 插件：Bots 在沙箱中运行代码。只有服务器使用它。                                                                                                                                                                   |
+| `plugin-vaults`         | `vaults` 插件：Vaults，以及它们读取的机密提供方。只有服务器使用它。                                                                                                                                                      |
+| `plugin-computers`      | `computers` 插件：Computers、它们的配对和会话，以及 Bots 的 Computer 工具。只有服务器使用它。                                                                                                                            |
+| `plugin-triggers`       | `triggers` 插件：启动 Turns 的触发器，以及它们的 webhook。只有服务器使用它。                                                                                                                                             |
+| `plugin-billing`        | `billing` 插件：组织的用量和预算。只有服务器使用它。额度操作（`Wallets`）由宿主提供。                                                                                                                                    |
+| `plugin-settings`       | `settings` 插件：每个成员的设置。只有服务器使用它。                                                                                                                                                                      |
+| `plugin-turn-limiter`   | `turn-limiter` 插件：限制每个 Turn 的模型步数。它一开始是关闭的。只有服务器使用它。                                                                                                                                      |
+| `plugin-time-limiter`   | `time-limiter` 插件：限制每个 Turn 的时间。它一开始是关闭的。只有服务器使用它。                                                                                                                                          |
+| `plugin-token-limiter`  | `token-limiter` 插件：限制每个 Turn 的 token。它一开始是关闭的。只有服务器使用它。                                                                                                                                       |
+| `server-development`    | 开发服务器：一个本地测试账户、模拟的模型和一个模拟的 App。`pnpm dev` 运行它。永远不要在生产环境中使用它。请看[运行开发服务器](/zh-cn/server#运行开发服务器)。                                                            |
+| `server-testing`        | 服务器的测试辅助工具（TypeScript 源码），以及启动整个服务器或使用多个插件的测试。只检查一个包的测试放在那个包里。请看[在代码中测试服务器](/zh-cn/developers/testing#在代码中测试服务器)。                                |
+| `api`                   | 带类型的 HTTP 契约。服务器、客户端和 API 参考都使用它。它的根为每个模块导出一个命名空间（例如 `ChatsApi`），以及 `OpenBotApi`。领域类型来自 `domain`。                                                                   |
+| `client`                | TypeScript 客户端。它的入口 `Api`、`Core` 和 `Domain` 提供 API 契约、聊天 schema 和领域模型。请看[客户端](/zh-cn/client)。                                                                                               |
+| `core`                  | Bot 核心：Bot、Chat、Turn、存储、插件和技能。                                                                                                                                                                            |
+| `domain`                | 领域模型：Bot、Chat、执行、设置以及 API 的其他记录。它的根为每个模块导出一个命名空间（例如 `Execution`），每个模块也有自己的入口，例如 `@openbot-build/domain/Identity`。                                                |
+| `protocol`              | OpenBot App Protocol：发布、查找、连接 App，并为 App 建立索引。                                                                                                                                                          |
+| `protocol-test`         | App Protocol 的公开测试服务。请看[协议测试](/zh-cn/protocol-test)。                                                                                                                                                      |
+| `cli`                   | `openbot` 命令。对于 `openbot <name>`，它会运行 `openbot-<name>`。                                                                                                                                                       |
+| `computer`              | `openbot computer` 命令，用来配对和连接你自己的 [Computer](/zh-cn/developers/computers)。                                                                                                                                |
+| `docs`                  | 本文档网站。                                                                                                                                                                                                             |
+
+每个包把模块平放在 `src` 中。只有多个插件的契约包为每个插件设一个文件夹，例如
+`conversation-contract` 中的 `chats/`。包的入口使用源文件的路径：
+`@openbot-build/server-kernel/Settings` 就是
+`src/Settings.ts`。只有当另一个包或文档示例使用某个入口时，服务器包才有这个入口。一个符号只有一个归属：请从拥有它的包导入。`core`、`api`
+和 `protocol` 的根为每个公开模块导出一个命名空间，例如
+`import { Live } from "@openbot-build/core"`。它们的一些模块也有自己的入口，因为其他包的声明文件通过这些入口命名类型。
 
 下面的示例省略了模型。要运行它们，请提供一个 `LanguageModel` Layer，例如来自
-`openbot` 中的某个[模型提供方](#模型提供方)。
+`model-providers` 中的某个[模型提供方](#模型提供方)。
 
 ---
 
@@ -260,92 +266,34 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 
 ## openbot 中的插件
 
-服务器在每个 Turn 中都使用 OpenBot 的插件，例如 Bot、App 和工作插件。工作插件为 Bot 提供待办列表、提醒和计划模式。`@openbot-build/openbot`
-再次导出 Turn 限制插件。它们来自 `plugin-turn-limiter`、`plugin-token-limiter`
-和 `plugin-time-limiter` 这三个包。你可以在自己的 `ChatRuntime` 中使用它们。
+服务器在每个 Turn 中都使用 OpenBot 的插件，例如 Bot、App 和工作插件。工作插件为 Bot 提供待办列表、提醒和计划模式。这些插件是服务器的一部分，不是一个库：程序用
+`Host` 运行它们，并用插件文件打开和关闭它们。请看[插件](/zh-cn/plugins)。
 
-`Auth.handle(request)` 返回包含响应的 Effect。`Chats.wait` 的超时接受
-`Duration.Input`，例如 `"30 seconds"`。HTTP 路由仍通过 `timeoutMs` 接受毫秒数。
+`Chats.wait` 的超时接受 `Duration.Input`，例如 `"30 seconds"`。HTTP 路由仍通过
+`timeoutMs` 接受毫秒数。
 
 ### 记忆
 
-`BotMemory` 包含
+`bots` 插件包含
 [Bot 记忆](/zh-cn/developers/memory)的类型和辅助函数。服务器用它们实现记忆 Bot 和记忆 API。记忆 API 的 schema 在
-`api` 中，名为 `BotMemory`。
-
-`BotMemory.apply` 接受 `ids` 数组，其中每个操作按顺序对应一个新 ID。
-`BotMemory.edit` 的 `id`
-是一个新的 ID 字符串。调用方在调用这些纯辅助函数前生成 ID。
+`domain` 中，名为 `BotMemory`。
 
 ### Turn 限制
 
-有三个插件可以限制每个 Turn。你可以只用其中一个，也可以用
-`PluginComposition.merge`
-把它们合在一起。每个插件只计算自己的 Turn。在服务器中，插件文件打开它们并设定限制。请看[插件](/zh-cn/plugins)。
+有三个插件可以限制每个 Turn。它们是预设中一开始关闭的条目。插件文件打开它们并设定限制。请看[插件](/zh-cn/plugins)。每个插件只计算自己的 Turn，每个 Turn 保存自己的限制，所以新的限制只对新的 Turn 生效。
 
-#### 模型步骤
-
-`TurnLimiter` 在达到设定的模型步骤数后停止 Turn。第一次模型请求算作一步。
-
-```ts
-import { TurnLimiter } from "@openbot-build/openbot"
-
-const runtime =
-	yield *
-	ChatRuntime.make({
-		store,
-		bot: { plugin: TurnLimiter.make({ maxSteps: 4 }) },
-	})
-```
-
-它会以以下两种错误之一失败：
-
-| 错误                     | 何时发生                                                                  |
-| ------------------------ | ------------------------------------------------------------------------- |
-| `InvalidMaxSteps`        | `maxSteps` 不是正整数。                                                   |
-| `ModelStepLimitExceeded` | 达到限制后，Turn 还需要再走一个模型步骤。它带有 `maxSteps` 和 `history`。 |
-
-#### Token
-
-`TokenLimiter`
-在 Turn 用掉设定数量的 token 后停止它。token 是模型读或写的一小段文字。插件把每个模型步骤的输入和输出 token 加在一起。已经开始的模型步骤可以完成。当总数达到
-`maxTokens` 时，下一个模型步骤会失败。
-
-```ts
-import { TokenLimiter } from "@openbot-build/openbot"
-
-const plugin = TokenLimiter.make({ maxTokens: 100_000 })
-```
-
-| 错误                 | 何时发生                                                                                 |
-| -------------------- | ---------------------------------------------------------------------------------------- |
-| `InvalidMaxTokens`   | `maxTokens` 不是正整数。                                                                 |
-| `TokenLimitExceeded` | 达到限制后，Turn 还需要再走一个模型步骤。它带有 `maxTokens`、`usedTokens` 和 `history`。 |
-
-#### 时间
-
-`TimeLimiter` 在设定的时间过后停止 Turn。`maxDuration` 可以是毫秒数，也可以是
-`"5 minutes"`
-这样的文字。时间一到，插件会马上停止 Turn。模型步骤或工具调用进行到一半时也会被停止。
-
-```ts
-import { TimeLimiter } from "@openbot-build/openbot"
-
-const plugin = TimeLimiter.make({ maxDuration: "5 minutes" })
-```
-
-| 错误                 | 何时发生                                                       |
-| -------------------- | -------------------------------------------------------------- |
-| `InvalidMaxDuration` | `maxDuration` 不是一个有限的正时间。                           |
-| `TimeLimitExceeded`  | Turn 运行的时间超过了限制。它带有 `maxDuration` 和 `history`。 |
+| 插件            | 配置          | Turn 超过限制时的错误                                                                                         |
+| --------------- | ------------- | ------------------------------------------------------------------------------------------------------------- |
+| `turn-limiter`  | `maxSteps`    | `ModelStepLimitExceeded`，带有 `maxSteps` 和 `history`。第一次模型请求算作一步。                              |
+| `token-limiter` | `maxTokens`   | `TokenLimitExceeded`，带有 `maxTokens`、`usedTokens` 和 `history`。已经开始的模型步骤可以完成。               |
+| `time-limiter`  | `maxDuration` | `TimeLimitExceeded`，带有 `maxDuration` 和 `history`。它马上停止 Turn，模型步骤或工具调用进行到一半时也一样。 |
 
 ---
 
 ## 模型提供方
 
-`@openbot-build/openbot` 有三个模型提供方。它们的代码在 `model-providers`
-包中。`openbot`
-会再次导出它们，所以下面的导入不变。每个提供方把一个模型选择变成一个
+包 `model-providers`
+有三个模型提供方，供你自己的程序使用。每个提供方把一个模型选择变成一个
 `LanguageModel`
 Layer。API 密钥由你提供。OpenBot 如何使用它们，请看[模型](/zh-cn/models)。
 
@@ -353,7 +301,7 @@ Layer。API 密钥由你提供。OpenBot 如何使用它们，请看[模型](/zh
 
 ```ts
 import { Config, Model, Provider } from "@openbot-build/core"
-import { OpenAiCompatProvider } from "@openbot-build/openbot"
+import * as OpenAiCompatProvider from "@openbot-build/model-providers/OpenAiCompatProvider"
 import { Effect, Layer, Redacted } from "effect"
 import { LanguageModel } from "effect/ai"
 import { FetchHttpClient } from "effect/http"
@@ -390,7 +338,8 @@ API。它还有 `ResponsesCompaction.layer()`，用 Responses
 API 自带的压缩功能缩短很长的历史。
 
 ```ts
-import { OpenAiProvider, ResponsesCompaction } from "@openbot-build/openbot"
+import * as OpenAiProvider from "@openbot-build/model-providers/OpenAiProvider"
+import * as ResponsesCompaction from "@openbot-build/model-providers/ResponsesCompaction"
 
 const services = Layer.merge(
 	Layer.unwrap(OpenAiProvider.make().model(selection)),
@@ -418,7 +367,7 @@ const runtime = Effect.gen(function* () {
 API。
 
 ```ts
-import { AnthropicProvider } from "@openbot-build/openbot"
+import * as AnthropicProvider from "@openbot-build/model-providers/AnthropicProvider"
 
 const provider = AnthropicProvider.make({ max_tokens: 1024 })
 ```

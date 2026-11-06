@@ -1,8 +1,8 @@
+import type { Caller } from "@openbot-build/domain/Identity"
 import { Bots as BotsApi } from "@openbot-build/domain"
-import { type Caller } from "@openbot-build/domain"
 import { Effect } from "effect"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import { Bots, type Failure } from "./Bots.ts"
 
 /** The services that the default Bot needs. */
@@ -57,7 +57,7 @@ export const make: Effect.Effect<DefaultBot, never, Services> = Effect.gen(
 								() => BotsApi.BotStorageUnavailable.make({}),
 							),
 						)
-					const id = document.defaultBot ?? null
+					const id = document.defaultBot
 					if (id === null)
 						return yield* BotsApi.BotInvalid.make({
 							message:

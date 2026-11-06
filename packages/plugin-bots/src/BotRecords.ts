@@ -1,18 +1,11 @@
 import { PgClient } from "@effect/sql-pg"
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { Array as Arr, Effect, Layer, Option, Schema } from "effect"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import {
 	type Collection,
 	BotRecords,
 } from "@openbot-build/conversation-contract/bots/BotRecords"
-export { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
-export type {
-	Keys,
-	Filter,
-	Collection,
-} from "@openbot-build/conversation-contract/bots/BotRecords"
-
 /** Fails with `BotStorageUnavailable` in place of a storage failure, and logs the failure. */
 const storageUnavailable = (message: string) =>
 	Failures.replace(message, () => BotsApi.BotStorageUnavailable.make({}))

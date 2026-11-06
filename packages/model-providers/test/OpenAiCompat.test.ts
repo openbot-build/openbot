@@ -22,7 +22,7 @@ import {
 } from "effect/ai"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { Config, Model, Provider } from "@openbot-build/core"
-import * as OpenAiCompatProvider from "@openbot-build/model-providers/providers/openai-compat/OpenAiCompatProvider"
+import * as OpenAiCompatProvider from "@openbot-build/model-providers/OpenAiCompatProvider"
 
 const selection = Config.Selection.make({
 	provider: Provider.Id.make("openai-compat"),

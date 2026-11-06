@@ -1,3 +1,4 @@
+import { DelegationId } from "@openbot-build/domain/DelegationId"
 import { Execution, Delegations as Domain } from "@openbot-build/domain"
 import { errors as ExecutionErrors } from "./ExecutionsApi.ts"
 import { BotAuth } from "./AuthApi.ts"
@@ -12,23 +13,7 @@ import {
 } from "effect/http-api"
 
 // tsdown drops star exports from the built API namespace. List the names here.
-export {
-	ExecutionView,
-	DelegationId,
-	DelegationResultStatus,
-	OpenDelegationStatus,
-	DelegationStatus,
-	DelegationParent,
-	DelegationLimit,
-	DelegationLimits,
-	DelegationUsage,
-	DelegationPause,
-	DelegationNotFound,
-	DelegationConflict,
-	DelegationStorageUnavailable,
-} from "@openbot-build/domain/Delegations"
 import {
-	DelegationId,
 	DelegationNotFound,
 	DelegationConflict,
 	DelegationStorageUnavailable,

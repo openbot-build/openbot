@@ -1,12 +1,10 @@
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import {
-	Authorization,
-	Execution,
-	Files,
 	ServiceId,
-	type Caller,
 	type ServiceIdentity,
-} from "@openbot-build/domain"
+	type Caller,
+} from "@openbot-build/domain/Identity"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
+import { Authorization, Execution, Files } from "@openbot-build/domain"
 import { and, eq, isNull, lt, notExists, notInArray, or } from "drizzle-orm"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { SqlClient } from "effect/sql"
@@ -25,12 +23,9 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
-import {
-	filesDefaults,
-	filesOf,
-} from "@openbot-build/server-kernel/settings/Documents"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+} from "@openbot-build/server-execution/Store"
+import { filesDefaults } from "@openbot-build/server-kernel/Documents"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 
 export const cleanupWorkflowName = "openbot.file-cleanup"
 export const retentionWorkflowName = "openbot.file-retention"
@@ -111,8 +106,7 @@ export interface Service {
 }
 
 export class FileTasks extends Context.Service<FileTasks, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-files/FileTasks",
+	"@openbot-build/plugin-files/FileTasks",
 ) {}
 
 const make = Effect.gen(function* () {
@@ -233,7 +227,7 @@ const make = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const document = Option.match(yield* settings.platform, {
 					onNone: () => filesDefaults,
-					onSome: (snapshot) => filesOf(snapshot.document),
+					onSome: (snapshot) => snapshot.document.files,
 				})
 				const now = yield* Clock.currentTimeMillis
 				const expired = yield* db

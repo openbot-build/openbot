@@ -13,15 +13,12 @@
 		".": "./dist/index.js",
 		"./Channel": "./dist/Channel.js",
 		"./ChannelAdmission": "./dist/ChannelAdmission.js",
-		"./ChannelConfig": "./dist/ChannelConfig.js",
 		"./ChannelInbox": "./dist/ChannelInbox.js",
 		"./ChannelQueue": "./dist/ChannelQueue.js",
 		"./ChannelRegistry": "./dist/ChannelRegistry.js",
 		"./ChannelRemoval": "./dist/ChannelRemoval.js",
 		"./ChannelWatch": "./dist/ChannelWatch.js",
-		"./Channels": "./dist/Channels.js",
-		"./HttpHandlers": "./dist/HttpHandlers.js",
-		"./HttpMounts": "./dist/HttpMounts.js"
+		"./Channels": "./dist/Channels.js"
 	},
 	"scripts": {
 		"build": "tsdown",
@@ -49,6 +46,7 @@
 	"devDependencies": {
 		"@effect/platform-node": "4.1.2",
 		"@effect/vitest": "4.1.2",
+		"@nmnmcc/ability": "3.2.0",
 		"vitest": "5.0.5"
 	},
 	"repository": {

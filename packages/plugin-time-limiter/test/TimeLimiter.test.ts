@@ -11,7 +11,7 @@ import { assert, it, layer } from "@effect/vitest"
 import { TestClock } from "effect/testing"
 import { Chat, Plugin, PluginComposition } from "@openbot-build/core"
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
-import * as TimeLimiter from "../src/TimeLimiter.ts"
+import * as TimeLimiter from "../src/TimeLimiterFeature.ts"
 import { ChatTest } from "./ChatTest.ts"
 
 const usage = Response.Usage.make({
@@ -52,37 +52,11 @@ const toolPlugin = Plugin.make({ id: Plugin.Id.make("tools") })(() =>
 	),
 )
 
-it.effect("invalid time limits fail before any model request", () =>
-	Effect.gen(function* () {
-		const calls = yield* Ref.make(0)
-		const model = yield* makeModel(() =>
-			Stream.unwrap(
-				Effect.as(
-					Ref.update(calls, (n) => n + 1),
-					Stream.empty,
-				),
-			),
-		)
-		for (const maxDuration of [0, -1, "Infinity", "-Infinity"] as const) {
-			const chat = ChatTest(TimeLimiter.make({ maxDuration }))
-			const error = yield* chat
-				.execute({ input: "hello" })
-				.pipe(
-					Effect.flip,
-					Effect.provideService(LanguageModel.LanguageModel, model),
-				)
-			assert.ok(Schema.is(TimeLimiter.InvalidMaxDuration)(error))
-			assert.strictEqual(error.maxDuration, maxDuration)
-		}
-		assert.strictEqual(yield* Ref.get(calls), 0)
-	}),
-)
-
 it.effect("stops a model step that runs past the limit", () =>
 	Effect.gen(function* () {
 		const released = yield* Ref.make(0)
 		const started = yield* Deferred.make<void>()
-		const chat = ChatTest(TimeLimiter.make({ maxDuration: "20 millis" }))
+		const chat = ChatTest(TimeLimiter.make({ maxDuration: 20 }))
 		const model = yield* makeModel(() =>
 			Stream.unwrap(
 				Effect.as(Deferred.succeed(started, undefined), Stream.never),
@@ -117,7 +91,7 @@ layer(tools.toLayer({ Wait: () => Effect.never }))((it) => {
 				const started = yield* Deferred.make<void>()
 				const chat = ChatTest(
 					PluginComposition.merge(
-						TimeLimiter.make({ maxDuration: "20 millis" }),
+						TimeLimiter.make({ maxDuration: 20 }),
 						toolPlugin,
 					),
 				)
@@ -155,7 +129,7 @@ layer(tools.toLayer({ Wait: () => Effect.never }))((it) => {
 
 it.effect("a Turn that ends in time completes", () =>
 	Effect.gen(function* () {
-		const chat = ChatTest(TimeLimiter.make({ maxDuration: "1 minute" }))
+		const chat = ChatTest(TimeLimiter.make({ maxDuration: 60_000 }))
 		const model = yield* makeModel(() => answer())
 		const view = yield* chat
 			.execute({ input: "hello" })

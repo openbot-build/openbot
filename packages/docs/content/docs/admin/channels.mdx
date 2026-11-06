@@ -69,13 +69,6 @@ execution; removal waits for it. Closing the event stream does not cancel
 removal. An explicit cancellation keeps the Channel disabled. A later change can
 turn it on.
 
-After a data upgrade, an old Channel can have `needsAuthorization: true`. Its
-settings, secrets, links and history stay. Its `enabled` value stays too, but it
-accepts no input and starts no delivery or watch work. An administrator must
-save a change or rotate its secret to set a new caller with current rights. This
-clears `needsAuthorization`. Old work with an unknown result still waits for a
-decision; saving new settings does not replay it.
-
 ### Slack
 
 `credentials`:
@@ -116,5 +109,4 @@ member rights when a Channel stops after a permission change.
 
 Input, replies, and cards have execution records. An unknown send result waits
 for a decision through the execution API. Check the platform before allowing a
-retry. A restart does not make that decision for you. Old Channel queue data
-must pass the maintenance-window conversion before the new server starts.
+retry. A restart does not make that decision for you.

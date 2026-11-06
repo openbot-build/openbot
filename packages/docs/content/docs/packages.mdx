@@ -17,61 +17,72 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use
 
 ## Overview
 
-| Package                 | What it is for                                                                                                                                                                                                                               |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `openbot`               | The server and the plugin host. It exports the model providers and the Turn limit plugins again. Its subpath `Parts` gives inner parts to the development server and the test helpers. It is not a stable API. See [Run from code](/server). |
-| `server-database`       | The tables of the server database, the Drizzle database, and the SQL migrations. Only the server uses it.                                                                                                                                    |
-| `server-kernel`         | The parts of the server that every plugin shares: errors, secrets, settings, configuration, network rules, and the HTTP host. Only the server uses it.                                                                                       |
-| `identity-contract`     | The shared service tags and types for sign-in, access, roles, organizations, mail, SSO, and the audit log. Only the server uses it.                                                                                                          |
-| `server-billing`        | Billing, credits, rate limits, and token limits of the server, with their PostgreSQL storage. Only the server uses it.                                                                                                                       |
-| `server-execution`      | The execution engine of the server: stored executions, calls, workflows, resources, and the private RPC. Only the server uses it.                                                                                                            |
-| `tools-contract`        | The shared service tags and types for tools: tool entries, tool definitions, host tools, and the todo list. Only the server uses it.                                                                                                         |
-| `models-contract`       | The shared service tags and types for models, model providers, model calls, and Live backends. Only the server uses it.                                                                                                                      |
-| `apps-contract`         | The shared service tags and types for Apps, Code Mode, files, and vaults. Only the server uses it.                                                                                                                                           |
-| `conversation-contract` | The shared service tags and types for Bots, Chats, capabilities, channels, and work. Only the server uses it.                                                                                                                                |
-| `model-providers`       | The model providers of the server: OpenAI, OpenAI-compatible services, Anthropic, ChatGPT, and TypeSafe. `openbot` exports some of them again.                                                                                               |
-| `server-plugin`         | The kit that makes a feature of the server into a graft plugin. Only the server uses it.                                                                                                                                                     |
-| `plugin-audit`          | The `audit` plugin: the audit log of each organization. Only the server uses it.                                                                                                                                                             |
-| `plugin-mail`           | The `mail` plugin: mail from the platform, with the SMTP settings of the platform. `openbot` exports its SMTP transport again.                                                                                                               |
-| `plugin-platform`       | The `platform` plugin: the platform admins and the platform settings. `openbot` exports its administration tools again.                                                                                                                      |
-| `plugin-organization`   | The `organization` plugin: organizations, their members, and invitations. Only the server uses it.                                                                                                                                           |
-| `plugin-access`         | The `access` plugin: who may join the platform, and how. Only the server uses it.                                                                                                                                                            |
-| `plugin-sso`            | The `sso` plugin: the sign-in connections of organizations. Only the server uses it.                                                                                                                                                         |
-| `plugin-auth`           | The `auth` plugin: sign-in, user tokens, and the check of each caller. `openbot` exports its parts again as `Auth`.                                                                                                                          |
-| `plugin-authorization`  | The `authorization` plugin: roles, and the check of the permissions of each caller. Only the server uses it.                                                                                                                                 |
-| `plugin-models`         | The `models` plugin: model providers, models, and the model registry. Only the server uses it.                                                                                                                                               |
-| `plugin-files`          | The `files` plugin: stored files and their work. Only the server uses it.                                                                                                                                                                    |
-| `plugin-artifacts`      | Fixed files, saved sources, and citations.                                                                                                                                                                                                   |
-| `plugin-bots`           | The `bots` plugin: Bots, their memory, and the delegations between them. `openbot` exports its memory helpers again as `BotMemory`.                                                                                                          |
-| `plugin-capabilities`   | The `capabilities` plugin: Grants, Rules, requests, and the checks of them. Only the server uses it.                                                                                                                                         |
-| `plugin-work`           | The `work` plugin: reminders, and the work tools of Bots. Only the server uses it.                                                                                                                                                           |
-| `plugin-imported`       | The `imported` plugin: executions that started in another program. Only the server uses it.                                                                                                                                                  |
-| `plugin-chats`          | The `chats` plugin: Chats, Turns, tools, and Live connections. Only the server uses it.                                                                                                                                                      |
-| `plugin-channels`       | The `channels` plugin: Channels, their messages, and the Channel tools of Bots. Only the server uses it.                                                                                                                                     |
-| `plugin-apps`           | The `apps` plugin: App connections, the App Index, and the App tools of Bots. `openbot` exports its `AppHost` and `AppTools` again.                                                                                                          |
-| `plugin-code`           | The `code` plugin: code runs of Bots in a sandbox. Only the server uses it.                                                                                                                                                                  |
-| `plugin-vaults`         | The `vaults` plugin: Vaults, and the secret providers that they read. Only the server uses it.                                                                                                                                               |
-| `plugin-computers`      | The `computers` plugin: Computers, their pairings and sessions, and the Computer tools of Bots. Only the server uses it.                                                                                                                     |
-| `plugin-triggers`       | The `triggers` plugin: Triggers that start Turns, and their webhooks. Only the server uses it.                                                                                                                                               |
-| `plugin-billing`        | The `billing` plugin: the wallets of organizations, usage, and budgets. Only the server uses it.                                                                                                                                             |
-| `plugin-settings`       | The `settings` plugin: the settings of each member. Only the server uses it.                                                                                                                                                                 |
-| `plugin-turn-limiter`   | The `turn-limiter` plugin: a limit on the model steps of each Turn. It is off at first. `openbot` exports its `TurnLimiter` again.                                                                                                           |
-| `plugin-time-limiter`   | The `time-limiter` plugin: a limit on the time of each Turn. It is off at first. `openbot` exports its `TimeLimiter` again.                                                                                                                  |
-| `plugin-token-limiter`  | The `token-limiter` plugin: a limit on the tokens of each Turn. It is off at first. `openbot` exports its `TokenLimiter` again.                                                                                                              |
-| `server-upgrade`        | Runs the SQL migrations of `server-database`, and moves old data into the new tables. `openbot-migrate` and `DatabasePostgres.migrate` use it. Only the server uses it.                                                                      |
-| `server-development`    | The development server: a local test account, simulated models, and a simulated App. `pnpm dev` runs it. Never use it in production. See [Run the development server](/server#run-the-development-server).                                   |
-| `server-testing`        | The test helpers of the server, as TypeScript source, and the tests that start a database or a whole server. See [Test servers in code](/developers/testing#test-servers-in-code).                                                           |
-| `api`                   | The typed HTTP contract. The server, the client, and the API reference use it.                                                                                                                                                               |
-| `client`                | The TypeScript client. See [Client](/client).                                                                                                                                                                                                |
-| `core`                  | The Bot core: Bots, Chats, Turns, storage, plugins, and skills.                                                                                                                                                                              |
-| `protocol`              | The OpenBot App Protocol: publish, find, connect, and index Apps.                                                                                                                                                                            |
-| `protocol-test`         | A public test service for the App Protocol. See [Protocol test](/protocol-test).                                                                                                                                                             |
-| `cli`                   | The `openbot` command. It runs `openbot-<name>` for `openbot <name>`.                                                                                                                                                                        |
-| `computer`              | The `openbot computer` command, which pairs and connects your own [Computer](/developers/computers).                                                                                                                                         |
-| `docs`                  | This docs site.                                                                                                                                                                                                                              |
+| Package                 | What it is for                                                                                                                                                                                                                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `openbot`               | The server and the plugin host. It exports only `Host`, `Preset`, `Launch`, and `Wallets`, and the programs `openbot-server`, `openbot-migrate`, `openbot-setup`, and `openbot-inspect`. See [Run from code](/server).                                                                               |
+| `server-database`       | The tables of the server database, the Drizzle database, the SQL migrations, and `Migrations`, which runs and checks them. `openbot-migrate` uses it. Its `Testing` module gives tests a throwaway PostgreSQL server and folders of migrations; only tests use it. Only the server uses the package. |
+| `server-kernel`         | The parts of the server that every plugin shares: errors, secrets, settings, configuration, network rules, and the HTTP host. Only the server uses it.                                                                                                                                               |
+| `identity-contract`     | The shared service tags and types for sign-in, access, roles, organizations, mail, SSO, and the audit log. Only the server uses it.                                                                                                                                                                  |
+| `server-billing`        | Billing, credits, rate limits, and token limits of the server, with their PostgreSQL storage. Only the server uses it.                                                                                                                                                                               |
+| `server-execution`      | The execution engine of the server: stored executions, calls, workflows, resources, and the private RPC. Only the server uses it.                                                                                                                                                                    |
+| `tools-contract`        | The shared service tags and types for tools: tool entries, tool definitions, and host tools. Only the server uses it.                                                                                                                                                                                |
+| `models-contract`       | The shared service tags and types for models, model providers, model calls, and Live backends. Only the server uses it.                                                                                                                                                                              |
+| `apps-contract`         | The shared service tags and types for Apps, Code Mode, files, vaults, and Computers. It also holds the tags of the services from outside that the host gives: the check of App connections, the drivers of Computer providers, and the readers of secret providers. Only the server uses it.         |
+| `conversation-contract` | The shared service tags and types for Bots, Chats, capabilities, channels, and work, with the todo list. Only the server uses it.                                                                                                                                                                    |
+| `model-providers`       | The model providers of the server: OpenAI, OpenAI-compatible services, Anthropic, ChatGPT, and TypeSafe. A program imports each one from its own module.                                                                                                                                             |
+| `server-plugin`         | The kit that makes a feature of the server into a graft plugin. Only the server uses it.                                                                                                                                                                                                             |
+| `plugin-audit`          | The `audit` plugin: the audit log of each organization. Only the server uses it.                                                                                                                                                                                                                     |
+| `plugin-mail`           | The `mail` plugin: mail from the platform, with the SMTP settings of the platform. Its SMTP transport is the default mail service of the host.                                                                                                                                                       |
+| `plugin-platform`       | The `platform` plugin: the platform admins and the platform settings. The `openbot-setup` and `openbot-inspect` programs use its administration tools.                                                                                                                                               |
+| `plugin-organization`   | The `organization` plugin: organizations, their members, and invitations. Only the server uses it.                                                                                                                                                                                                   |
+| `plugin-access`         | The `access` plugin: who may join the platform, and how. Only the server uses it.                                                                                                                                                                                                                    |
+| `plugin-sso`            | The `sso` plugin: the sign-in connections of organizations. Only the server uses it.                                                                                                                                                                                                                 |
+| `plugin-auth`           | The `auth` plugin: sign-in, user tokens, and the check of each caller. Only the server uses it.                                                                                                                                                                                                      |
+| `plugin-authorization`  | The `authorization` plugin: roles, and the check of the permissions of each caller. Only the server uses it.                                                                                                                                                                                         |
+| `plugin-models`         | The `models` plugin: model providers, models, and the model registry. Only the server uses it.                                                                                                                                                                                                       |
+| `plugin-files`          | The `files` plugin: stored files and their work. Only the server uses it.                                                                                                                                                                                                                            |
+| `plugin-artifacts`      | Fixed files, saved sources, and citations.                                                                                                                                                                                                                                                           |
+| `plugin-bots`           | The `bots` plugin: Bots, their memory, and the delegations between them. Only the server uses it.                                                                                                                                                                                                    |
+| `plugin-capabilities`   | The `capabilities` plugin: Grants, Rules, requests, and the checks of them. Only the server uses it.                                                                                                                                                                                                 |
+| `plugin-work`           | The `work` plugin: reminders, and the work tools of Bots. Only the server uses it.                                                                                                                                                                                                                   |
+| `plugin-chats`          | The `chats` plugin: Chats, Turns, tools, and Live connections. Only the server uses it.                                                                                                                                                                                                              |
+| `plugin-channels`       | The `channels` plugin: Channels, their messages, and the Channel tools of Bots. Only the server uses it.                                                                                                                                                                                             |
+| `plugin-apps`           | The `apps` plugin: App connections, the App Index, and the App tools of Bots. Its config in the plugins file sets the timing of the App Index worker. Only the server uses it.                                                                                                                       |
+| `plugin-code`           | The `code` plugin: code runs of Bots in a sandbox. Only the server uses it.                                                                                                                                                                                                                          |
+| `plugin-vaults`         | The `vaults` plugin: Vaults, and the secret providers that they read. Only the server uses it.                                                                                                                                                                                                       |
+| `plugin-computers`      | The `computers` plugin: Computers, their pairings and sessions, and the Computer tools of Bots. Only the server uses it.                                                                                                                                                                             |
+| `plugin-triggers`       | The `triggers` plugin: Triggers that start Turns, and their webhooks. Only the server uses it.                                                                                                                                                                                                       |
+| `plugin-billing`        | The `billing` plugin: the usage and the budgets of organizations. Only the server uses it. The host gives the credit operations (`Wallets`).                                                                                                                                                         |
+| `plugin-settings`       | The `settings` plugin: the settings of each member. Only the server uses it.                                                                                                                                                                                                                         |
+| `plugin-turn-limiter`   | The `turn-limiter` plugin: a limit on the model steps of each Turn. It is off at first. Only the server uses it.                                                                                                                                                                                     |
+| `plugin-time-limiter`   | The `time-limiter` plugin: a limit on the time of each Turn. It is off at first. Only the server uses it.                                                                                                                                                                                            |
+| `plugin-token-limiter`  | The `token-limiter` plugin: a limit on the tokens of each Turn. It is off at first. Only the server uses it.                                                                                                                                                                                         |
+| `server-development`    | The development server: a local test account, simulated models, and a simulated App. `pnpm dev` runs it. Never use it in production. See [Run the development server](/server#run-the-development-server).                                                                                           |
+| `server-testing`        | The test helpers of the server, as TypeScript source, and the tests that start a whole server or use more than one plugin. A test of one package lives in that package. See [Test servers in code](/developers/testing#test-servers-in-code).                                                        |
+| `api`                   | The typed HTTP contract. The server, the client, and the API reference use it. Its root exports one namespace for each module, such as `ChatsApi`, and `OpenBotApi`. The types of the domain come from `domain`.                                                                                     |
+| `client`                | The TypeScript client. Its entries `Api`, `Core`, and `Domain` give the API contract, the chat schemas, and the domain models. See [Client](/client).                                                                                                                                                |
+| `core`                  | The Bot core: Bots, Chats, Turns, storage, plugins, and skills.                                                                                                                                                                                                                                      |
+| `domain`                | The domain models: Bots, Chats, executions, settings, and the other records of the API. Its root exports one namespace for each module, such as `Execution`, and each module also has its own entry, such as `@openbot-build/domain/Identity`.                                                       |
+| `protocol`              | The OpenBot App Protocol: publish, find, connect, and index Apps.                                                                                                                                                                                                                                    |
+| `protocol-test`         | A public test service for the App Protocol. See [Protocol test](/protocol-test).                                                                                                                                                                                                                     |
+| `cli`                   | The `openbot` command. It runs `openbot-<name>` for `openbot <name>`.                                                                                                                                                                                                                                |
+| `computer`              | The `openbot computer` command, which pairs and connects your own [Computer](/developers/computers).                                                                                                                                                                                                 |
+| `docs`                  | This docs site.                                                                                                                                                                                                                                                                                      |
+
+Each package keeps its modules flat in `src`. Only a contract package of several
+plugins has one folder for each plugin, such as `chats/` in
+`conversation-contract`. An entry of a package has the path of its source file:
+`@openbot-build/server-kernel/Settings` is `src/Settings.ts`. A server package
+has an entry only when another package or a docs example uses it. A symbol has
+one home: import it from the package that owns it. The roots of `core`, `api`,
+and `protocol` export one namespace for each public module, such as
+`import { Live } from "@openbot-build/core"`. Some of their modules also have
+their own entry, because the declaration files of other packages name types
+through them.
 
 The examples below leave out the model. To run them, provide a `LanguageModel`
-Layer, for example from a [model provider](#model-providers) in `openbot`.
+Layer, for example from a [model provider](#model-providers) in
+`model-providers`.
 
 ---
 
@@ -297,103 +308,45 @@ loads, and runs the skills.
 
 The server uses the plugins of OpenBot, such as the Bot, App, and work plugins,
 in every Turn. The work plugin gives the Bot its todo list, its reminders and
-plan mode. `@openbot-build/openbot` exports the Turn limit plugins again. They
-come from the packages `plugin-turn-limiter`, `plugin-token-limiter`, and
-`plugin-time-limiter`. You can use them with your own `ChatRuntime`.
+plan mode. The plugins are parts of the server, not a library: a program runs
+them with `Host`, and turns them on and off with the plugins file. See
+[Plugins](/plugins).
 
-`Auth.handle(request)` returns an Effect with the response. `Chats.wait` takes a
-`Duration.Input` for its timeout, such as `"30 seconds"`. The HTTP route still
-takes `timeoutMs` as a number of milliseconds.
+`Chats.wait` takes a `Duration.Input` for its timeout, such as `"30 seconds"`.
+The HTTP route still takes `timeoutMs` as a number of milliseconds.
 
 ### Memory
 
-`BotMemory` has the types and helpers of [Bot memory](/developers/memory). The
-server uses them for the memory Bot and the memory API. The schemas of the
-memory API are in `api`, as `BotMemory`.
-
-`BotMemory.apply` takes an `ids` array with one new ID for each operation, in
-the same order. `BotMemory.edit` takes a new ID string as `id`. The caller makes
-these IDs before it calls the pure helpers.
+The `bots` plugin has the types and helpers of [Bot memory](/developers/memory).
+The server uses them for the memory Bot and the memory API. The schemas of the
+memory API are in `domain`, as `BotMemory`.
 
 ### Turn limits
 
-Three plugins put a limit on each Turn. You can use one of them, or merge them
-with `PluginComposition.merge`. Each one counts only its own Turn. In the
-server, the plugins file turns them on and sets the limits. See
-[Plugins](/plugins).
+Three plugins put a limit on each Turn. They are entries of the preset that are
+off at first. The plugins file turns them on and sets the limits. See
+[Plugins](/plugins). Each one counts only its own Turn, and each Turn keeps its
+limit, so a new limit counts only for new Turns.
 
-#### Model steps
-
-`TurnLimiter` stops a Turn after a set number of model steps. The first model
-request counts as one step.
-
-```ts
-import { TurnLimiter } from "@openbot-build/openbot"
-
-const runtime =
-	yield *
-	ChatRuntime.make({
-		store,
-		bot: { plugin: TurnLimiter.make({ maxSteps: 4 }) },
-	})
-```
-
-It fails with one of two errors:
-
-| Error                    | When                                                                                |
-| ------------------------ | ----------------------------------------------------------------------------------- |
-| `InvalidMaxSteps`        | `maxSteps` is not a positive whole number.                                          |
-| `ModelStepLimitExceeded` | The Turn needs another model step after the limit. It has `maxSteps` and `history`. |
-
-#### Tokens
-
-`TokenLimiter` stops a Turn after it uses a set number of tokens. A token is a
-small piece of text that the model reads or writes. The plugin adds the input
-and output tokens of each model step. A model step that has started can finish.
-The next model step fails when the total reaches `maxTokens`.
-
-```ts
-import { TokenLimiter } from "@openbot-build/openbot"
-
-const plugin = TokenLimiter.make({ maxTokens: 100_000 })
-```
-
-| Error                | When                                                                                                |
-| -------------------- | --------------------------------------------------------------------------------------------------- |
-| `InvalidMaxTokens`   | `maxTokens` is not a positive whole number.                                                         |
-| `TokenLimitExceeded` | The Turn needs another model step after the limit. It has `maxTokens`, `usedTokens`, and `history`. |
-
-#### Time
-
-`TimeLimiter` stops a Turn after a set time. `maxDuration` takes a number of
-milliseconds or a text such as `"5 minutes"`. When the time is up, the plugin
-stops the Turn at once. It also stops a model step or a tool call in the middle.
-
-```ts
-import { TimeLimiter } from "@openbot-build/openbot"
-
-const plugin = TimeLimiter.make({ maxDuration: "5 minutes" })
-```
-
-| Error                | When                                                                     |
-| -------------------- | ------------------------------------------------------------------------ |
-| `InvalidMaxDuration` | `maxDuration` is not a positive, finite time.                            |
-| `TimeLimitExceeded`  | The Turn runs longer than the limit. It has `maxDuration` and `history`. |
+| Plugin          | Config        | Error when the Turn goes over the limit                                                                                              |
+| --------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `turn-limiter`  | `maxSteps`    | `ModelStepLimitExceeded`, with `maxSteps` and `history`. The first model request counts as one step.                                 |
+| `token-limiter` | `maxTokens`   | `TokenLimitExceeded`, with `maxTokens`, `usedTokens`, and `history`. A model step that has started can finish.                       |
+| `time-limiter`  | `maxDuration` | `TimeLimitExceeded`, with `maxDuration` and `history`. It stops the Turn at once, also in the middle of a model step or a tool call. |
 
 ---
 
 ## Model providers
 
-`@openbot-build/openbot` has three model providers. Their code is in the
-`model-providers` package. `openbot` exports them again, so the imports below
-stay the same. Each one turns a model selection into a `LanguageModel` Layer.
-You give the API key. See [Models](/models) for how OpenBot uses them.
+The package `model-providers` has three model providers for your own program.
+Each one turns a model selection into a `LanguageModel` Layer. You give the API
+key. See [Models](/models) for how OpenBot uses them.
 
 ### OpenAiCompatProvider
 
 ```ts
 import { Config, Model, Provider } from "@openbot-build/core"
-import { OpenAiCompatProvider } from "@openbot-build/openbot"
+import * as OpenAiCompatProvider from "@openbot-build/model-providers/OpenAiCompatProvider"
 import { Effect, Layer, Redacted } from "effect"
 import { LanguageModel } from "effect/ai"
 import { FetchHttpClient } from "effect/http"
@@ -430,7 +383,8 @@ the Responses API. It also has `ResponsesCompaction.layer()`, which makes long
 histories shorter with the native compaction of the Responses API.
 
 ```ts
-import { OpenAiProvider, ResponsesCompaction } from "@openbot-build/openbot"
+import * as OpenAiProvider from "@openbot-build/model-providers/OpenAiProvider"
+import * as ResponsesCompaction from "@openbot-build/model-providers/ResponsesCompaction"
 
 const services = Layer.merge(
 	Layer.unwrap(OpenAiProvider.make().model(selection)),
@@ -458,7 +412,7 @@ The same pattern, with `AnthropicProvider` and the provider ID `anthropic`. It
 uses the Messages API.
 
 ```ts
-import { AnthropicProvider } from "@openbot-build/openbot"
+import * as AnthropicProvider from "@openbot-build/model-providers/AnthropicProvider"
 
 const provider = AnthropicProvider.make({ max_tokens: 1024 })
 ```

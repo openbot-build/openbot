@@ -1,9 +1,11 @@
+import type {
+	ExperienceNotFound,
+	ExperienceStorageUnavailable,
+} from "@openbot-build/domain/ExperienceErrors"
 import {
 	type Vaults,
 	type AppIndex,
 	type AppConnections,
-	type ExperienceNotFound,
-	type ExperienceStorageUnavailable,
 	AppCalls,
 	Authorization,
 	Execution,
@@ -16,7 +18,7 @@ import {
 	type Store,
 	Client,
 } from "@openbot-build/protocol"
-import type { Paused } from "@openbot-build/server-execution/execution/Admission"
+import type { Paused } from "@openbot-build/server-execution/Admission"
 import type { Pending } from "@nmnmcc/ability/Authorizer"
 import { type Unavailable, ConnectionSessions } from "./ConnectionSessions.ts"
 import type { VaultReadFailed } from "@openbot-build/apps-contract/vaults/Readers"
@@ -30,11 +32,11 @@ import {
 	Ref,
 	Schema,
 } from "effect"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import { Calls } from "@openbot-build/server-execution/Calls"
 import * as Gate from "@openbot-build/conversation-contract/capabilities/Gate"
 import { RequestCommands } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
 import * as CallFrame from "@openbot-build/conversation-contract/chats/CallFrame"
-import { type Fence } from "@openbot-build/server-execution/execution/Store"
+import { type Fence } from "@openbot-build/server-execution/Store"
 import { ActionPolicy } from "./ActionPolicy.ts"
 import * as AppCall from "@openbot-build/apps-contract/apps/AppCall"
 import { AppCommands } from "@openbot-build/apps-contract/apps/AppCommands"
@@ -46,7 +48,7 @@ import {
 } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import * as Db from "@openbot-build/server-database/Database"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import * as AppSecrets from "@openbot-build/apps-contract/vaults/AppSecrets"
 import * as VaultCode from "@openbot-build/apps-contract/vaults/CodeMode"
 
@@ -369,8 +371,7 @@ export interface Service {
 }
 
 export class AppSession extends Context.Service<AppSession, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-apps/AppSession",
+	"@openbot-build/plugin-apps/AppSession",
 ) {}
 
 const make = Effect.gen(function* () {

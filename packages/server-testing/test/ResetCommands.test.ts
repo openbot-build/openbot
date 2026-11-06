@@ -1,24 +1,26 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { TokenId } from "@openbot-build/domain/TokenId"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { assert, layer } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
-import { Authorization, Execution, TokenId } from "@openbot-build/domain"
+import { Authorization, Execution } from "@openbot-build/domain"
 import { Effect, Layer, Redacted, Ref, String as Str } from "effect"
 import { SqlClient } from "effect/sql"
 import { AuthorizationCommands } from "@openbot-build/plugin-apps/AuthorizationCommands"
 import { Connections } from "@openbot-build/plugin-apps/Connections"
 import * as ResetCommands from "@openbot-build/plugin-apps/ResetCommands"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
-import { DatabasePostgres as Database } from "@openbot-build/openbot"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Policies from "./Policies.ts"
-import * as Postgres from "./PostgresTest.ts"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as Policies from "../src/Policies.ts"
 
-const database = Layer.effectDiscard(Database.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(Postgres.start, (db) =>
-				Database.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),

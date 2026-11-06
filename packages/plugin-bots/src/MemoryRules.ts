@@ -1,6 +1,6 @@
 import { BotMemory as Api } from "@openbot-build/domain"
 import { Array as Arr, Schema } from "effect"
-import * as Memory from "./memory/BotMemory.ts"
+import * as Memory from "./BotMemory.ts"
 import type { LearningContext } from "./BotMemories.ts"
 
 export const confessorRules =

@@ -1,22 +1,22 @@
+import { IndexStore } from "@openbot-build/protocol"
 import { AppIndex } from "@openbot-build/domain"
 
-import { Index } from "@openbot-build/protocol"
 import { Effect, HashMap, Layer, Schema } from "effect"
 import { and, eq } from "drizzle-orm"
 import {
 	appIndexEntries,
 	appIndexJobs,
 } from "@openbot-build/server-database/Schema"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
 import * as Db from "@openbot-build/server-database/Database"
 
-const EntryJson = Schema.fromJsonString(Index.Entry)
+const EntryJson = Schema.fromJsonString(IndexStore.Entry)
 /** The JSON text of the last check of a job, in `app_index_jobs.check` and `app_index_results.check`. */
 export const CheckJson = Schema.fromJsonString(AppIndex.Check)
 /** The public Index entries in Postgres. It holds only entries that were checked independently. */
 export const decode = Schema.decodeUnknownEffect(EntryJson)
 /** The entry has its type already, so it always encodes. */
-const encode = (entry: Index.Entry) =>
+const encode = (entry: IndexStore.Entry) =>
 	Schema.encodeEffect(EntryJson)(entry).pipe(Effect.orDie)
 
 /**
@@ -24,7 +24,7 @@ const encode = (entry: Index.Entry) =>
  * the failure as its cause, and the callers log it.
  */
 const unavailable = Effect.mapError((cause: unknown) =>
-	Index.IndexError.make({
+	IndexStore.IndexError.make({
 		reason: "Unavailable",
 		operation: "Public Index storage",
 		cause,
@@ -52,16 +52,16 @@ export const checks = (db: Db.Database, namespace: string) =>
 		)
 
 export const layer = Layer.effect(
-	Index.IndexStore,
+	IndexStore.IndexStore,
 	Effect.gen(function* () {
 		const db = yield* Db.make
-		const namespace = yield* IndexNamespace
+		const namespace = yield* instanceNamespace
 		const where = (cardUrl: string) =>
 			and(
 				eq(appIndexEntries.namespace, namespace),
 				eq(appIndexEntries.cardUrl, cardUrl),
 			)
-		return Index.IndexStore.of({
+		return IndexStore.IndexStore.of({
 			get: (cardUrl) =>
 				db
 					.select()

@@ -1,3 +1,4 @@
+import { ManagementScope } from "@openbot-build/domain/Developers"
 import {
 	Context,
 	Effect,
@@ -8,28 +9,27 @@ import {
 	Ref,
 	Schema,
 } from "effect"
-import { AuthApi, DeveloperApi as Api } from "@openbot-build/api"
+import { AuthApi } from "@openbot-build/api"
 
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
-import { DomainControl } from "@openbot-build/server-kernel/apps/DomainControl"
+import { DomainControl } from "@openbot-build/server-kernel/DomainControl"
 import { scopeKey } from "@openbot-build/plugin-apps/DeveloperAccess"
 import { Auth } from "@openbot-build/identity-contract/auth/Auth"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 
 export class Proofs extends Context.Service<
 	Proofs,
 	{
 		readonly tokens: (
-			scope: Api.ManagementScope,
+			scope: ManagementScope,
 		) => Effect.Effect<ReadonlyArray<string>>
 		readonly publish: (
-			scope: Api.ManagementScope,
+			scope: ManagementScope,
 			tokens: ReadonlyArray<string>,
 		) => Effect.Effect<void>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/server-development/DevelopmentProofs/Proofs") {}
+>()("@openbot-build/server-development/DevelopmentProofs/Proofs") {}
 export const layer = Layer.effect(
 	Proofs,
 	Effect.map(
@@ -81,7 +81,7 @@ export const layerRoutes = Layer.unwrap(
 						Schema.decodeEffect(
 							Schema.fromJsonString(
 								Schema.Struct({
-									scope: Api.ManagementScope,
+									scope: ManagementScope,
 									tokens: Schema.Array(Schema.String),
 								}),
 							),

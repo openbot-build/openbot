@@ -1,4 +1,8 @@
 import {
+	type ProofRecord,
+	getApp,
+} from "@openbot-build/apps-contract/apps/DeveloperRows"
+import {
 	type PlatformError,
 	Array as Arr,
 	Clock,
@@ -10,7 +14,7 @@ import {
 	Schema,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import * as Models from "./DeveloperModels.ts"
 import { Developers, Execution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
@@ -25,14 +29,14 @@ import {
 	Store,
 	transactionFailures,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { AppInspections } from "./AppInspections.ts"
 import { issueKey, sameIssue } from "./DeveloperReports.ts"
 import * as Rows from "./DeveloperRows.ts"
 import * as DeveloperNotices from "./DeveloperNotices.ts"
 import { DeveloperWatches, type Reference } from "./DeveloperWatches.ts"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
 
 export const CheckResult = Schema.TaggedUnion({
 	App: { report: Models.InspectionReport },
@@ -52,7 +56,7 @@ export interface Service {
 		| {
 				readonly id?: never
 				readonly kind: "Proof"
-				readonly proof: Rows.ProofRecord
+				readonly proof: ProofRecord
 		  },
 		| Developers.DeveloperForbidden
 		| Developers.DeveloperNotFound
@@ -64,7 +68,7 @@ export interface Service {
 			| {
 					readonly id?: never
 					readonly kind: "Proof"
-					readonly proof: Rows.ProofRecord
+					readonly proof: ProofRecord
 			  },
 	) => Effect.Effect<
 		| {
@@ -113,13 +117,12 @@ export interface Service {
 export class DeveloperMonitor extends Context.Service<
 	DeveloperMonitor,
 	Service
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/DeveloperMonitor") {}
+>()("@openbot-build/plugin-apps/DeveloperMonitor") {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
-	const namespace = yield* IndexNamespace
+	const namespace = yield* instanceNamespace
 	const access = yield* DeveloperAccess
 	const inspections = yield* AppInspections
 	const crypto = yield* SecureRandom.SecureRandom
@@ -128,13 +131,13 @@ const make = Effect.gen(function* () {
 	const notices = yield* DeveloperNotices.make
 	/** Every account that holds a proof or is a member of one. */
 	const possibleOwners = Effect.gen(function* () {
-		const proofs = yield* Rows.stored(
+		const proofs = yield* transactionFailures(
 			db
 				.selectDistinct({ owner: developerProofs.owner })
 				.from(developerProofs)
 				.where(eq(developerProofs.namespace, namespace)),
 		)
-		const members = yield* Rows.stored(
+		const members = yield* transactionFailures(
 			db
 				.selectDistinct({ owner: developerMembers.owner })
 				.from(developerMembers)
@@ -188,7 +191,7 @@ const make = Effect.gen(function* () {
 				Effect.gen(function* () {
 					// Domain rows come before watch and execution rows in every transaction.
 					if (current.ref.kind === "App")
-						yield* Rows.getApp(db, namespace, current.ref.id, true)
+						yield* getApp(db, namespace, current.ref.id, true)
 					else yield* access.readProof(current.ref.id, true)
 					return yield* watches.complete(
 						fence,
@@ -214,12 +217,12 @@ const make = Effect.gen(function* () {
 								return yield* Effect.die("An App check has a proof result.")
 							const cardUrl = current.ref.id
 							const report = result.report
-							const app = yield* Rows.getApp(db, namespace, cardUrl, true)
+							const app = yield* getApp(db, namespace, cardUrl, true)
 							const interested = yield* Effect.filter(
 								yield* possibleOwners,
 								(owner) => access.allows(owner, cardUrl),
 							)
-							const disabled = yield* Rows.stored(
+							const disabled = yield* transactionFailures(
 								db
 									.select({ owner: developerSubscriptions.owner })
 									.from(developerSubscriptions)

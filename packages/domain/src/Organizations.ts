@@ -1,11 +1,6 @@
 import { Array as Arr, Record as Rec, Schema } from "effect"
 import { Caller } from "./Identity.ts"
-import {
-	InvitationId,
-	InvitationInvalid,
-	InvitationNotFound,
-	InvitationStatus,
-} from "./Invitation.ts"
+import { InvitationId, InvitationStatus } from "./Invitation.ts"
 import { Email } from "./Email.ts"
 import { Delivery } from "./Mail.ts"
 import { PolicyInput, PolicySchema } from "./Authorization.ts"
@@ -63,7 +58,6 @@ export const UpdateMemberRequest = Schema.Struct({
 })
 export type UpdateMemberRequest = typeof UpdateMemberRequest.Type
 
-export { InvitationId, InvitationInvalid, InvitationNotFound, InvitationStatus }
 /**
  * An invitation to join an organization, or to use one shared Bot of it.
  * The person with this verified email can accept it.

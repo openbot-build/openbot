@@ -29,7 +29,7 @@ export const featureHeader = "openbot-unavailable-feature"
 
 /** Saves faults before the HTTP encoder handles them. */
 export class FailureBoundary extends HttpApiMiddleware.Service<FailureBoundary>()(
-	"@openbot-build/api/FailureBoundary",
+	"@openbot-build/api/FailureApi/FailureBoundary",
 	{
 		error: [
 			RequestFailed.pipe(HttpApiSchema.status(503)),

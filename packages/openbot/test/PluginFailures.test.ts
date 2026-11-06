@@ -14,9 +14,9 @@ import {
 	String as Str,
 } from "effect"
 import { TestClock } from "effect/testing"
-import * as PluginFailures from "../src/app/PluginFailures.ts"
-import * as PluginLogs from "../src/app/PluginLogs.ts"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
+import * as PluginFailures from "../src/PluginFailures.ts"
+import * as PluginLogs from "../src/PluginLogs.ts"
+import { Records } from "@openbot-build/server-kernel/Records"
 import * as Feature from "@openbot-build/server-plugin/Feature"
 
 interface Line {

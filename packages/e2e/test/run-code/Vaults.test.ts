@@ -1,11 +1,8 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { SecretProvider, Vault, VaultItem } from "@openbot-build/domain/Vaults"
 import { PgClient } from "@effect/sql-pg"
 import { assert, it } from "@effect/vitest"
-import {
-	ConnectionsApi,
-	FailureApi,
-	RequestsApi,
-	VaultsApi,
-} from "@openbot-build/api"
+import { ConnectionsApi, FailureApi, RequestsApi } from "@openbot-build/api"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import {
 	Array as Arr,
@@ -20,11 +17,15 @@ import {
 	String as Str,
 } from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
-import type { HttpClientResponse, HttpMethod } from "effect/http"
-import { AppHost } from "@openbot-build/openbot"
 import {
-	Apps,
+	type HttpClientResponse,
+	type HttpMethod,
+	FetchHttpClient,
+} from "effect/http"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
+import {
 	AppFixture as Fixture,
+	Apps,
 	BrowserHost,
 	Caller,
 	Messages,
@@ -131,7 +132,12 @@ const programs = (seen: Ref.Ref<ReadonlyArray<string>>) =>
 	})
 
 // The host runs real servers, so the test needs real time.
-it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+it.layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"Vaults keep their secrets, and Code Mode sends them only to the tools that an item allows",
 		() =>
@@ -154,7 +160,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					},
 					discovery: publisher.discovery,
 					appProbe: publisher.probe,
-					appNetwork: Layer.succeed(AppHost.AppNetwork, {
+					appNetwork: Layer.succeed(AppNetwork, {
 						layer: (owner, origins) =>
 							NodeHttpServer.layerUserNetwork({
 								owner,
@@ -283,7 +289,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						},
 					}),
 					201,
-					VaultsApi.SecretProvider,
+					SecretProvider,
 				)
 				assert.deepStrictEqual(provider.credentials, {
 					kind: "onepassword",
@@ -295,7 +301,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const vault = yield* read(
 					yield* call("POST", "/v1/vaults", { name: "Team secrets" }),
 					201,
-					VaultsApi.Vault,
+					Vault,
 				)
 				const item = yield* read(
 					yield* call("POST", `/v1/vaults/${vault.id}/items`, {
@@ -317,7 +323,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						],
 					}),
 					201,
-					VaultsApi.VaultItem,
+					VaultItem,
 				)
 				assert.deepStrictEqual(item.fields, ["token"])
 				yield* text(
@@ -369,7 +375,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						fromProvider(["password"]),
 					),
 					201,
-					VaultsApi.VaultItem,
+					VaultItem,
 				)
 				assert.ok(mail.source._tag === "OnePassword")
 				assert.strictEqual(mail.source.provider, provider.id)
@@ -397,14 +403,14 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					(yield* read(
 						yield* call("GET", "/v1/vaults", undefined, bob.session),
 						200,
-						Schema.Array(VaultsApi.Vault),
+						Schema.Array(Vault),
 					)).length,
 					0,
 				)
 				const bobVault = yield* read(
 					yield* call("POST", "/v1/vaults", { name: "Bob" }, bob.session),
 					201,
-					VaultsApi.Vault,
+					Vault,
 				)
 				yield* text(
 					yield* call(

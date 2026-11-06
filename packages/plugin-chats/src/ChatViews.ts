@@ -1,16 +1,12 @@
+import type { OpenWork } from "@openbot-build/domain/Chats"
 import { Chat, type Item, type Turn } from "@openbot-build/core"
 import type { Execution } from "@openbot-build/domain"
-import type {
-	ChatInfo,
-	ChatSummary,
-	ChatView,
-	OpenWork,
-} from "@openbot-build/api"
+import type { ChatsApi } from "@openbot-build/api"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import { response } from "./ResponseMapping.ts"
 import { Array as Arr } from "effect"
 
-export const info = (ref: Chat.Ref): ChatInfo => {
+export const info = (ref: Chat.Ref): ChatsApi.ChatInfo => {
 	const state = ChatHost.hostState(ref)
 	return {
 		id: ref.id,
@@ -33,7 +29,7 @@ export const project = (input: {
 	readonly items: ReadonlyArray<Item.Record>
 	readonly executionId: Execution.Id | null
 	readonly open: OpenWork
-}): ChatView => {
+}): ChatsApi.ChatView => {
 	const ref = input.view.chat
 	const turn = Chat.currentTurn(ref)
 	return {
@@ -64,7 +60,7 @@ export const project = (input: {
 export const summary = (
 	ref: Chat.Ref,
 	executionId: Execution.Id | null,
-): ChatSummary => {
+): ChatsApi.ChatSummary => {
 	const turn: Turn.Record | undefined = ref.turn
 	const latest = turn === undefined ? undefined : response(ref.id, turn, [])
 	return {

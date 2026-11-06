@@ -13,6 +13,9 @@
 			"path": "../api"
 		},
 		{
+			"path": "../apps-contract"
+		},
+		{
 			"path": "../conversation-contract"
 		},
 		{

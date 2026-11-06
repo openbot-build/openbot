@@ -15,33 +15,6 @@ import { FileErrors } from "./FilesApi.ts"
 import { ChatOperationErrors } from "./ChatsApi.ts"
 import { Limit } from "./Page.ts"
 
-export {
-	Artifact,
-	ArtifactId,
-	ArtifactVersion,
-	ArtifactFrom,
-	Source,
-	SourceId,
-	SourceFrom,
-	SourceOrigin,
-	SourceReference,
-	ChatItem,
-	Version,
-	Digest,
-	Availability,
-	ArtifactNotFound,
-	SourceNotFound,
-	ArtifactConflict,
-	ArtifactInvalid,
-	ArtifactStorageUnavailable,
-} from "@openbot-build/domain/Artifacts"
-
-export {
-	PublishArtifactRequest,
-	PublishVersionRequest,
-	CaptureSourceRequest,
-	RecordCitationsRequest,
-} from "@openbot-build/domain/ArtifactCommands"
 const {
 	PublishArtifactRequest,
 	PublishVersionRequest,

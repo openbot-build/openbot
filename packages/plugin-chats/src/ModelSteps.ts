@@ -1,8 +1,8 @@
 import {
 	type BillingStorageError,
 	Billing,
-} from "@openbot-build/server-billing/billing/Billing"
-import type { Paused } from "@openbot-build/server-execution/execution/Admission"
+} from "@openbot-build/server-billing/Billing"
+import type { Paused } from "@openbot-build/server-execution/Admission"
 import {
 	type Provider,
 	type Model,
@@ -11,10 +11,10 @@ import {
 	ContextCompaction,
 	Config,
 } from "@openbot-build/core"
-import * as ToolDefinitions from "@openbot-build/tools-contract/chats/ToolDefinitions"
+import * as ToolDefinitions from "@openbot-build/tools-contract/ToolDefinitions"
 import { Execution } from "@openbot-build/domain"
-import { CurrentAttribution } from "@openbot-build/server-billing/billing/MeteredModel"
-import * as ModelCalls from "@openbot-build/models-contract/models/ModelCalls"
+import { CurrentAttribution } from "@openbot-build/server-billing/MeteredModel"
+import * as ModelCalls from "@openbot-build/models-contract/ModelCalls"
 import {
 	Array as Arr,
 	Clock,
@@ -29,18 +29,15 @@ import {
 } from "effect"
 import { Digest } from "effect/crypto"
 import { LanguageModel, Prompt, Tool, Toolkit, type Response } from "effect/ai"
-import { Records, category } from "@openbot-build/server-kernel/errors/Records"
+import { Records, category } from "@openbot-build/server-kernel/Records"
 import { Hex } from "effect/encoding"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import {
-	Store,
-	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import { Store, type Fence } from "@openbot-build/server-execution/Store"
 
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 
 const CallRetry = Context.Reference<"read_only" | "never">(
-	"@openbot-build/openbot/chats/ModelSteps/CallRetry",
+	"@openbot-build/plugin-chats/ModelSteps/CallRetry",
 	{ defaultValue: () => "read_only" },
 )
 
@@ -111,8 +108,7 @@ export interface Service {
 }
 
 export class ModelSteps extends Context.Service<ModelSteps, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-chats/ModelSteps",
+	"@openbot-build/plugin-chats/ModelSteps",
 ) {}
 
 const make = Effect.gen(function* () {

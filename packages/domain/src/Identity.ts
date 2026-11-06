@@ -68,7 +68,9 @@ export const ExecutionIdentity = Schema.Struct({
 export type ExecutionIdentity = typeof ExecutionIdentity.Type
 
 /** A service has its own name. It cannot stand in for a member or token. */
-export const ServiceId = Schema.NonEmptyString.pipe(Schema.brand("ServiceId"))
+export const ServiceId = Schema.NonEmptyString.pipe(
+	Schema.brand("@openbot-build/domain/ServiceId"),
+)
 export type ServiceId = typeof ServiceId.Type
 export const ServiceCaller = Schema.Struct({
 	kind: Schema.Literal("service"),

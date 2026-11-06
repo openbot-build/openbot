@@ -1,3 +1,5 @@
+import type { Capability } from "@openbot-build/domain/Bots"
+import type { LimitControl } from "@openbot-build/domain/Delegations"
 import { type AppCalls, type Execution } from "@openbot-build/domain"
 import type {
 	Bots as BotsApi,
@@ -5,11 +7,9 @@ import type {
 } from "@openbot-build/domain"
 import type { CodeRuns as CodeDomain } from "@openbot-build/domain"
 import { Context, Data, type Effect, type Option } from "effect"
-import { type Capability } from "./Capability.ts"
 import type { Ask } from "./Requests.ts"
 import { Work } from "./Work.ts"
-import type * as PolicyOrigin from "./PolicyOrigin.ts"
-import { type Fence } from "@openbot-build/server-execution/execution/Store"
+import { type Fence } from "@openbot-build/server-execution/Store"
 
 /**
  * What a tool call does after the check. `Allow` runs it now. `Deny` does not run it,
@@ -60,8 +60,7 @@ export class Gate extends Context.Service<
 		/** Read only the answer for the current saved call occurrence. */
 		readonly answer: (callId: string) => Effect.Effect<Option.Option<Answer>>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/capabilities/Gate") {}
+>()("@openbot-build/conversation-contract/capabilities/Gate") {}
 
 /** Bound before tool approval checks, so a model cannot choose an execution or actor. */
 export type Frame = Pick<typeof Work.Service, "identity" | "chat" | "turn">
@@ -77,8 +76,7 @@ export class Gates extends Context.Service<
 			fence: Fence,
 			work: Frame,
 			continuation?: "chat" | "workflow",
-			control?: PolicyOrigin.Control,
+			control?: LimitControl,
 		) => Effect.Effect<Gate["Service"]>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/capabilities/Gate/Gates") {}
+>()("@openbot-build/conversation-contract/capabilities/Gate/Gates") {}

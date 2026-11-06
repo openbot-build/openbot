@@ -1,14 +1,12 @@
-import * as Imported from "@openbot-build/server-execution/imported/Executions"
-import * as ImportedHistory from "./ImportedHistory.ts"
+import type { Caller } from "@openbot-build/domain/Identity"
+import { ExperienceNotFound } from "@openbot-build/domain/ExperienceErrors"
 import { type Chat } from "@openbot-build/core"
 import {
 	Authorization,
-	type Caller,
 	Execution,
-	ExperienceNotFound,
 	AppCalls as Domain,
 } from "@openbot-build/domain"
-import { and, asc, eq, or } from "drizzle-orm"
+import { and, asc, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option, type Schema } from "effect"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import * as Db from "@openbot-build/server-database/Database"
@@ -17,7 +15,7 @@ import {
 	toolOrigins,
 	toolExecutions,
 } from "@openbot-build/server-database/ExecutionSchema"
-import { transactionFailures } from "@openbot-build/server-execution/execution/Store"
+import { transactionFailures } from "@openbot-build/server-execution/Store"
 import { ownerKey } from "./StoredConnections.ts"
 import { AppCommands } from "./AppCommands.ts"
 
@@ -25,7 +23,6 @@ import { AppCommands } from "./AppCommands.ts"
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const checks = yield* Check.make
-	const history = yield* ImportedHistory.make
 	const work = yield* AppCommands
 	const locate = Effect.fn("AppQueries.locate")(function* (
 		caller: Caller,
@@ -33,11 +30,7 @@ export const make = Effect.gen(function* () {
 	) {
 		const found = Arr.head(
 			yield* db
-				.select({
-					id: executions.id,
-					namespace: executions.namespace,
-					workflow: executions.workflow,
-				})
+				.select({ id: executions.id, namespace: executions.namespace })
 				.from(executions)
 				.where(
 					and(
@@ -54,18 +47,11 @@ export const make = Effect.gen(function* () {
 			namespace: found.value.namespace,
 			id: Execution.Id.make(found.value.id),
 		}
-		const old = found.value.workflow === Imported.workflowName
-		if (!old) yield* work.authorize(key, caller, "read")
-		return { key, old }
+		yield* work.authorize(key, caller, "read")
+		return key
 	}, transactionFailures)
 	const read = (caller: Caller, id: Domain.AppOperationId) =>
-		locate(caller, id).pipe(
-			Effect.flatMap(({ key, old }) =>
-				old
-					? history.app(key, caller).pipe(Effect.map((value) => value.view))
-					: work.view(key),
-			),
-		)
+		locate(caller, id).pipe(Effect.flatMap(work.view))
 	const list = Effect.fn("AppQueries.list")(function* (
 		caller: Caller,
 		chat: Chat.Id,
@@ -100,14 +86,7 @@ export const make = Effect.gen(function* () {
 					eq(executions.namespace, ownerKey(caller)),
 					eq(executions.organizationId, caller.organizationId),
 					eq(executions.resourceKind, "AppCall"),
-					or(
-						eq(toolExecutions.chat, chat),
-						and(
-							eq(executions.workflow, Imported.workflowName),
-							eq(executions.contextKind, "Chat"),
-							eq(executions.contextId, chat),
-						),
-					),
+					eq(toolExecutions.chat, chat),
 				),
 			)
 			.orderBy(asc(executions.createdAt), asc(executions.id))
@@ -120,9 +99,8 @@ export const make = Effect.gen(function* () {
 		/** A history binding also needs the exact saved tool position. */
 		history: (caller: Caller, id: Domain.AppOperationId) =>
 			locate(caller, id).pipe(
-				Effect.flatMap(({ key, old }) =>
+				Effect.flatMap((key) =>
 					Effect.gen(function* () {
-						if (old) return yield* history.position(key, caller)
 						const saved = yield* work.load(key)
 						return {
 							operation: yield* work.view(key),
@@ -140,16 +118,8 @@ export const make = Effect.gen(function* () {
 			responses: Schema.JsonObject,
 		) =>
 			locate(caller, id).pipe(
-				Effect.flatMap(({ key, old }) =>
-					old
-						? history
-								.app(key, caller)
-								.pipe(
-									Effect.andThen(
-										Effect.fail(Execution.Conflict.make({ id: key.id })),
-									),
-								)
-						: work.respond(key, caller, commandKey, round, responses),
+				Effect.flatMap((key) =>
+					work.respond(key, caller, commandKey, round, responses),
 				),
 			),
 	}

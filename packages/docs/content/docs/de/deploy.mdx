@@ -70,12 +70,12 @@ Das OpenBot-Image enthält Node.js, den gebündelten Server, die gebündelten
 Programme für Migration und Einrichtung und die Datenbank-Migrationen. Es
 enthält keine Build-Werkzeuge und keine Geheimnisse.
 
-| Pfad im Image               | Was es ist                                                                |
-| --------------------------- | ------------------------------------------------------------------------- |
-| `/app/dist/app/Main.mjs`    | Der Server. Das Image startet ihn standardmäßig.                          |
-| `/app/dist/app/Migrate.mjs` | Das Migrationsprogramm. Es bereitet die Datenbank vor.                    |
-| `/app/dist/app/Setup.mjs`   | Das Einrichtungsprogramm. Es schreibt die ersten Plattform-Einstellungen. |
-| `/app/migrations`           | Die Datenbank-Migrationen.                                                |
+| Pfad im Image           | Was es ist                                                                |
+| ----------------------- | ------------------------------------------------------------------------- |
+| `/app/dist/Main.mjs`    | Der Server. Das Image startet ihn standardmäßig.                          |
+| `/app/dist/Migrate.mjs` | Das Migrationsprogramm. Es bereitet die Datenbank vor.                    |
+| `/app/dist/Setup.mjs`   | Das Einrichtungsprogramm. Es schreibt die ersten Plattform-Einstellungen. |
+| `/app/migrations`       | Die Datenbank-Migrationen.                                                |
 
 Der Server im Image hört auf `0.0.0.0:3000`. Das Image hat einen Health Check
 (Gesundheitsprüfung), der alle fünf Sekunden `/health` aufruft.
@@ -119,37 +119,29 @@ App-Netzwerks getrennt.
 
 ### Die Datenbank vorbereiten
 
-Das Migrationsprogramm braucht `OPENBOT_DATABASE_URL` und `OPENBOT_SECRET_KEYS`.
-Stoppe zuerst alle OpenBot-Instanzen. Sichere die Datenbank und die Liste der
-Schlüssel im Objektspeicher. Behalte die alten Geheimschlüssel: Das Programm
-braucht sie zum Öffnen alter Einträge. Führe es vor dem ersten Serverstart und
-vor jeder neuen Version aus:
+Das Migrationsprogramm braucht nur `OPENBOT_DATABASE_URL`. Stoppe zuerst alle
+OpenBot-Instanzen und sichere die Datenbank. Führe es vor dem ersten Serverstart
+und vor jeder neuen Version aus:
 
 ```sh
 docker run --rm --env-file openbot.env \
-  openbot:$OPENBOT_RELEASE /app/dist/app/Migrate.mjs
+  openbot:$OPENBOT_RELEASE /app/dist/Migrate.mjs
 ```
 
-Dieselbe Migration ändert geeignete UUID-Spalten von Text in den PostgreSQL-Typ
-`uuid`. Jede ID belegt dort 16 Bytes. Alte v4-Werte bleiben gleich. Neue
-gespeicherte IDs nutzen v7, wenn die Zeitfolge hilft. Spalten mit gemischten
-oder externen IDs behalten Text. Stoppe dafür wie oben alle Server.
+Alle Migrationen eines Laufs liegen in einer Transaktion. Schlägt eine fehl,
+behält die Datenbank ihr altes Schema.
 
-Führe nach einem Abbruch denselben Befehl erneut aus. Jeder Datenblock und sein
-Fortschritt werden zusammen gespeichert. Ein beschädigter Eintrag stoppt den
-Lauf. Die Fehlerursache bleibt in einem verschlüsselten Bericht. Das Programm
-prüft Anzahl, Verweise, Geheimnisse und Zustände. Erst dann ist die Datenversion
-bereit und der Server darf starten. Laufende Server halten eine gemeinsame
-Datenbanksperre. Die Umstellung braucht eine alleinige Sperre.
+Diese Version braucht eine neue Datenbank. Sie liest keine Daten in den Formen
+älterer Versionen und überträgt solche Daten nicht. Enthält die Datenbank Daten
+einer älteren Version, stoppt die Migration mit diesem Fehler und ändert nichts:
 
-Die Sicherung behält Ressourcen-IDs, Verlauf und offene Entscheidungen. Alte
-externe Aktionen ohne bekanntes Ergebnis bleiben `outcome_unknown`. Arbeit ohne
-sicheren Prüfpunkt wird mit Grund als `interrupted` markiert. Ein fehlendes
-ursprüngliches Token wird nie zu einem uneingeschränkten Mitgliedsaufruf.
+```text
+This database holds data of an older OpenBot version (...). This version works
+only with a new database. Make a new database and run openbot migrate on it.
+```
 
-Vor dem neuen Verkehr kannst du die Sicherung wiederherstellen. Sobald externe
-Aktionen erneut laufen, repariere die Daten nur vorwärts. Stelle keine alten
-Daten wieder her, die diese Aktionen wiederholen würden.
+Die Wörter in den Klammern sagen, was die Migration gefunden hat. Lege für diese
+Version eine neue, leere Datenbank an und führe die Migration darauf aus.
 
 </Step>
 <Step>
@@ -161,7 +153,7 @@ Führe das Einrichtungsprogramm einmal aus, auf einer neuen Datenbank:
 ```sh
 docker run --rm --env-file openbot.env \
   -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
-  /app/dist/app/Setup.mjs \
+  /app/dist/Setup.mjs \
   --config=/run/setup.json
 ```
 
@@ -182,8 +174,9 @@ docker run -d --name openbot --env-file openbot.env \
   -p 127.0.0.1:8080:3000 openbot:$OPENBOT_RELEASE
 ```
 
-Beim Start prüft der Server die Tabellen und die abgeschlossene Datenversion.
-Wenn eine Prüfung fehlschlägt, stoppt er und schreibt einen Fehler ins Log.
+Beim Start prüft der Server, ob die neueste Migration gelaufen ist und ob jede
+Tabelle ihre Spalten hat. Wenn eine Prüfung fehlschlägt, stoppt er und schreibt
+einen Fehler ins Log.
 
 </Step>
 <Step>
@@ -252,8 +245,7 @@ kommen aus `.env.production`. Der Dienst `openbot` bekommt auch
 `OPENBOT_OUTBOUND_ALLOW`, `OPENBOT_CLUSTER_HOST` und `OPENBOT_PLUGINS_FILE`.
 Compose bindet `deploy/docker/plugins.yml` nur zum Lesen unter
 `/etc/openbot/plugins.yml` ein. Die Produkteinstellungen liegen in der
-Datenbank. Der Dienst `migrate` braucht `OPENBOT_DATABASE_URL` und
-`OPENBOT_SECRET_KEYS`.
+Datenbank. Der Dienst `migrate` braucht nur `OPENBOT_DATABASE_URL`.
 
 In der Vorlage nutzt `OPENBOT_DATABASE_URL` den Wert `${POSTGRES_PASSWORD}`. So
 setzt du das Passwort nur einmal.
@@ -316,7 +308,7 @@ Führe das Einrichtungsprogramm einmal aus, nach dem ersten `up`:
 
 ```sh
 docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
-  run --rm -v "$PWD/setup.json:/run/setup.json:ro" openbot /app/dist/app/Setup.mjs \
+  run --rm -v "$PWD/setup.json:/run/setup.json:ro" openbot /app/dist/Setup.mjs \
   --config=/run/setup.json
 ```
 

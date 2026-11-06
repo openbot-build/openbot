@@ -2,14 +2,13 @@ import { Files } from "@openbot-build/domain"
 import { Effect, Option, Redacted } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { HttpClient } from "effect/http"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import {
 	filesDefaults,
-	filesOf,
 	type FilesDocument,
-} from "@openbot-build/server-kernel/settings/Documents"
-import { bindings } from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+} from "@openbot-build/server-kernel/Documents"
+import { bindings } from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import * as S3 from "./S3.ts"
 
 /** The shared object storage boundary. Secrets are opened only for a call. */
@@ -22,7 +21,7 @@ export const make = Effect.gen(function* () {
 		Effect.map(
 			Option.match({
 				onNone: () => filesDefaults,
-				onSome: (snapshot) => filesOf(snapshot.document),
+				onSome: (snapshot) => snapshot.document.files,
 			}),
 		),
 	)

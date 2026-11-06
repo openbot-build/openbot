@@ -18,7 +18,7 @@ import {
 import type { PgClient } from "@effect/sql-pg"
 import { AppHost } from "./AppHost.ts"
 import { Governance } from "./Governance.ts"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
 import type {
 	Error as StorageError,
@@ -52,8 +52,7 @@ export class ConnectionSessions extends Context.Service<
 			readonly policy: typeof Client.InvocationPolicy.Service
 		}) => Effect.Effect<Opened, Error, Scope.Scope>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/ConnectionSessions") {}
+>()("@openbot-build/plugin-apps/ConnectionSessions") {}
 
 export const make: Effect.Effect<
 	typeof ConnectionSessions.Service,

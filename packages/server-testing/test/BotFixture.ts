@@ -1,6 +1,7 @@
-import { BotsApi } from "@openbot-build/api"
+import { BotId } from "@openbot-build/domain/BotId"
+import { type Bot } from "@openbot-build/domain/Bots"
 import { Effect, Layer } from "effect"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import { Billing } from "@openbot-build/server-billing/Billing"
 import * as MemoryLogs from "@openbot-build/plugin-bots/MemoryLogs"
 import * as TurnContext from "@openbot-build/plugin-chats/TurnContext"
 import * as Grants from "@openbot-build/plugin-capabilities/Grants"
@@ -16,8 +17,8 @@ import * as Delegations from "@openbot-build/plugin-bots/Delegations"
 import * as Judge from "@openbot-build/plugin-capabilities/Judge"
 
 /** A Bot for tests that use Chats without the Bot services. */
-export const bot: BotsApi.Bot = {
-	id: BotsApi.BotId.make("bot_test"),
+export const bot: Bot = {
+	id: BotId.make("bot_test"),
 	owner: { _tag: "Member", userId: "test-user" },
 	name: "Assistant",
 	role: "Helps one person",

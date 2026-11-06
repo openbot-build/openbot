@@ -68,5 +68,4 @@ export class Reminders extends Context.Service<
 			chat: Chat.Id,
 		) => Effect.Effect<ReadonlyArray<Reminder>, BotsApi.BotStorageUnavailable>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/work/Reminders") {}
+>()("@openbot-build/conversation-contract/work/Reminders") {}

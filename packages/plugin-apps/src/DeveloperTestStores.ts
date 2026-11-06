@@ -16,9 +16,10 @@ import {
 	developerTestFlows,
 	developerTests,
 } from "@openbot-build/server-database/Schema"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import * as Rows from "./DeveloperRows.ts"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
+import type { InstanceSettings } from "@openbot-build/server-kernel/InstanceSettings"
 import * as Db from "@openbot-build/server-database/Database"
 
 const PrivateState = Schema.Struct({
@@ -43,17 +44,16 @@ export class DeveloperTestStores extends Context.Service<
 	{
 		readonly bind: (owner: string, id: string) => BoundTestStores
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/DeveloperTestStores") {}
+>()("@openbot-build/plugin-apps/DeveloperTestStores") {}
 
 export const make: Effect.Effect<
 	typeof DeveloperTestStores.Service,
 	never,
-	PgClient.PgClient | Secrets | SecureRandom.SecureRandom
+	PgClient.PgClient | Secrets | SecureRandom.SecureRandom | InstanceSettings
 > = Effect.gen(function* () {
 	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
-	const namespace = yield* IndexNamespace
+	const namespace = yield* instanceNamespace
 	const secrets = yield* Secrets
 	const crypto = yield* SecureRandom.SecureRandom
 	const uses = GrantUses.makeWith(db, secrets)

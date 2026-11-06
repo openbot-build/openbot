@@ -1,11 +1,11 @@
 import { Chat, Config } from "@openbot-build/core"
 import { Schema } from "effect"
 import { BotId } from "./BotId.ts"
-export { BotId } from "./BotId.ts"
 import { Decision } from "./Authorization.ts"
 import { Name } from "./Name.ts"
 import { PlanApproval } from "./PlanApproval.ts"
 import * as BotMemory from "./BotMemory.ts"
+import * as Execution from "./Execution.ts"
 
 /**
  * Who owns a Bot.
@@ -127,13 +127,13 @@ export type Capability = typeof Capability.Type
 export const GrantId = Schema.String.check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(128),
-).pipe(Schema.brand("@openbot-build/api/GrantId"))
+).pipe(Schema.brand("@openbot-build/domain/GrantId"))
 export type GrantId = typeof GrantId.Type
 
 export const RuleId = Schema.String.check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(128),
-).pipe(Schema.brand("@openbot-build/api/RuleId"))
+).pipe(Schema.brand("@openbot-build/domain/RuleId"))
 export type RuleId = typeof RuleId.Type
 
 export const Decider = Schema.TaggedUnion({
@@ -211,8 +211,6 @@ export const UpdateRuleRequest = Schema.Struct({
 })
 export type UpdateRuleRequest = typeof UpdateRuleRequest.Type
 
-export const BotMemoryView = BotMemory.View
-export type BotMemoryView = typeof BotMemoryView.Type
 export const UpdateBotMemoryRequest = Schema.Struct({
 	command: BotMemory.Edit,
 })
@@ -220,7 +218,7 @@ export type UpdateBotMemoryRequest = typeof UpdateBotMemoryRequest.Type
 export class BotNotFound extends Schema.TaggedError<
 	BotNotFound,
 	{ readonly brand: unique symbol }
->()("BotNotFound", { bot: Schema.String }) {}
+>()("BotNotFound", { bot: Schema.String }, Execution.category("not_found")) {}
 export class RuleNotFound extends Schema.TaggedError<
 	RuleNotFound,
 	{ readonly brand: unique symbol }

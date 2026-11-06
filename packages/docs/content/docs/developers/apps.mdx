@@ -59,7 +59,7 @@ To only look, without saving a draft, send the same body to
 
 ### Review and create the connection
 
-`draftId` must be the UUID from the saved draft. Old v4 and new v7 values both
+`draftId` must be the UUID from the saved draft. UUID v4 and v7 values both
 work. The API rejects other text before it reaches storage. Outside connection
 IDs keep their existing format.
 
@@ -357,12 +357,6 @@ An `outcome_unknown` execution waits for a decision. Check the outside state
 before choosing a retry. It must not send an unconfirmed write again on its own.
 
 ---
-
-After an upgrade, saved App calls remain in the same history API with their
-original IDs. Reads check your current account and Chat access. Error details
-stay private; the public result gives an error kind and ID. An old call with no
-saved caller cannot continue by sending more input. Check an unknown outside
-result before you start a new call.
 
 ## App views
 

@@ -3,7 +3,7 @@ title: 组织
 description: 组织、成员、设置、角色和审计日志。
 ---
 
-邀请制升级默认值、邮箱登录、审批、组角色及管理员恢复请参阅[账号准入](/zh-cn/access)。
+邀请制默认值、邮箱登录、审批、组角色及管理员恢复请参阅[账号准入](/zh-cn/access)。
 
 面向组织管理员。每项任务需要对应权限。只有平台管理员可以修改 `/v1/platform`
 下的设置。从[管理员手册](/zh-cn/admin)开始。
@@ -32,8 +32,7 @@ cookie 的请求上，它也会检查。
 `ownerUserId`。该空间只有本人一个成员，不能邀请别人、添加成员、使用组织 SSO、退出或转让。其他空间的类型为
 `kind: "organization"`。个人空间复用现有组织路由。未明确指定空间时，若只有一个普通组织，仍选择该组织；没有普通组织时才选择个人空间。
 
-旧版本的 OpenBot 会为每个新账户创建一个名为 "Personal" 的组织。这些组织会保留。它们是普通组织，所以你可以改名、邀请别人或离开它们。验证域名见
-[SSO 和域名](/zh-cn/sso)，`organizationCreation` 见
+验证域名见 [SSO 和域名](/zh-cn/sso)，`organizationCreation` 见
 [Platform](/zh-cn/platform#组织创建)。
 
 ---

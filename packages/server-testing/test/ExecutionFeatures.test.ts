@@ -23,9 +23,9 @@ import type { Work } from "@openbot-build/conversation-contract/capabilities/Wor
 import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
 import { TurnContext } from "@openbot-build/conversation-contract/chats/TurnContext"
 import * as ExecutionFeatures from "@openbot-build/plugin-chats/ExecutionFeatures"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import type { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
+import { Records } from "@openbot-build/server-kernel/Records"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import type { Definition } from "@openbot-build/tools-contract/ToolDefinitions"
 import * as BotFixture from "./BotFixture.ts"
 
 const fence = {
@@ -100,6 +100,7 @@ const feature = (
 	build: "normal",
 	review: options.review ?? true,
 	restores: options.restores ?? [],
+	missing: BotFeatures.wait(),
 	settings: Effect.succeed(null),
 	prepare: (prepared) =>
 		Effect.gen(function* () {
@@ -192,7 +193,14 @@ it.effect(
 					feature(built, "tools", { order: 10, version: 2 }),
 				)
 				const failure = yield* execution
-					.open(fence, frame, [{ id: "tools", version: 1, settings: null }])
+					.open(fence, frame, [
+						{
+							id: "tools",
+							version: 1,
+							settings: null,
+							missing: BotFeatures.wait(),
+						},
+					])
 					.pipe(Effect.flip)
 				assert.ok(Schema.is(Execution.Conflict)(failure))
 				assert.deepStrictEqual(yield* Ref.get(built), [])

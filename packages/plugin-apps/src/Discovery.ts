@@ -1,17 +1,8 @@
 import { CatalogDiscovery, Discovery } from "@openbot-build/protocol"
-import * as OutboundPolicy from "@openbot-build/server-kernel/network/OutboundPolicy"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { AppDiscovery } from "@openbot-build/domain"
 
-import {
-	Array as Arr,
-	Effect,
-	Layer,
-	Match,
-	Option,
-	pipe,
-	type Schema,
-} from "effect"
+import { Array as Arr, Effect, Match, Option, pipe, type Schema } from "effect"
 
 const invalidInput = (input: string): AppDiscovery.Failed =>
 	AppDiscovery.Failed.make({
@@ -118,11 +109,4 @@ export const configurationKeys = (
 					}),
 				),
 		}),
-	)
-
-/** Discovery is anonymous. OpenBot credentials are never sent as publisher headers. */
-export const layerPublic: Layer.Layer<Discovery.Discovery> =
-	CatalogDiscovery.layer().pipe(
-		Layer.provide(CatalogDiscovery.layerRules),
-		Layer.provide(OutboundPolicy.layerPublicNetwork),
 	)

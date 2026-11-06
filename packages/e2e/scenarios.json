@@ -6183,14 +6183,14 @@
 						"condition": "Runs a real local OpenBot HTTP server with a throwaway PostgreSQL database and real time. The server uses signed fixture OIDC identities and a fixed model, not a live model provider.",
 						"evidence": [
 							{
-								"file": "packages/server-testing/test/BrowserHost.ts",
-								"searchText": "const database = yield* PostgresTest.start",
-								"line": 173
+								"file": "packages/server-testing/src/BrowserHost.ts",
+								"searchText": "const database = yield* TestDatabase.migrated",
+								"line": 164
 							},
 							{
 								"file": "packages/e2e/test/connect-apps/AppApiE2E.test.ts",
-								"searchText": "layer(BrowserHost.layerPlatform, { excludeTestServices: true })",
-								"line": 249
+								"searchText": "Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer)",
+								"line": 260
 							}
 						]
 					}
@@ -6242,7 +6242,7 @@
 								"line": 521
 							},
 							{
-								"file": "packages/server-testing/test/Caller.ts",
+								"file": "packages/server-testing/src/Caller.ts",
 								"searchText": "origin: publicOrigin,",
 								"line": 75
 							}
@@ -6255,7 +6255,7 @@
 						"condition": "The host restart closes and rebuilds the server layers against the same database inside the test process. It is not a separate built-host process crash.",
 						"evidence": [
 							{
-								"file": "packages/server-testing/test/BrowserHost.ts",
+								"file": "packages/server-testing/src/BrowserHost.ts",
 								"searchText": "Scope.close(current.scope, Exit.void).pipe(Effect.andThen(launch))",
 								"line": 718
 							}
@@ -6313,7 +6313,7 @@
 				{
 					"file": "packages/e2e/test/connect-apps/AppIndexApi.test.ts",
 					"condition": {
-						"condition": "PostgresTest.start runs initdb and pg_ctl from devenv, creates temporary database files, and binds real PostgreSQL on loopback."
+						"condition": "TestDatabase.start runs initdb and pg_ctl from devenv, creates temporary database files, and binds real PostgreSQL on loopback."
 					}
 				},
 				{
@@ -6473,7 +6473,7 @@
 				{
 					"file": "packages/e2e/test/connect-apps/IndexWork.test.ts",
 					"condition": {
-						"condition": "All three cases use BrowserHost.layerPlatform with excludeTestServices set to true. There is no skip or environment gate in this file."
+						"condition": "All three cases use the Node services, Node crypto and the fetch HTTP client, with excludeTestServices set to true. There is no skip or environment gate in this file."
 					}
 				},
 				{
@@ -9314,10 +9314,10 @@
 								"line": 519
 							},
 							{
-								"file": "packages/server-testing/test/BrowserHost.ts",
+								"file": "packages/server-testing/src/BrowserHost.ts",
 								"testTitle": "files upload to S3, go to the model, and go away when nothing uses them",
-								"searchText": "const database = yield* PostgresTest.start",
-								"line": 173
+								"searchText": "const database = yield* TestDatabase.migrated",
+								"line": 164
 							}
 						],
 						"condition": "Both tests start BrowserHost with a real local HTTP server and a disposable PostgreSQL database. They give it an in-memory storage handler and a recording model."
@@ -10210,7 +10210,7 @@
 				{
 					"file": "packages/e2e/test/live-chat/Live.test.ts",
 					"condition": {
-						"condition": "PostgresTest requires initdb and pg_ctl from devenv, temporary file access, and free local ports. No skip or external-service credential gate is present in this file."
+						"condition": "BrowserHost starts its database with TestDatabase, which requires initdb and pg_ctl from devenv, temporary file access, and free local ports. No skip or external-service credential gate is present in this file."
 					}
 				},
 				{
@@ -12393,9 +12393,9 @@
 							{
 								"file": "packages/e2e/test/run-code/Vaults.test.ts",
 								"testTitle": "Vaults keep their secrets, and Code Mode sends them only to the tools that an item allows",
-								"searchText": "it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })",
+								"searchText": "Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer)",
 								"anchorScope": "Shared setup or helper in this file.",
-								"line": 129
+								"line": 136
 							},
 							{
 								"file": "packages/e2e/test/run-code/Vaults.test.ts",
@@ -13942,7 +13942,7 @@
 				{
 					"file": "packages/e2e/test/triggers/Triggers.test.ts",
 					"condition": {
-						"condition": "PostgresTest requires initdb and pg_ctl from devenv, temporary file access, and free local ports. No skip or external-service gate is present in this file."
+						"condition": "BrowserHost starts its database with TestDatabase, which requires initdb and pg_ctl from devenv, temporary file access, and free local ports. No skip or external-service gate is present in this file."
 					}
 				},
 				{

@@ -1,23 +1,20 @@
+import type { BotId } from "@openbot-build/domain/BotId"
 import type { Execution } from "@openbot-build/domain"
-import {
-	type ChatCommandRequest,
-	type ChatCommandReceipt,
-	type BotsApi,
-} from "@openbot-build/api"
+import { type ChatsApi } from "@openbot-build/api"
 import { Effect, type PlatformError } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Client, type ClientError } from "./Client.ts"
 import { prepare, type Command } from "./Command.ts"
 
-type Input = Omit<ChatCommandRequest, "commandKey"> &
-	Partial<Pick<ChatCommandRequest, "commandKey">>
+type Input = Omit<ChatsApi.ChatCommandRequest, "commandKey"> &
+	Partial<Pick<ChatsApi.ChatCommandRequest, "commandKey">>
 
 /** Make a message command. Reuse send after a lost reply. Observe its execution for output. */
 export const message = Effect.fn("Chats.message")(function* (
-	chatId: ChatCommandReceipt["chat"],
+	chatId: ChatsApi.ChatCommandReceipt["chat"],
 	input: Input,
 ): Effect.fn.Return<
-	Command<ChatCommandReceipt, ClientError>,
+	Command<ChatsApi.ChatCommandReceipt, ClientError>,
 	PlatformError.PlatformError,
 	Client | SecureRandom.SecureRandom
 > {
@@ -34,10 +31,10 @@ export const message = Effect.fn("Chats.message")(function* (
 
 /** Send to the direct Chat with a Bot. All retries keep the same command key. */
 export const botMessage = Effect.fn("Chats.botMessage")(function* (
-	botId: BotsApi.BotId,
+	botId: BotId,
 	input: Input,
 ): Effect.fn.Return<
-	Command<ChatCommandReceipt, ClientError>,
+	Command<ChatsApi.ChatCommandReceipt, ClientError>,
 	PlatformError.PlatformError,
 	Client | SecureRandom.SecureRandom
 > {
@@ -54,7 +51,7 @@ export const botMessage = Effect.fn("Chats.botMessage")(function* (
 
 /** Stop work and observe the receipt until its resources have been released. */
 export const interrupt = Effect.fn("Chats.interrupt")(function* (
-	chatId: ChatCommandReceipt["chat"],
+	chatId: ChatsApi.ChatCommandReceipt["chat"],
 	input: {
 		readonly commandKey?: Execution.CommandKey
 		readonly delegations?: boolean
@@ -77,7 +74,7 @@ export const interrupt = Effect.fn("Chats.interrupt")(function* (
 
 /** Delete a Chat after its work has ended. A retry returns the same receipt. */
 export const remove = Effect.fn("Chats.remove")(function* (
-	chatId: ChatCommandReceipt["chat"],
+	chatId: ChatsApi.ChatCommandReceipt["chat"],
 	commandKey?: Execution.CommandKey,
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,

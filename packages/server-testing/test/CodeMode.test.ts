@@ -1,8 +1,9 @@
+import { FetchHttpClient } from "effect/http"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import { NodeFileSystem } from "@effect/platform-node"
+import { Records } from "@openbot-build/server-kernel/Records"
+import { NodeFileSystem, NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
-import { ConnectionsApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Cause,
@@ -21,7 +22,6 @@ import {
 	make as makeSandbox,
 	type Program,
 } from "@openbot-build/plugin-code/Sandbox"
-import * as BrowserHost from "./BrowserHost.ts"
 
 const limits = {
 	timeoutMs: 2_000,
@@ -145,9 +145,15 @@ it.layer(Layer.merge(NodeFileSystem.layer, ErrorRecordsFixture.layer))((it) => {
 
 // These tests need real time: the sandbox stops a program after a real
 // timeout.
-it.layer(Layer.merge(BrowserHost.layerPlatform, ErrorRecordsFixture.layer), {
-	excludeTestServices: true,
-})((it) => {
+it.layer(
+	Layer.merge(
+		Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+		ErrorRecordsFixture.layer,
+	),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"a program has no Node.js, and the sandbox stops programs at their limits",
 		() =>
@@ -246,7 +252,7 @@ it.effect(
 			): Binding => ({
 				name: "openbot_" + toolName,
 				source: {
-					connectionId: ConnectionsApi.ConnectionId.make(connectionId),
+					connectionId: ConnectionId.make(connectionId),
 					connectionName,
 					cardUrl: "https://apps.example.com/card",
 					appName: "Example",

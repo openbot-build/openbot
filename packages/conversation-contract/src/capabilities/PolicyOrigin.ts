@@ -1,12 +1,11 @@
+import type { CapabilityRequestId } from "@openbot-build/domain/CapabilityRequestId"
+import { LimitControl as Control } from "@openbot-build/domain/Delegations"
+import { Caller } from "@openbot-build/domain/Identity"
 import { Chat, Turn } from "@openbot-build/core"
-import {
-	Caller,
-	Execution,
-	Requests,
-	Delegations as Domain,
-} from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import { Effect, Option, Schema } from "effect"
 import { Delegations } from "../bots/Delegations.ts"
+import * as DelegationSource from "../bots/DelegationSource.ts"
 import * as CallFrame from "../chats/CallFrame.ts"
 import * as ChatHost from "../chats/ChatHost.ts"
 import { TurnAccess } from "../chats/TurnAccess.ts"
@@ -15,11 +14,8 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 
-/** A limit check is a control operation. It is not a model tool call. */
-export const Control = Domain.LimitControl
-export type Control = typeof Control.Type
 export const controlId = (source: Key, control: Control) =>
 	`delegation-limit:${source.id}:${control.epoch}`
 const TurnReference = Schema.Struct({
@@ -47,7 +43,7 @@ export const make = Effect.gen(function* () {
 		const owner = yield* store.ownership(originKey)
 		if (
 			source.record.resource.kind !== "Delegation" ||
-			source.workflow !== "openbot.delegation" ||
+			source.workflow !== DelegationSource.workflowName ||
 			execution.record.resource.kind !== "Turn" ||
 			owner.ownerExecutionId !== sourceKey.id ||
 			source.identity.owner.organizationId !==
@@ -133,7 +129,7 @@ export const make = Effect.gen(function* () {
 	const linkRequest = Effect.fn("PolicyOrigin.linkRequest")(function* (
 		fence: Fence,
 		control: Control,
-		request: Requests.CapabilityRequestId,
+		request: CapabilityRequestId,
 	) {
 		const origin = yield* currentLimit(fence, control)
 		yield* store.guard(fence)

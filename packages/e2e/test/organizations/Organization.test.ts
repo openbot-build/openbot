@@ -1,26 +1,36 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import {
+	Organization,
+	Member,
+	AuditLogEntry,
+	Invitation,
+	CreateInvitationResponse,
+} from "@openbot-build/domain/Organizations"
+import { Domain } from "@openbot-build/domain/Sso"
+import { OrganizationSettings } from "@openbot-build/domain/Settings"
+import { Roles, Mail } from "@openbot-build/domain"
+import {
+	AuditLog,
+	Chat,
+	Member as MemberModel,
+	ResourceInfo,
+} from "@openbot-build/domain/Authorization"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
 import {
 	BrowserHost,
 	Caller,
-	Policies,
 	Outside,
+	Policies,
 } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
-import {
-	AuthApi,
-	Authorization,
-	Mail,
-	OrganizationApi,
-	Roles,
-	Settings,
-	SsoApi,
-	UserTokensApi,
-} from "@openbot-build/api"
-import { Array as Arr, Effect, Ref, Schema, String as Str } from "effect"
+import { AuthApi } from "@openbot-build/api"
+import { Array as Arr, Effect, Ref, Schema, String as Str, Layer } from "effect"
 import {
 	HttpClient,
 	HttpClientRequest,
 	HttpClientResponse,
 	type HttpMethod,
+	FetchHttpClient,
 } from "effect/http"
 
 const publicOrigin = "https://api.example.com"
@@ -28,18 +38,18 @@ const member = (userId: string) =>
 	"/v1/organization/members/" + encodeURIComponent(userId)
 
 const Organizations = Schema.Struct({
-	items: Schema.Array(OrganizationApi.Organization),
+	items: Schema.Array(Organization),
 })
 const Members = Schema.Struct({
-	items: Schema.Array(OrganizationApi.Member),
+	items: Schema.Array(Member),
 	next: Schema.NullOr(Schema.String),
 })
 const AuditLogs = Schema.Struct({
-	items: Schema.Array(OrganizationApi.AuditLogEntry),
+	items: Schema.Array(AuditLogEntry),
 	next: Schema.NullOr(Schema.String),
 })
 const Invitations = Schema.Struct({
-	items: Schema.Array(OrganizationApi.Invitation),
+	items: Schema.Array(Invitation),
 })
 const Failure = Schema.Struct({ _tag: Schema.String })
 
@@ -61,7 +71,12 @@ const tagOf = (response: HttpClientResponse.HttpClientResponse) =>
 	)
 
 // The host is a real server with real time.
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"An account makes its own organization, and others join after a domain is verified",
 		() =>
@@ -78,13 +93,13 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const account = Caller.withCookie({ address, publicOrigin })
 				const alice = yield* host.login("alice")
 				const organization = yield* json(
-					OrganizationApi.Organization,
+					Organization,
 					account(alice.session, "/v1/organization"),
 				)
 				assert.strictEqual(organization.id, alice.identity.organizationId)
 				assert.strictEqual(organization.status, "active")
 				const self = yield* json(
-					OrganizationApi.Member,
+					Member,
 					account(alice.session, member(alice.identity.userId)),
 				)
 				assert.deepStrictEqual(self.roles, ["super_administrator"])
@@ -98,7 +113,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// A domain does nothing until its TXT record proves control.
 				const added = yield* json(
-					SsoApi.Domain,
+					Domain,
 					account(alice.session, "/v1/organization/domains", "POST", {
 						domain: "example.com",
 					}),
@@ -157,7 +172,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					alice.identity.organizationId,
 				)
 				const joined = yield* json(
-					OrganizationApi.Member,
+					Member,
 					account(alice.session, member(carol.identity.userId)),
 				)
 				assert.deepStrictEqual(joined.roles, ["member"])
@@ -167,7 +182,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(ambiguous.status, 400)
 				assert.strictEqual(yield* tagOf(ambiguous), "OrganizationRequired")
 				const chosen = yield* json(
-					OrganizationApi.Organization,
+					Organization,
 					HttpClient.get(address + "/v1/organization", {
 						headers: {
 							cookie: Caller.sessionCookie(bob.session),
@@ -202,7 +217,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const alice = yield* host.login("alice")
 				const bob = yield* host.login("bob")
 				const settings = yield* json(
-					Settings.OrganizationSettings,
+					OrganizationSettings,
 					account(alice.session, "/v1/organization/settings"),
 				)
 				assert.strictEqual(settings.joinByDomain, true)
@@ -217,7 +232,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(stale.status, 409)
 				const changed = yield* json(
-					Settings.OrganizationSettings,
+					OrganizationSettings,
 					account(alice.session, "/v1/organization/settings", "PATCH", {
 						expectedVersion: settings.version,
 						botMemory: false,
@@ -245,7 +260,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(missingMemberRole.status, 404)
 				assert.strictEqual(yield* tagOf(missingMemberRole), "RoleNotFound")
 				const unchangedMember = yield* json(
-					OrganizationApi.Member,
+					Member,
 					account(alice.session, member(bob.identity.userId)),
 				)
 				assert.deepStrictEqual(unchangedMember.roles, ["member"])
@@ -257,11 +272,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						name: "Log reader",
 						description: "Reads the audit log.",
 						policy: yield* Policies.json(function* (_) {
-							yield* _.allow(
-								"read",
-								Authorization.AuditLog,
-								Policies.inOrganization,
-							)
+							yield* _.allow("read", AuditLog, Policies.inOrganization)
 						}),
 					}),
 					200,
@@ -308,11 +319,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						name: "Everything",
 						description: "Too much.",
 						policy: yield* Policies.json(function* (_) {
-							yield* _.allow(
-								"read",
-								Authorization.Chat,
-								Policies.inOrganization,
-							)
+							yield* _.allow("read", Chat, Policies.inOrganization)
 						}),
 					},
 				)
@@ -331,7 +338,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						name: "Own Chats",
 						description: "Enough.",
 						policy: yield* Policies.json(function* (_) {
-							yield* _.allow("read", Authorization.Chat, Policies.own)
+							yield* _.allow("read", Chat, Policies.own)
 						}),
 					},
 				)
@@ -427,17 +434,13 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					"PATCH",
 					{
 						policy: yield* Policies.json(function* (_) {
-							yield* _.allow(
-								"write",
-								Authorization.Member,
-								Policies.inOrganization,
-							)
+							yield* _.allow("write", MemberModel, Policies.inOrganization)
 						}),
 					},
 				)
 				assert.strictEqual(allow.status, 403)
 				const { version } = yield* json(
-					Settings.OrganizationSettings,
+					OrganizationSettings,
 					account(bob.session, "/v1/organization/settings"),
 				)
 				const defaults = yield* account(
@@ -465,7 +468,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					"PATCH",
 					{
 						policy: yield* Policies.json(function* (_) {
-							yield* _.deny("run", Authorization.Chat, Policies.inOrganization)
+							yield* _.deny("run", Chat, Policies.inOrganization)
 						}),
 					},
 				)
@@ -482,7 +485,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// A suspended member is out, with the cookie and with every token.
 				const token = yield* json(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					account(carol.session, "/v1/user/tokens", "POST", {
 						name: "Carol bot",
 					}),
@@ -558,7 +561,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(byBob.items[0]?.actor.userId, bob.identity.userId)
 
 				const resources = yield* json(
-					Schema.Array(Authorization.ResourceInfo),
+					Schema.Array(ResourceInfo),
 					account(alice.session, "/v1/organization/resources"),
 				)
 				const chat = yield* Effect.fromOption(
@@ -623,7 +626,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(personalSpaces.items.length, 1)
 				assert.strictEqual(personalSpaces.items[0]?.kind, "personal")
 				const personal = yield* json(
-					OrganizationApi.Organization,
+					Organization,
 					account(bob.session, "/v1/organization"),
 				)
 				assert.strictEqual(personal.id, bob.memberships[0]?.organizationId)
@@ -634,7 +637,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						...(roles === undefined ? {} : { roles }),
 					})
 				const invitation = yield* json(
-					OrganizationApi.CreateInvitationResponse,
+					CreateInvitationResponse,
 					invite("Inv-Bob@example.com", ["member"]),
 					201,
 				)
@@ -652,7 +655,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					{ status: "disabled" },
 				)
 				const token = yield* json(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					account(alice.session, "/v1/user/tokens", "POST", { name: "mail" }),
 					201,
 				)
@@ -711,7 +714,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					404,
 				)
 				const accepted = yield* json(
-					OrganizationApi.Organization,
+					Organization,
 					account(
 						bob.session,
 						"/v1/invitations/" + invitation.id + "/accept",
@@ -732,7 +735,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					[alice.identity.organizationId],
 				)
 				const bobMember = yield* json(
-					OrganizationApi.Member,
+					Member,
 					account(alice.session, member(bob.identity.userId)),
 				)
 				assert.deepStrictEqual(bobMember.roles, ["member"])
@@ -753,7 +756,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// Carol declines. Then she cannot accept.
 				const forCarol = yield* json(
-					OrganizationApi.Invitation,
+					Invitation,
 					invite("inv-carol@example.com"),
 				)
 				assert.strictEqual(
@@ -761,7 +764,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					403,
 				)
 				const declined = yield* json(
-					OrganizationApi.Invitation,
+					Invitation,
 					account(
 						carol.session,
 						"/v1/invitations/" + forCarol.id + "/decline",
@@ -784,10 +787,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 
 				// A revoked invitation cannot be answered.
-				const forDave = yield* json(
-					OrganizationApi.Invitation,
-					invite("inv-dave@example.com"),
-				)
+				const forDave = yield* json(Invitation, invite("inv-dave@example.com"))
 				assert.strictEqual(
 					(yield* account(
 						alice.session,
@@ -814,11 +814,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				// An Administrator cannot send an invitation for Super Administrator rights.
 				const forAdmin = yield* json(
-					OrganizationApi.Invitation,
+					Invitation,
 					invite("inv-admin@example.com", ["super_administrator"]),
 				)
 				yield* json(
-					OrganizationApi.Member,
+					Member,
 					account(alice.session, member(bob.identity.userId), "PATCH", {
 						roles: ["administrator"],
 					}),

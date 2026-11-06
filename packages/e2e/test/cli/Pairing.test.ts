@@ -1,5 +1,13 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
+import {
+	ComputerPairing,
+	Computer,
+	SessionOutput,
+	FileContent,
+} from "@openbot-build/domain/Computers"
 import { assert, layer } from "@effect/vitest"
-import { ComputersApi, UserTokensApi } from "@openbot-build/api"
 import { BrowserHost, Caller, Wait } from "@openbot-build/server-testing"
 import { finished } from "../connect-computers/Commands.ts"
 import {
@@ -42,9 +50,15 @@ const pairingCode = (process: Effect.Success<ReturnType<typeof start>>) =>
 		),
 	)
 
-layer(Layer.merge(commands, BrowserHost.layerPlatform), {
-	excludeTestServices: true,
-})((it) => {
+layer(
+	Layer.merge(
+		commands,
+		Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"a built computer pairs, does work, and pairs again with a new token",
 		() =>
@@ -55,7 +69,7 @@ layer(Layer.merge(commands, BrowserHost.layerPlatform), {
 				const account = Caller.withCookie({ address, publicOrigin })
 				const keyed = Caller.withToken(address)
 				const { secret } = yield* Caller.read(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					account(alice.session, "/v1/user/tokens", "POST", {
 						name: "Computer work",
 					}),
@@ -75,7 +89,7 @@ layer(Layer.merge(commands, BrowserHost.layerPlatform), {
 					const code = yield* pairingCode(pairing)
 					const pairingPath = "/v1/computer-pairings/" + code
 					const shown = yield* Caller.read(
-						ComputersApi.ComputerPairing,
+						ComputerPairing,
 						keyed(secret, pairingPath),
 					)
 					assert.strictEqual(shown.code, code)
@@ -87,7 +101,7 @@ layer(Layer.merge(commands, BrowserHost.layerPlatform), {
 						401,
 					)
 					const computer = yield* Caller.read(
-						ComputersApi.Computer,
+						Computer,
 						keyed(secret, pairingPath + "/approve", "POST", {
 							name: "Test machine",
 						}),
@@ -121,10 +135,7 @@ layer(Layer.merge(commands, BrowserHost.layerPlatform), {
 				const first = yield* pair()
 				assert.strictEqual(first.computer.state, "offline")
 				const computerPath = "/v1/computers/" + first.computer.id
-				const state = Caller.read(
-					ComputersApi.Computer,
-					keyed(secret, computerPath),
-				)
+				const state = Caller.read(Computer, keyed(secret, computerPath))
 				const connected = () =>
 					Wait.untilTrue(
 						"the built computer connects",
@@ -139,7 +150,7 @@ layer(Layer.merge(commands, BrowserHost.layerPlatform), {
 					Str.includes("Connected. Bots can use this machine now."),
 				)
 				const output = yield* Caller.read(
-					ComputersApi.SessionOutput,
+					SessionOutput,
 					keyed(secret, computerPath + "/sessions", "POST", {
 						command: shell("printf 'from the machine\\n'"),
 						cwd: files.folder,
@@ -151,7 +162,7 @@ layer(Layer.merge(commands, BrowserHost.layerPlatform), {
 				assert.strictEqual(output.session, null)
 
 				const waiting = yield* Caller.read(
-					ComputersApi.SessionOutput,
+					SessionOutput,
 					keyed(secret, computerPath + "/sessions", "POST", {
 						command: shell('read -r line; printf "<%s>\\n" "$line"'),
 						cwd: files.folder,
@@ -161,7 +172,7 @@ layer(Layer.merge(commands, BrowserHost.layerPlatform), {
 				assert.strictEqual(waiting.running, true)
 				assert.isNotNull(waiting.session)
 				const ended = yield* Caller.read(
-					ComputersApi.SessionOutput,
+					SessionOutput,
 					keyed(
 						secret,
 						computerPath + "/sessions/" + waiting.session + "/input",
@@ -176,7 +187,7 @@ layer(Layer.merge(commands, BrowserHost.layerPlatform), {
 				assert.strictEqual(ended.running, false)
 
 				const failed = yield* Caller.read(
-					ComputersApi.SessionOutput,
+					SessionOutput,
 					keyed(secret, computerPath + "/sessions", "POST", {
 						command: shell("printf 'failed command\\n'; exit 7"),
 						cwd: files.folder,
@@ -185,7 +196,7 @@ layer(Layer.merge(commands, BrowserHost.layerPlatform), {
 				assert.strictEqual(failed.exitCode, 7)
 				assert.strictEqual(failed.output, "failed command\n")
 				const large = yield* Caller.read(
-					ComputersApi.SessionOutput,
+					SessionOutput,
 					keyed(secret, computerPath + "/sessions", "POST", {
 						command: shell("printf '%04096d' 0"),
 						cwd: files.folder,
@@ -210,7 +221,7 @@ layer(Layer.merge(commands, BrowserHost.layerPlatform), {
 					"The machine wrote this file.\n",
 				)
 				const read = yield* Caller.read(
-					ComputersApi.FileContent,
+					FileContent,
 					keyed(
 						secret,
 						computerPath + "/files?path=" + encodeURIComponent(file),
@@ -224,7 +235,7 @@ layer(Layer.merge(commands, BrowserHost.layerPlatform), {
 				assert.notStrictEqual(second.config.token, first.config.token)
 				assert.strictEqual(
 					(yield* Caller.read(
-						Schema.Array(ComputersApi.Computer),
+						Schema.Array(Computer),
 						keyed(secret, "/v1/computers"),
 					)).length,
 					1,
@@ -309,7 +320,7 @@ layer(Layer.merge(commands, BrowserHost.layerPlatform), {
 				assert.strictEqual(yield* fs.exists(files.configFile), false)
 				assert.deepStrictEqual(
 					yield* Caller.read(
-						Schema.Array(ComputersApi.Computer),
+						Schema.Array(Computer),
 						send(alice.session, "/v1/computers"),
 					),
 					[],

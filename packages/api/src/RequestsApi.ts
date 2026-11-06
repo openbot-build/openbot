@@ -1,7 +1,7 @@
+import { CapabilityRequestId } from "@openbot-build/domain/CapabilityRequestId"
+import { PersonDecision as ResolveRequest } from "@openbot-build/domain/Requests"
 import { Execution, Requests as RequestDomain } from "@openbot-build/domain"
 import { errors as ExecutionErrors } from "./ExecutionsApi.ts"
-import { CapabilityRequestId } from "./CapabilityRequestId.ts"
-export { CapabilityRequestId } from "./CapabilityRequestId.ts"
 import { BotAuth } from "./AuthApi.ts"
 import { Authorize, GroupRequired, own } from "./Authorization.ts"
 import { Schema } from "effect"
@@ -15,11 +15,6 @@ import {
 import { BotErrors } from "./BotsApi.ts"
 
 // tsdown drops star exports from the built API namespace. List the names here.
-export {
-	RequestStatus,
-	RequestNotFound,
-	RequestConflict,
-} from "@openbot-build/domain/Requests"
 import {
 	RequestStatus,
 	RequestNotFound,
@@ -32,8 +27,6 @@ export const CapabilityRequest = Schema.Struct({
 	executionStatus: Execution.Status,
 })
 export type CapabilityRequest = typeof CapabilityRequest.Type
-export const ResolveRequest = RequestDomain.PersonDecision
-export type ResolveRequest = typeof ResolveRequest.Type
 
 export const RequestErrors = [
 	...BotErrors,

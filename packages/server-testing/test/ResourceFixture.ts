@@ -1,3 +1,5 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { PgClient } from "@effect/sql-pg"
 import {
 	NodeCrypto,
@@ -24,19 +26,17 @@ import {
 } from "effect/cluster"
 import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import { SqlClient } from "effect/sql"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Directory from "@openbot-build/server-execution/resources/Directory"
-import * as Transport from "@openbot-build/server-execution/resources/Transport"
-import * as PrivateRpc from "@openbot-build/server-execution/transport/PrivateRpc"
-import * as PostgresTest from "./PostgresTest.ts"
+import * as Records from "@openbot-build/server-kernel/Records"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as Directory from "@openbot-build/server-execution/Directory"
+import * as Transport from "@openbot-build/server-execution/Transport"
+import * as PrivateRpc from "@openbot-build/server-execution/PrivateRpc"
 
-const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(PostgresTest.start, (db) =>
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),

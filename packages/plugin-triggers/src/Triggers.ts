@@ -1,23 +1,22 @@
+import { TriggerId } from "@openbot-build/domain/TriggerId"
+import { BotId } from "@openbot-build/domain/BotId"
+import { Caller } from "@openbot-build/domain/Identity"
 import { SqlClient } from "effect/sql"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import {
-	Store,
-	storage,
-	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
+import { Store, storage, type Key } from "@openbot-build/server-execution/Store"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 export const workflowName = "openbot.trigger-schedule"
 export const ScheduleInput = Schema.Struct({
-	triggerId: Domain.TriggerId,
+	triggerId: TriggerId,
 	revision: Schema.Natural,
 	dueAt: Schema.Finite,
 })
 export interface Saved {
 	readonly trigger: Trigger
-	readonly caller: Option.Option<Caller>
+	readonly caller: Caller
 }
 const Data = Schema.fromJsonString(
-	Schema.Struct({ prompt: Schema.String, caller: Schema.NullOr(Caller) }),
+	Schema.Struct({ prompt: Schema.String, caller: Caller }),
 )
 const binding = (organizationId: string, id: string) =>
 	Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))([
@@ -28,8 +27,7 @@ const binding = (organizationId: string, id: string) =>
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no API to compare secrets in constant time.
 import { timingSafeEqual } from "node:crypto"
 import { Triggers as Domain } from "@openbot-build/domain"
-import { Bots as BotsApi } from "@openbot-build/domain"
-import { Caller, Execution } from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import {
 	Clock,
@@ -43,7 +41,7 @@ import {
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url, Hex } from "effect/encoding"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { triggerResource } from "@openbot-build/identity-contract/authorization/Resources"
 import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
@@ -101,7 +99,7 @@ export class Triggers extends Context.Service<
 		readonly create: (
 			caller: Caller,
 			input: {
-				readonly bot: BotsApi.BotId
+				readonly bot: BotId
 				readonly prompt: string
 				readonly schedule?: Domain.Schedule
 				readonly shared?: boolean
@@ -163,20 +161,15 @@ export class Triggers extends Context.Service<
 			id: string,
 		) => Effect.Effect<void, Domain.TriggerStorageUnavailable>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-triggers/Triggers") {}
+>()("@openbot-build/plugin-triggers/Triggers") {}
 
-const view = (
-	row: Row,
-	prompt: string,
-	needsAuthorization: boolean,
-): Trigger => ({
-	id: Domain.TriggerId.make(row.id),
+const view = (row: Row, prompt: string): Trigger => ({
+	id: TriggerId.make(row.id),
 	owner:
 		row.ownerUserId === null
 			? { _tag: "Organization" }
 			: { _tag: "Member", userId: row.ownerUserId },
-	bot: BotsApi.BotId.make(row.bot),
+	bot: BotId.make(row.bot),
 	prompt,
 	schedule:
 		row.scheduleCron === null
@@ -190,7 +183,6 @@ const view = (
 	webhook: row.hookSecretHash !== null,
 	actor: row.actor,
 	enabled: row.enabled,
-	needsAuthorization,
 	nextRunAt: row.nextRunAt,
 	executionId:
 		row.scheduleExecutionId === null
@@ -219,16 +211,15 @@ export const make = Effect.gen(function* () {
 				.open(row.prompt, yield* binding(row.organizationId, row.id))
 				.pipe(Effect.flatMap(Schema.decodeEffect(Data)))
 			if (
-				data.caller !== null &&
-				(data.caller.organizationId !== row.organizationId ||
-					data.caller.userId !== row.actor)
+				data.caller.organizationId !== row.organizationId ||
+				data.caller.userId !== row.actor
 			)
 				return yield* Domain.TriggerInvalid.make({
 					message: "The trigger identity does not match its record.",
 				})
 			return {
-				trigger: view(row, data.prompt, data.caller === null),
-				caller: Option.fromNullishOr(data.caller),
+				trigger: view(row, data.prompt),
+				caller: data.caller,
 			}
 		}).pipe(
 			Failures.replace("The saved trigger could not be opened.", () =>
@@ -290,18 +281,18 @@ export const make = Effect.gen(function* () {
 			return receipt.executionId
 		})
 	const cancelSchedule = (saved: Saved) =>
-		saved.trigger.executionId === null || Option.isNone(saved.caller)
+		saved.trigger.executionId === null
 			? Effect.void
 			: store
 					.cancel(
 						{
-							namespace: ownerKey(saved.caller.value),
+							namespace: ownerKey(saved.caller),
 							id: saved.trigger.executionId,
 						},
 						Execution.CommandKey.make(
 							`trigger-stop:${saved.trigger.executionId}`,
 						),
-						saved.caller.value,
+						saved.caller,
 					)
 					.pipe(Effect.asVoid)
 
@@ -451,7 +442,6 @@ export const make = Effect.gen(function* () {
 			const trigger: Trigger = {
 				...next.trigger,
 				actor: caller.userId,
-				needsAuthorization: false,
 				nextRunAt: nextOf(next.trigger, now),
 				revision: current.revision + 1,
 				updatedAt: now,
@@ -514,9 +504,7 @@ export const make = Effect.gen(function* () {
 				yield* check(schedule, now)
 				const enabled = input.enabled ?? true
 				const trigger: Trigger = {
-					id: Domain.TriggerId.make(
-						"trg_" + Hex.encode(yield* randomBytes(16)),
-					),
+					id: TriggerId.make("trg_" + Hex.encode(yield* randomBytes(16))),
 					owner,
 					bot: input.bot,
 					prompt: input.prompt,
@@ -524,7 +512,6 @@ export const make = Effect.gen(function* () {
 					webhook: false,
 					actor: caller.userId,
 					enabled,
-					needsAuthorization: false,
 					nextRunAt: nextOf({ schedule, enabled }, now),
 					executionId: null,
 					lastFiredAt: null,
@@ -602,7 +589,6 @@ export const make = Effect.gen(function* () {
 				const expected = Buffer.from(row.hookSecretHash, "hex")
 				if (!timingSafeEqual(expected, yield* sha(secret))) return Option.none()
 				const saved = yield* fromRow(row)
-				if (Option.isNone(saved.caller)) return Option.none()
 				return Option.some({
 					organizationId: row.organizationId,
 					trigger: saved.trigger,
@@ -632,9 +618,7 @@ export const make = Effect.gen(function* () {
 								yield* Clock.currentTimeMillis,
 							),
 						}
-						if (Option.isNone(found.value.caller))
-							return yield* Execution.Forbidden.make({})
-						const executionId = yield* schedule(found.value.caller.value, next)
+						const executionId = yield* schedule(found.value.caller, next)
 						yield* db
 							.update(triggers)
 							.set({

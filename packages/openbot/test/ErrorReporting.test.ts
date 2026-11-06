@@ -14,10 +14,11 @@ import {
 } from "effect"
 import { HttpClient, HttpRouter, HttpServerResponse } from "effect/http"
 import { Execution } from "@openbot-build/domain"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import * as ErrorReporting from "@openbot-build/server-kernel/errors/Reporting"
-import * as EnvironmentConfiguration from "@openbot-build/server-kernel/configuration/EnvironmentConfiguration"
-import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
+import { Records } from "@openbot-build/server-kernel/Records"
+import * as ErrorReporting from "@openbot-build/server-kernel/Reporting"
+import * as EnvironmentConfiguration from "@openbot-build/server-kernel/EnvironmentConfiguration"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 
 const records = Layer.succeed(Records, {
 	record: (_cause, category) =>
@@ -194,10 +195,10 @@ it.effect(
 it.live("database startup failure is reported without a working database", () =>
 	Effect.gen(function* () {
 		let sent = 0
-		const program = DatabasePostgres.check.pipe(
+		const program = Migrations.check.pipe(
 			Effect.provide(
-				DatabasePostgres.layer({
-					databaseUrl: Redacted.make("postgres://127.0.0.1:1/unavailable"),
+				PgClient.layer({
+					url: Redacted.make("postgres://127.0.0.1:1/unavailable"),
 				}).pipe(
 					Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 				),

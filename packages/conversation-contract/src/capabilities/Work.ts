@@ -1,6 +1,7 @@
+import type { BotId } from "@openbot-build/domain/BotId"
+import type { ExecutionIdentity } from "@openbot-build/domain/Identity"
 import type { Chat, Turn } from "@openbot-build/core"
 import type { Bots as BotsApi } from "@openbot-build/domain"
-import type { ExecutionIdentity } from "@openbot-build/domain"
 import { Context } from "effect"
 import type { Chain } from "../chats/ChatHost.ts"
 
@@ -18,9 +19,8 @@ export class Work extends Context.Service<
 		/** The delegation chain: who gave the work to whom. */
 		readonly chain: Chain
 		/** The owner chain of the Bot, from the top, ending with the Bot. They decide its requests. */
-		readonly deciders: ReadonlyArray<BotsApi.BotId>
+		readonly deciders: ReadonlyArray<BotId>
 		readonly chat: Chat.Id
 		readonly turn: Turn.Id
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/capabilities/Work") {}
+>()("@openbot-build/conversation-contract/capabilities/Work") {}

@@ -1,3 +1,8 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { DelegationId } from "@openbot-build/domain/DelegationId"
+import { Trigger } from "@openbot-build/domain/Triggers"
+import { Trigger as TriggerModel } from "@openbot-build/domain/Authorization"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
 import {
 	BrowserHost,
 	Caller,
@@ -7,13 +12,7 @@ import {
 import { PgClient } from "@effect/sql-pg"
 import { Execution } from "@openbot-build/domain"
 import { assert, layer } from "@effect/vitest"
-import {
-	Authorization,
-	ChatSummary,
-	DelegationsApi,
-	TriggersApi,
-	UserTokensApi,
-} from "@openbot-build/api"
+import { DelegationsApi, TriggersApi, ChatsApi } from "@openbot-build/api"
 import { Item } from "@openbot-build/core"
 import {
 	Array as Arr,
@@ -26,9 +25,10 @@ import {
 	Schema,
 	Stream,
 	String as Str,
+	Layer,
 } from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
-import { HttpClient, HttpClientRequest } from "effect/http"
+import { HttpClient, HttpClientRequest, FetchHttpClient } from "effect/http"
 
 const publicOrigin = "https://triggers.example.com"
 const usage = {
@@ -116,7 +116,12 @@ const client = Effect.fn("Triggers.client")(function* (host: BrowserHost.Host) {
 })
 
 // The hosts use real servers, so these tests run on the real clock.
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"a trigger gives its prompt to its Bot on a schedule and from a webhook, the result comes to the Chat of the actor, and only those who may use it",
 		() =>
@@ -132,7 +137,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				yield* host.defaultBot(bob.session)
 				const tasks = (credential: Redacted.Redacted<string>) =>
 					json(
-						Schema.Array(ChatSummary),
+						Schema.Array(ChatsApi.ChatSummary),
 						send(credential, "/v1/chats?kind=task"),
 					)
 				const delegation = (id: string) =>
@@ -174,7 +179,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const second =
 					Math.floor(((yield* Clock.currentTimeMillis) + 2000) / 1000) % 60
 				const daily = yield* json(
-					TriggersApi.Trigger,
+					Trigger,
 					send(alice.session, "/v1/triggers", "POST", {
 						prompt: "Check the build.",
 						schedule: { cron: `${second} * * * * *` },
@@ -212,7 +217,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(rest.chat.kind, "direct")
 				assert.strictEqual(rest.status, "Completed")
 				const after = yield* json(
-					TriggersApi.Trigger,
+					Trigger,
 					send(alice.session, "/v1/triggers/" + daily.id),
 				)
 				assert.ok(after.lastFiredAt !== null)
@@ -233,14 +238,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const started = yield* json(
 					Schema.Struct({
 						...Execution.Receipt.fields,
-						delegation: DelegationsApi.DelegationId,
+						delegation: DelegationId,
 					}),
 					webhook(daily.id, Redacted.value(hook.secret), { order: 42 }),
 				)
 				const again = yield* json(
 					Schema.Struct({
 						...Execution.Receipt.fields,
-						delegation: DelegationsApi.DelegationId,
+						delegation: DelegationId,
 					}),
 					webhook(daily.id, Redacted.value(hook.secret), { order: 42 }),
 				)
@@ -286,7 +291,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// A disabled trigger does not fire from its webhook.
 				const disabled = yield* json(
-					TriggersApi.Trigger,
+					Trigger,
 					send(alice.session, "/v1/triggers/" + daily.id, "PATCH", {
 						expected: after.revision + 1,
 						enabled: false,
@@ -307,7 +312,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				})
 				assert.strictEqual(shared.status, 403, yield* shared.text)
 				const team = yield* json(
-					TriggersApi.Trigger,
+					Trigger,
 					send(alice.session, "/v1/triggers", "POST", {
 						prompt: "Say hello.",
 						shared: true,
@@ -315,7 +320,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.deepStrictEqual(team.owner, { _tag: "Organization" })
 				const seen = yield* json(
-					Schema.Array(TriggersApi.Trigger),
+					Schema.Array(Trigger),
 					send(bob.session, "/v1/triggers"),
 				)
 				assert.deepStrictEqual(
@@ -363,7 +368,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const alice = yield* host.login("trigger-archived-bot")
 				const bot = yield* host.defaultBot(alice.session)
 				const trigger = yield* json(
-					TriggersApi.Trigger,
+					Trigger,
 					send(alice.session, "/v1/triggers", "POST", { prompt: "Say hello." }),
 				)
 				const hook = yield* json(
@@ -407,17 +412,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const alice = yield* host.login("triggers-deny")
 				yield* host.defaultBot(alice.session)
 				const create = (prompt: string) =>
-					json(
-						TriggersApi.Trigger,
-						send(alice.session, "/v1/triggers", "POST", { prompt }),
-					)
+					json(Trigger, send(alice.session, "/v1/triggers", "POST", { prompt }))
 				const open = yield* create("Open")
 				const hidden = yield* create("Hidden")
 				const listed = Effect.map(
-					json(
-						Schema.Array(TriggersApi.Trigger),
-						send(alice.session, "/v1/triggers"),
-					),
+					json(Schema.Array(Trigger), send(alice.session, "/v1/triggers")),
 					(triggers) => Arr.map(triggers, (trigger) => trigger.id),
 				)
 				assert.sameMembers(yield* listed, [open.id, hidden.id])
@@ -429,7 +428,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					"PATCH",
 					{
 						policy: yield* Policies.json(function* (_) {
-							yield* _.deny("read", Authorization.Trigger, {
+							yield* _.deny("read", TriggerModel, {
 								when: ($) => $.eq("id", hidden.id),
 							})
 						}),
@@ -458,7 +457,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				yield* host.defaultBot(alice.session)
 				let api = yield* client(host)
 				const token = yield* api.json(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					api.send(alice.session, "/v1/user/tokens", "POST", {
 						name: "Trigger token",
 					}),
@@ -467,7 +466,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const second =
 					Math.floor(((yield* Clock.currentTimeMillis) + 10000) / 1000) % 60
 				const trigger = yield* api.json(
-					TriggersApi.Trigger,
+					Trigger,
 					keyed(token.secret, "/v1/triggers", "POST", {
 						prompt: "Token task.",
 						schedule: { cron: `${second} * * * * *` },
@@ -479,7 +478,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					keyed(token.secret, "/v1/triggers/" + trigger.id + "/webhook", "PUT"),
 				)
 				const current = yield* api.json(
-					TriggersApi.Trigger,
+					Trigger,
 					api.send(alice.session, "/v1/triggers/" + trigger.id),
 				)
 				assert.notStrictEqual(current.executionId, trigger.executionId)
@@ -508,7 +507,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				yield* host.restart
 				api = yield* client(host)
 				const after = yield* api.json(
-					TriggersApi.Trigger,
+					Trigger,
 					api.send(alice.session, "/v1/triggers/" + trigger.id),
 				)
 				assert.strictEqual(after.executionId, current.executionId)
@@ -532,7 +531,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					403,
 				)
 				const tasks = yield* api.json(
-					Schema.Array(ChatSummary),
+					Schema.Array(ChatsApi.ChatSummary),
 					api.send(alice.session, "/v1/chats?kind=task"),
 				)
 				assert.strictEqual(tasks.length, 0)

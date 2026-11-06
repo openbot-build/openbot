@@ -89,9 +89,9 @@ when using these helpers; this Node.js example uses `NodeCrypto.layer`.
 
 For a page reload, save the command key, target, and full input before calling
 `command.send`. Pass that key as `commandKey` when preparing the command again.
-A valid message receipt includes `inputId` for new commands. Match it to
+A valid message receipt includes `inputId`. Match it to
 `ChatView.queuedInputs[].id` or a saved `ChatItem.id` before replacing a local
-pending copy. Old saved commands may omit the field. See
+pending copy. A message to a task Chat may omit the field. See
 [The answer](/developers/chats#the-answer).
 
 | Option           | Required | What it does                                                                                                      |
@@ -113,7 +113,8 @@ Record IDs have branded types. A brand keeps an ID for one kind of record from
 being used for another kind. For example, a `ConnectionId` cannot be used as an
 `AppViewId`. Keep the ID from an API answer when you call another operation. To
 read an ID from outside the program, decode it with its schema from
-`@openbot-build/api`, such as `ConnectionsApi.ConnectionId`. Model and provider
+`@openbot-build/domain`, such as `ConnectionId.ConnectionId`. A client app
+imports the same schemas from `@openbot-build/client/Domain`. Model and provider
 IDs use `Model.Id` and `Provider.Id` from `@openbot-build/core`. The JSON and
 URL values are still strings.
 
@@ -230,7 +231,19 @@ needs a new attempt; `ModelProviderLoginRequired` needs sign-in;
 A command receipt has `executionId`, `commandKey`, and `sequence`. It confirms
 that the command was saved. It does not confirm that the outside action ended.
 Read `GET /v1/executions/:executionId` for `status` and `failure`. A failure has
-only `category` and `errorId`.
+only `category` and `errorId`. The category tells you what to do next:
+
+| Category          | What to do                                                             |
+| ----------------- | ---------------------------------------------------------------------- |
+| `invalid`         | Change the input. Then try again.                                      |
+| `forbidden`       | The caller may not do this. Do not try again.                          |
+| `not_found`       | A resource does not exist.                                             |
+| `conflict`        | The state changed. Read it again before you try again.                 |
+| `limited`         | A limit or a budget stopped the work. Try again only after it changes. |
+| `unavailable`     | OpenBot could not do the work now. Try again later.                    |
+| `external`        | An outside service failed.                                             |
+| `outcome_unknown` | The outside action may or may not have happened.                       |
+| `interrupted`     | The work stopped before it ended.                                      |
 
 Read saved events with `GET /v1/executions/:executionId/events?afterSequence=0`.
 The page has `events`, `afterSequence`, and `terminal`. Keep the returned cursor

@@ -1,20 +1,25 @@
 import {
+	ServiceId,
+	type ServiceIdentity,
+	type Caller,
+} from "@openbot-build/domain/Identity"
+import {
 	type ServiceExecution,
 	Store,
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import {
 	type Bots as BotsType,
 	type Computers,
 	Execution,
-	ServiceId,
-	type Caller,
-	type ServiceIdentity,
 } from "@openbot-build/domain"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
-import type { Machine, ComputerError } from "./Computer.ts"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
+import type {
+	Machine,
+	ComputerError,
+} from "@openbot-build/apps-contract/computers/Computer"
 import { and, eq, isNull, lt } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -36,12 +41,12 @@ import {
 import {
 	type Access as ExecutionAccess,
 	type DecisionCommand,
-} from "@openbot-build/server-execution/execution/Engine"
-import type { End } from "@openbot-build/server-execution/execution/Program"
+} from "@openbot-build/server-execution/Engine"
+import type { End } from "@openbot-build/server-execution/Program"
 import * as Access from "./Access.ts"
 import * as Activity from "./Activity.ts"
 import { ComputerProviders } from "./ComputerProviders.ts"
-import { Drivers } from "./Drivers.ts"
+import { Drivers } from "@openbot-build/apps-contract/computers/Drivers"
 
 export const serviceId = ServiceId.make("computer-maintenance")
 export const sweepWorkflowName = "openbot.computer-maintenance"
@@ -179,8 +184,7 @@ export interface Service {
 }
 
 export class Maintenance extends Context.Service<Maintenance, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-computers/Maintenance",
+	"@openbot-build/plugin-computers/Maintenance",
 ) {}
 
 export const make = Effect.gen(function* () {

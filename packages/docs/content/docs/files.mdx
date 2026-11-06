@@ -29,11 +29,6 @@ storage calls have a saved error ID and retry after a growing delay. A restart
 keeps that task and its saved results. One persistent retention task finds old,
 unused files; each instance does not run its own deletion loop.
 
-The data move keeps an old unfinished deletion as interrupted work. Send a new
-delete request to resume it with your current access. Repeated requests share
-the active task. A task with an unknown outside result stays stopped until its
-decision is resolved.
-
 ## Fix an upload problem
 
 Check the file type, size, and your storage allowance. A file that is still

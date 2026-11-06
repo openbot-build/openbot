@@ -1,3 +1,5 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { ExecutionView } from "@openbot-build/domain/AppCalls"
 import {
 	AppFixture as Fixture,
 	BrowserHost,
@@ -8,11 +10,10 @@ import { Execution } from "@openbot-build/domain"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import {
-	AppExecution,
 	ExecutionsApi,
-	type ChatView,
 	ConnectionsApi,
 	RequestsApi,
+	type ChatsApi,
 } from "@openbot-build/api"
 import type { Chat } from "@openbot-build/core"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
@@ -34,8 +35,8 @@ import {
 	String as Str,
 } from "effect"
 import { LanguageModel, type Prompt, Response, Tool } from "effect/ai"
-import type { HttpMethod } from "effect/http"
-import { AppHost } from "@openbot-build/openbot"
+import { type HttpMethod, FetchHttpClient } from "effect/http"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 
 const { message, settled } = Messages
 type Send = Messages.Send
@@ -57,8 +58,8 @@ class NoNewTurn extends Schema.TaggedError<
 const Draft = Schema.toCodecJson(ConnectionsApi.ConnectionDraft)
 const Connection = Schema.toCodecJson(ConnectionsApi.Connection)
 const Requests = Schema.toCodecJson(Schema.Array(RequestsApi.CapabilityRequest))
-const Invocation = Schema.toCodecJson(AppExecution.ExecutionView)
-const Invocations = Schema.toCodecJson(Schema.Array(AppExecution.ExecutionView))
+const Invocation = Schema.toCodecJson(ExecutionView)
+const Invocations = Schema.toCodecJson(Schema.Array(ExecutionView))
 
 /** A page of Chat Items. The Items stay plain JSON, so the test sees all of their fields. */
 const ItemsPage = Schema.Struct({
@@ -102,7 +103,12 @@ const toolResults = (messages: ReadonlyArray<Prompt.Message>) =>
 		),
 	)
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"the OpenBot App plugin combines live paged capabilities with caller tools and records real handler results for the current account",
 		() =>
@@ -262,7 +268,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					],
 					discovery: publisher.discovery,
 					appProbe: publisher.probe,
-					appNetwork: Layer.succeed(AppHost.AppNetwork, {
+					appNetwork: Layer.succeed(AppNetwork, {
 						layer: (owner, origins) =>
 							NodeHttpServer.layerUserNetwork({
 								owner,
@@ -324,7 +330,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const requestsFor = (
 					chat: string,
 					session: Redacted.Redacted<string>,
-					view: ChatView,
+					view: ChatsApi.ChatView,
 				) =>
 					view.open.requests === 0
 						? Effect.succeed(Arr.empty<RequestsApi.CapabilityRequest>())
@@ -343,7 +349,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					session: Redacted.Redacted<string>,
 					turn: string | undefined,
 				) => {
-					const isNew = (view: ChatView) =>
+					const isNew = (view: ChatsApi.ChatView) =>
 						view.turn !== null && view.turn.id !== turn
 					return settled(sender(session), chat).pipe(
 						Effect.repeat({

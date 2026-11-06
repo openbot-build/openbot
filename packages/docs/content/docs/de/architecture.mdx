@@ -7,9 +7,8 @@ description:
 Für Entwickler. Das [Entwicklerhandbuch](/de/developers) führt zu API-Arbeit,
 App-Veröffentlichung und Änderungen am Projekt.
 
-Diese Seite beschreibt das gemeinsame Ausführungsdesign. Bestehende Daten werden
-in einem Wartungsfenster mit geprüfter Migration umgewandelt. Der letzte
-Abschnitt verweist auf Funktions- und Freigabeprüfungen.
+Diese Seite beschreibt das gemeinsame Ausführungsdesign. Der letzte Abschnitt
+verweist auf Funktions- und Freigabeprüfungen.
 
 ChatGPT nutzt einen normalen Modellanbieter mit OAuth-Zugangsdaten. OAuth ist
 die Freigabe eines Kontos im Browser. Die verschlüsselten Tokens gehören zum
@@ -169,11 +168,17 @@ Geschäftstransaktionen. `Runner` hält Übernahme und Speicherwiederholungen;
 Funktionen geben ihre Bot-Werkzeuge über `BotFeatures` an einen Turn. Jede
 Funktion hat eine feste ID, eine Version und eine Reihenfolge beim
 Zusammenfügen. Die erste Phase eines Turns speichert die Liste der Funktionen
-mit Versionen und Einstellungen im Workflow-Protokoll. Jede spätere Phase und
-jede Wiederholung nutzt diese Liste. Eine Funktion mit neuer Version stoppt
-einen alten Turn mit einem Konflikt. Fehlt eine Funktion der Liste, wartet der
-Turn und hält dabei nichts. Eine neue Funktion nutzen nur neue Turns. Zwei
-Funktionen mit derselben ID stoppen den Serverstart.
+mit Versionen, Einstellungen und Regel für das Fehlen im Workflow-Protokoll.
+Jede spätere Phase und jede Wiederholung nutzt diese Liste. Eine Funktion mit
+neuer Version stoppt einen alten Turn mit einem Konflikt. Die Regel für das
+Fehlen sagt, was eine Phase tut, wenn eine Funktion der Liste fehlt, zum
+Beispiel weil jemand ihr Plugin ausschaltete. Mit `skip` läuft die Phase ohne
+die Funktion weiter; Limits nutzen das. Mit `wait` wartet die Phase und hält
+dabei nichts, aber nicht länger als die Grenze in der Liste (30 Sekunden für die
+Werkzeug-Funktionen). Dann scheitert die Phase mit `BotFeatureMissing` und der
+Kategorie `unavailable`. Die Liste hält die Regel, also gilt sie auch, wenn das
+Plugin weg ist. Eine neue Funktion nutzen nur neue Turns. Zwei Funktionen mit
+derselben ID stoppen den Serverstart.
 
 Jede Arbeitsphase läuft in einer `Activity`. Ihr Name enthält die gespeicherte
 Phase und Generation. Die Engine speichert nur ein sicheres Phasenergebnis, etwa
@@ -195,7 +200,11 @@ angehängte Kindarbeit und ihre Nachrichten. Ein abgelöstes Werkzeug darf seine
 Turn überleben. Kindabschluss und Folgemeldung werden gemeinsam gespeichert. So
 geht zwischen zwei Lesevorgängen keine Arbeit verloren. Jede Abbruchphase hat
 eine eigene Nummer und ein gespeichertes Signal. Ein altes Signal kann keine
-spätere Phase abbrechen.
+spätere Phase abbrechen. Ein Kind, dessen Workflow nicht auf dem Server ist,
+bekommt keinen Abbruchbefehl. Es kann also nicht enden. Der Besitzer wartet 30
+Sekunden, ob das Plugin dieses Workflows zurückkommt. Dann speichert er einen
+Fehler mit der Kategorie `unavailable` und macht weiter. Das Kind behält seinen
+Zustand, etwa `cancelling`, denn seine externe Arbeit kann noch laufen.
 
 ## Zustand und Aufrufe
 
@@ -220,8 +229,7 @@ an benannten Schritten und vermeiden doppelte Schreibvorgänge bei Wiederholung.
 Plugins dürfen den Lebenszyklus einer Ausführung nicht ändern.
 
 Tool-Ergebnisse in Effect 4.1.2 nutzen `modelOutput` für Text und Dateien an das
-Modell. OpenBot speichert dieses Feld und nutzt es bei der Wiederholung. Das
-alte Patch-Feld `content` wird nicht gelesen oder in das neue Feld übertragen.
+Modell. OpenBot speichert dieses Feld und nutzt es bei der Wiederholung.
 
 Der Ausführungsspeicher liest Aufrufe nach ID, Schritt oder letztem Versuch. Der
 ganze Verlauf bleibt für Prüfungen verfügbar. Wiederherstellung und Wiederholung
@@ -367,10 +375,10 @@ nicht doppelt berechnet. Schätzungen dienen nur Reservierungen und Ratenlimits.
 Fehlender Verbrauch bleibt unbekannt, mit Schätzung und Aufruf-ID. Er gilt nie
 als erfolgreicher Nullverbrauch. Am Ende gibt ein Aufruf seine Reservierung
 frei. Bei einer Übernahme werden die Reservierungen alter Versuche freigegeben.
-Der Schätzwert bleibt in einem eigenen Feld. Fehlende alte Schätzwerte bleiben
-null. Unbekannter Verbrauch blockiert keine neuen Aufrufe. Später bestätigter
-Verbrauch wird weiterhin nur einmal berechnet. Diese Schätzwerte sind keine
-belegten Obergrenzen für die Endkosten des Anbieters.
+Der Schätzwert bleibt in einem eigenen Feld. Unbekannter Verbrauch blockiert
+keine neuen Aufrufe. Später bestätigter Verbrauch wird weiterhin nur einmal
+berechnet. Diese Schätzwerte sind keine belegten Obergrenzen für die Endkosten
+des Anbieters.
 
 Vollständige Fehlerursachen liegen in verschlüsselten Fehlerdatensätzen. HTTP,
 Channels, Eltern-Bots und Workflow-Ergebnisse tragen nur sichere Kategorie und
@@ -415,87 +423,38 @@ ihrem Cursor nach. Endzustände sind erneut lesbar. HTTP, SDKs, Channels und
 Eltern-Bots nutzen denselben Weg. Das Schließen von SSE oder Long Polling
 beendet nur die Beobachtung. Abbruch braucht einen eigenen Befehl.
 
-## Datenumzug
-
-Vor dem Umzug alte Knoten und neue Eingaben stoppen. Datenbank und
-Objektverweise sichern. Neue Drizzle-Migrationen anwenden, dann Daten in Gruppen
-mit gespeichertem Fortschritt umwandeln. Die Basismigration nie ändern.
-Speicher-Layers führen zur Laufzeit keine DDL aus, also SQL zur Änderung der
-Tabellenstruktur.
-
-Der Umzug der Nutzungsdaten gilt auch für Datenbanken mit gespeicherten
-Ausführungen. Er liest aktuelle Anmeldungen und offene Token-Aufrufe in kleinen
-Gruppen. Der Server startet erst, wenn alle Nutzungseinträge vorhanden sind.
-Tokens bleiben in ihren verschlüsselten Datensätzen.
-
-Ressourcen-IDs, Besitzer, Verlauf, Freigaben, Verbindungen, Geheimnisse und
-offene Arbeit behalten. Alte verschlüsselte Daten brauchen eigene
-Migrationscodecs. Offene Arbeit erhält neue Ausführungsverweise. Unbekannte
-externe Ergebnisse bleiben unbekannt. Nicht wiederherstellbare Arbeit wird mit
-Grund unterbrochen. Ein fehlerhafter Datensatz stoppt den Umzug; er wird nicht
-übersprungen. Eine Entwicklereinladung muss denselben Besitzer wie ihr Nachweis
-haben.
-
-Der importierte Verlauf von Dateien und Index-Anfragen prüft bei jedem Lesen die
-aktuellen Rechte. Eine Index-Anfrage prüft auch den aktuellen Entwicklernachweis
-und den App-Zugriff. Ein entfernter Nachweis gibt keinen Zugriff auf alte
-Ergebnisse. Importierte Einträge starten keine externe Aktion erneut und
-übernehmen nicht die Identität der lesenden Person.
-
-Vor neuen Knoten Anzahl, Verweise, Entschlüsselung und Zustände prüfen. Die
-Umwandlung muss nach einem Stopp fortsetzbar und erneut ausführbar sein.
-Sicherungen nur vor Wiederaufnahme des Verkehrs zurückspielen. Nach neuen
-externen Aktionen vorwärts reparieren, damit Rücksetzen keinen Schreibvorgang
-wiederholt.
-
 ## Prüfungen und Freigabe
 
 Die [Prüfungen des Ausführungsdesigns](/de/architecture-checks) zeigen
-Fähigkeiten, Quelltests, entfernte Pfade und Freigabenachweise.
+Fähigkeiten, Quelltests und Freigabenachweise.
 
-Die Funktionsbasis sind 581 Tests. Neue Tests prüfen gespeicherte Befehle,
-Generationen, Abbruch, späte Ergebnisse, langsame Leser, Rechteänderungen und
-Verbrauch. Zwei echte Prozesse teilen PostgreSQL. Tests beenden den Besitzer und
-prüfen Wiederherstellung ab gespeicherten Schritten. Mitglieds- und Dienstarbeit
-nutzen denselben Testweg.
+Tests prüfen gespeicherte Befehle, Generationen, Abbruch, späte Ergebnisse,
+langsame Leser, Rechteänderungen und Verbrauch. Zwei echte Prozesse teilen
+PostgreSQL. Tests beenden den Besitzer und prüfen Wiederherstellung ab
+gespeicherten Schritten. Mitglieds- und Dienstarbeit nutzen denselben Testweg.
 
-Die Mitgliedslaufzeiten sind entfernt: `BackendLayers`, `Backend`,
-`ManagedChats`, `Chats`, `Coordinator` und die alte `LiveSessions`-Map. Damit
-entfallen Referenzzähler, `keepOpen`, `current`, Methodenproxies und der
-Chat-Heartbeat-Scan. Die alte Speicher-Jobwarteschlange und der alte
-Hilfsmodellpfad sind ebenfalls weg. Turn-, Werkzeug-, Freigabe-, Delegations-,
-App-, Code-Mode-, Channel-, Trigger-, Erinnerungs- und Speicherworkflows werden
-über gemeinsame Anwendungs-Layers an `Workflows` gegeben.
+Turn-, Werkzeug-, Freigabe-, Delegations-, App-, Code-Mode-, Channel-, Trigger-,
+Erinnerungs- und Speicherworkflows werden über gemeinsame Anwendungs-Layers an
+`Workflows` gegeben. Die App-Suche gibt Beschreibungen ohne Aktions-Callbacks
+zurück. Aufrufe und Programme nutzen nur die gemeinsamen Workflows. Der Runner
+im Speicher von `core` ist allein nutzbar.
 
-Die alten App-Dienste `Operations` und `Invocations` sowie der Code-Mode-Runner
-mit eigenen Laufzeitrechten sind entfernt. Die App-Suche gibt Beschreibungen
-ohne Aktions-Callbacks zurück. Aufrufe und Programme nutzen nur die gemeinsamen
-Workflows. Der Serverstart setzt keine alten App-Aufrufe zurück, durchsucht
-keine alten Delegationen und schreibt keine Chat-Runner-Heartbeats. Der alte
-PostgreSQL-Operation-Listener, Abbruchmeldungen und der Ablaufscan sind
-entfernt. Der Runner im Speicher von `core` bleibt allein nutzbar. Alte App- und
-Code-Datensätze behalten ihre Migrations-Codecs; sie führen keine Arbeit aus.
-
-Das alte globale Gate, die Werkzeugfreigaben, die Ebene für Arbeitswerkzeuge und
-der Bot-Signalbus sind ebenfalls entfernt. Jede Ausführung erstellt ihr eigenes
-Gate und ihre Freigaben. Ein Erinnerungswerkzeug sendet einen dauerhaften
-Befehl. Anfrage-Workflows schließen jeweils eine fällige Anfrage; es gibt keine
-globale Suche mehr. Die Anfrage, der gespeicherte Werkzeugaufruf und die
-Nachricht werden in einer Transaktion gespeichert. Ein fehlgeschlagener
+Jede Ausführung erstellt ihr eigenes Gate und ihre Freigaben. Ein
+Erinnerungswerkzeug sendet einen dauerhaften Befehl. Anfrage-Workflows schließen
+jeweils eine fällige Anfrage. Die Anfrage, der gespeicherte Werkzeugaufruf und
+die Nachricht werden in einer Transaktion gespeichert. Ein fehlgeschlagener
 Schreibzugriff hinterlässt keine wartende Anfrage ohne ihren Aufruf.
 
-Der alte Dienst für Delegationsgrenzen ist ebenfalls entfernt. Die Prüfung nutzt
-gespeicherten Verbrauch und den Delegations-Workflow. Wenn Verbrauch oder
-Einstellungen nicht lesbar sind, stoppt die Aktion. Sie nutzt keine alten Kosten
-oder Standardzeit. Eine unterbrochene Freigabeprüfung lässt die Aufgabe bis zur
-Wiederaufnahme pausiert.
+Die Prüfung der Delegationsgrenzen nutzt gespeicherten Verbrauch und den
+Delegations-Workflow. Wenn Verbrauch oder Einstellungen nicht lesbar sind,
+stoppt die Aktion. Sie nutzt keine geschätzten Kosten oder Standardzeit. Eine
+unterbrochene Freigabeprüfung lässt die Aufgabe bis zur Wiederaufnahme pausiert.
 
 Entwicklertestläufe und die Vorbereitung einer Anmeldung nutzen den gemeinsamen
 Workflow, gespeicherte Aufrufe und das Ereignislog. Der Befehl speichert den
 ursprünglichen Aufrufer und eine feste Ausführungs-ID. Fortschritt wird nur für
 die aktuelle Generation gespeichert. Die Bereinigung wartet, bis der Lauf seine
-Verbindung schließt. Die alte FiberMap für Läufe und ihre Ergebnis-Callbacks
-sind entfernt.
+Verbindung schließt.
 
 Prüfungen, Änderungen, manuelle Änderungen und erneute Prüfungen einer
 Verbindung nutzen gemeinsame Ausführungsbefehle. Ein gespeicherter Leseaufruf
@@ -507,19 +466,12 @@ Transaktion an den Dienst zur Bereinigung.
 Vorbereitung einer Anmeldung, Code-Austausch, Erneuerung, Widerruf, Entfernen,
 Zurücksetzen und Dateipflege nutzen gemeinsame Ausführungsdatensätze. Die
 Bereinigung von Entwicklertests nutzt gespeicherte Aufrufe, Signale und Timer.
-Sie hat keinen eigenen Worker und keinen lokalen Koordinationspfad mehr.
 
 Hilfsmodellaufrufe für den Speicher nutzen gemeinsame PostgreSQL-Permits. Ein
 Permit hält einen Platz im gemeinsamen Aufruflimit. Modell-Token-Grenzen nutzen
 gemeinsame Zähler in der Datenbank. Vor dem Senden muss die aktuelle Ausführung
 ihr Permit weiter besitzen. Eine Knotenübernahme setzt die gemeinsame Grenze
 daher nicht zurück.
-
-Die Datenumwandlung speichert Fortschritt und prüft alte Datensätze. Erst dann
-lässt die Startsperre neue Server zu. Tests prüfen verschlüsselte Daten,
-unterbrochene Arbeit, Wiederholungen und Fortsetzung nach einem Teilumzug.
-Schema-Migration und Datenumwandlung sind zwei Schritte desselben
-Wartungsbefehls.
 
 Vollständige Server- und Zweiprozess-Tests prüfen Besitzerverlust, langsames
 Schließen, verlorene Antworten, getrenntes Datenbanknetz und spätes Schließen

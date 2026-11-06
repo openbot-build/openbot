@@ -1,3 +1,4 @@
+import { IndexStore } from "@openbot-build/protocol"
 import { assert, it } from "@effect/vitest"
 import {
 	Array as Arr,
@@ -14,7 +15,6 @@ import {
 	CatalogDiscovery,
 	Discovery,
 	Document,
-	Index,
 	McpPublisher,
 	Network,
 } from "@openbot-build/protocol"
@@ -127,7 +127,7 @@ it.effect(
 				Document.presentationFromCard(candidate.card),
 			)
 			assert.strictEqual(decoded.examples[0].prompt, example.prompt)
-			const entry = yield* Index.Entry.decode({
+			const entry = yield* IndexStore.Entry.decode({
 				cardUrl: candidate.cardUrl,
 				card: candidate.card,
 				evidence: [
@@ -141,7 +141,7 @@ it.effect(
 				checkedAt: 1,
 				validators: {},
 			})
-			const codec = Schema.fromJsonString(Index.Entry)
+			const codec = Schema.fromJsonString(IndexStore.Entry)
 			assert.deepStrictEqual(
 				yield* Schema.decodeEffect(codec)(
 					yield* Schema.encodeEffect(codec)(entry),

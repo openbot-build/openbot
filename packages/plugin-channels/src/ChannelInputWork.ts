@@ -1,12 +1,8 @@
+import { type Caller, restrictExecution } from "@openbot-build/domain/Identity"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 import * as ChannelSend from "./ChannelSend.ts"
 import { Chat } from "@openbot-build/core"
-import {
-	Authorization,
-	Caller,
-	Execution,
-	restrictExecution,
-} from "@openbot-build/domain"
+import { Authorization, Execution } from "@openbot-build/domain"
 import { Effect, Option, Duration, String as Str } from "effect"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
@@ -18,13 +14,10 @@ import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredC
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
 import * as Db from "@openbot-build/server-database/Database"
-import {
-	Store,
-	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
+import { Store, type Fence } from "@openbot-build/server-execution/Store"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import * as Platform from "@openbot-build/server-kernel/Platform"
 import { ChannelInbox } from "./ChannelInbox.ts"
 import { ChannelQueue } from "./ChannelQueue.ts"
 import { Channels } from "@openbot-build/conversation-contract/channels/Channels"

@@ -96,8 +96,7 @@ export class Sso extends Context.Service<
 			userId: string,
 		) => Effect.Effect<Option.Option<string>, SsoModel.SsoUnavailable>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/identity-contract/sso/Sso") {}
+>()("@openbot-build/identity-contract/sso/Sso") {}
 
 /** The connection that signs in people with this email, if there is one. */
 export const connectionFor = ({

@@ -40,11 +40,6 @@ Delete with `DELETE /v1/organization/channels/:channelId` and a JSON body
 The Channel stops accepting new work. Removal waits for its saved work to
 release resources, then removes the Channel and its links. Chats stay.
 
-An upgraded Channel can have `needsAuthorization: true`. Its data and `enabled`
-setting stay, but it starts no input or delivery work. Save a change, or rotate
-its secret, with current rights to set its new caller. This clears the flag. An
-old unknown send is not replayed as that new caller.
-
 ## Link your account
 
 The bot only works for members of the organization. When a person who is not

@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest"
 import { Cause, Effect, Exit, Logger, Schema } from "effect"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import { codec, snapshot } from "@openbot-build/server-kernel/errors/Snapshot"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import { codec, snapshot } from "@openbot-build/server-kernel/Snapshot"
 
 class Inside extends Schema.TaggedError<
 	Inside,

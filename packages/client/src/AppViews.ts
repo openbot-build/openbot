@@ -1,3 +1,8 @@
+import type {
+	AppViewUnavailable,
+	ViewReadAction,
+	ActionRequest,
+} from "@openbot-build/domain/AppViews"
 import {
 	type StandardSchemaV1,
 	specTypeSchemas,
@@ -38,7 +43,7 @@ const reasons = {
 	Unsupported: "UnsupportedCapability",
 	Protocol: "Protocol",
 } as const satisfies Record<
-	Api.AppViewUnavailable["reason"],
+	AppViewUnavailable["reason"],
 	ProtocolClient.ClientError["reason"]
 >
 /**
@@ -113,7 +118,7 @@ export const make = Effect.fn("AppViews.make")(function* (
 	const params = { viewId: opened.id }
 	const key = { owner, connectionId: opened.source.connectionId }
 	const read = Effect.fn("AppViews.read")(function* (
-		method: Api.ViewReadAction,
+		method: ViewReadAction,
 		cursor?: string,
 	) {
 		return yield* api.appViews
@@ -125,7 +130,7 @@ export const make = Effect.fn("AppViews.make")(function* (
 	})
 	/** Follow saved child links. Approval can outlive the Turn that started it. */
 	const invoke = Effect.fn("AppViews.invoke")(function* (
-		payload: Api.ActionRequest,
+		payload: ActionRequest,
 	) {
 		const { action, target } =
 			payload.kind === "tool"

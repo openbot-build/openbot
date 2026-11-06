@@ -1,63 +1,11 @@
+import { ConnectionIdBrand } from "@openbot-build/domain/ConnectionId"
+import { CapabilityRequestIdBrand } from "@openbot-build/domain/CapabilityRequestId"
+import type { Identity, Account } from "@openbot-build/domain/Identity"
 import { type Authorizer, Condition, type Domain } from "@nmnmcc/ability"
 import * as AbilityHttpApi from "@nmnmcc/ability/HttpApi"
-import { Authorization, Account, Identity } from "@openbot-build/domain"
+import { Authorization } from "@openbot-build/domain"
 import type { Schema } from "effect"
-import { CapabilityRequestIdBrand } from "./CapabilityRequestId.ts"
-import { ConnectionIdBrand } from "./ConnectionId.ts"
 import { HttpApiMiddleware } from "effect/http-api"
-export {
-	App,
-	AuditLog,
-	Auth,
-	Bot,
-	Budget,
-	CeilingInput,
-	CeilingSchema,
-	Channel,
-	ChannelIdentity,
-	Chat,
-	Computer,
-	ComputerProvider,
-	Connection,
-	Decision,
-	File,
-	Forbidden,
-	Kind,
-	Member,
-	Model,
-	ModelProvider,
-	OpenBot,
-	Organization,
-	Platform,
-	PlatformAuth,
-	PolicyInput,
-	PolicySchema,
-	PolicyUnavailable,
-	Request,
-	ResourceAction,
-	ResourceInfo,
-	Role,
-	SecretProvider,
-	Sso,
-	Token,
-	Trigger,
-	Usage,
-	Wallet,
-	Vault,
-	builtinRoles,
-	defaultTokenPolicy,
-	emptyPolicy,
-	maxDepth,
-	maxRules,
-	onlyDenies,
-	platform,
-	resourceInfo,
-} from "@openbot-build/domain/Authorization"
-export type {
-	OpenBotDomain,
-	OpenBotPolicy,
-	Policy,
-} from "@openbot-build/domain/Authorization"
 const { Auth, PlatformAuth } = Authorization
 type OpenBot = Authorization.OpenBot
 

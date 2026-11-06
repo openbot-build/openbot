@@ -176,8 +176,8 @@ export const UsageEvent = Schema.Struct({
 	startedAt: Schema.String,
 	/** The amount held while the call runs. An ended call releases it. */
 	reservedMicros: NonNegativeMicros,
-	/** The saved cost estimate. Null when an old row no longer has it. */
-	estimatedMicros: Schema.NullOr(NonNegativeMicros),
+	/** The cost estimate that the reservation held. */
+	estimatedMicros: NonNegativeMicros,
 	estimatedTokens: Schema.Natural,
 	occurredAt: Schema.String,
 	source: UsageSource,
@@ -293,7 +293,7 @@ export type BudgetMode = typeof BudgetMode.Type
 export const BudgetId = Schema.String.check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(128),
-).pipe(Schema.brand("@openbot-build/api/BudgetId"))
+).pipe(Schema.brand("@openbot-build/domain/BudgetId"))
 export type BudgetId = typeof BudgetId.Type
 
 export const Budget = Schema.Struct({

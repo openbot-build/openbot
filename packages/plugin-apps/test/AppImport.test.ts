@@ -1,10 +1,8 @@
+import { Failed } from "@openbot-build/domain/AppDiscovery"
+import { ExperienceStorageUnavailable } from "@openbot-build/domain/ExperienceErrors"
 import { assert, it } from "@effect/vitest"
 import { NodeCrypto } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
-import {
-	AppDiscoveryFailed,
-	ExperienceStorageUnavailable,
-} from "@openbot-build/api"
 import { Discovery } from "@openbot-build/protocol"
 import { Effect, Layer } from "effect"
 import { Connections } from "../src/Connections.ts"
@@ -50,7 +48,7 @@ it.effect("an import tells the member why an App could not be discovered", () =>
 	Effect.gen(function* () {
 		const imported = yield* importWith(() =>
 			Effect.fail(
-				AppDiscoveryFailed.make({
+				Failed.make({
 					reason: "NoDeclaration",
 					issues: [
 						Discovery.Issue.make({

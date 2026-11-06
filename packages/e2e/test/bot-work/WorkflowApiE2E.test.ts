@@ -1,3 +1,8 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
+import { Chat } from "@openbot-build/domain/Authorization"
+import type { RequestStatus } from "@openbot-build/domain/Requests"
 import {
 	BrowserHost,
 	Caller,
@@ -6,16 +11,18 @@ import {
 	Wait,
 } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
-import {
-	Authorization,
-	DelegationsApi,
-	ExecutionsApi,
-	RequestsApi,
-	UserTokensApi,
-} from "@openbot-build/api"
+import { DelegationsApi, ExecutionsApi, RequestsApi } from "@openbot-build/api"
 import { Item } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
-import { Array as Arr, Effect, Option, pipe, Schema, Stream } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	Option,
+	pipe,
+	Schema,
+	Stream,
+	Layer,
+} from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
 
 const { untilTrue } = Wait
@@ -45,27 +52,27 @@ const clients = Effect.fn("WorkflowApiE2E.clients")(function* (
 				payload,
 			)
 	const token =
-		(secret: UserTokensApi.CreatedToken["secret"]): Messages.Send =>
+		(secret: CreatedToken["secret"]): Messages.Send =>
 		(path, method, payload) =>
 			Caller.withToken(address)(secret, path, method, payload)
 	const account = cookie(alice.session)
 	const stranger = cookie(bob.session)
 	const key = yield* Caller.read(
-		UserTokensApi.CreatedToken,
+		CreatedToken,
 		account("/v1/user/tokens", "POST", { name: "Workflow test" }),
 		201,
 	)
 	const otherKey = yield* Caller.read(
-		UserTokensApi.CreatedToken,
+		CreatedToken,
 		stranger("/v1/user/tokens", "POST", { name: "Workflow test" }),
 		201,
 	)
 	const readOnly = yield* Caller.read(
-		UserTokensApi.CreatedToken,
+		CreatedToken,
 		account("/v1/user/tokens", "POST", {
 			name: "Read Chats",
 			policy: yield* Policies.json(function* (_) {
-				yield* _.allow("read", Authorization.Chat)
+				yield* _.allow("read", Chat)
 			}),
 		}),
 		201,
@@ -77,7 +84,7 @@ const clients = Effect.fn("WorkflowApiE2E.clients")(function* (
 	}
 })
 
-const requestList = (send: Messages.Send, state: RequestsApi.RequestStatus) =>
+const requestList = (send: Messages.Send, state: RequestStatus) =>
 	Caller.read(
 		Schema.Array(RequestsApi.CapabilityRequest),
 		send("/v1/requests?status=" + state, "GET"),
@@ -159,7 +166,12 @@ const delegationModel = LanguageModel.make({
 })
 
 // HTTP servers and PostgreSQL use real time.
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"cookies and tokens give the same request decisions, owner checks and command retries",
 		() =>

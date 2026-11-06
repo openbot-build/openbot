@@ -1,6 +1,6 @@
+import type { BotId } from "@openbot-build/domain/BotId"
+import type { Caller } from "@openbot-build/domain/Identity"
 import { Vaults as VaultsModel } from "@openbot-build/domain"
-import { Bots as BotsModel } from "@openbot-build/domain"
-import { type Caller } from "@openbot-build/domain"
 import { Context, Effect } from "effect"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { VaultReadFailed } from "./Readers.ts"
@@ -87,12 +87,12 @@ export class Vaults extends Context.Service<
 		readonly grant: (
 			caller: Caller,
 			vaultId: string,
-			bot: BotsModel.BotId,
+			bot: BotId,
 		) => Effect.Effect<VaultsModel.VaultAccess, Failure>
 		readonly revoke: (
 			caller: Caller,
 			vaultId: string,
-			bot: BotsModel.BotId,
+			bot: BotId,
 		) => Effect.Effect<void, Failure>
 		/** The items of the Vaults that a Bot has the right to use. It checks no permission. An archived Bot has none. */
 		readonly usable: (
@@ -106,7 +106,6 @@ export class Vaults extends Context.Service<
 			fields: ReadonlyArray<string>,
 		) => Effect.Effect<ReadonlyMap<string, string>, VaultReadFailed>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/apps-contract/vaults/Vaults") {}
+>()("@openbot-build/apps-contract/vaults/Vaults") {}
 
 export { type Vault, type Item }

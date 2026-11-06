@@ -1,16 +1,15 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { TokenId } from "@openbot-build/domain/TokenId"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import * as ClientSdk from "@openbot-build/client"
-import * as ErrorReporting from "@openbot-build/server-kernel/errors/Reporting"
-import * as HttpFailureBoundary from "@openbot-build/server-kernel/errors/HttpBoundary"
+import * as ErrorReporting from "@openbot-build/server-kernel/Reporting"
+import * as HttpFailureBoundary from "@openbot-build/server-kernel/HttpBoundary"
 import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { AuthApi, ExecutionsApi, FailureApi } from "@openbot-build/api"
-import {
-	Authorization,
-	Billing,
-	Execution,
-	TokenId,
-} from "@openbot-build/domain"
+import { Authorization, Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Context,
@@ -18,6 +17,7 @@ import {
 	HashMap,
 	Layer,
 	Option,
+	Record as Rec,
 	Redacted,
 	Ref,
 	Schema,
@@ -32,40 +32,29 @@ import {
 } from "effect/http"
 import { HttpApi, HttpApiBuilder, HttpApiMiddleware } from "effect/http-api"
 import { SqlClient } from "effect/sql"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
-import * as Commands from "@openbot-build/server-execution/execution/Commands"
-import * as Handlers from "@openbot-build/server-execution/execution/HttpHandlers"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Observation from "@openbot-build/server-execution/Observation"
+import * as Commands from "@openbot-build/server-execution/Commands"
+import * as Handlers from "@openbot-build/server-execution/HttpHandlers"
+import * as Records from "@openbot-build/server-kernel/Records"
 import {
 	type Registered,
 	Unavailable,
 	Workflows,
-} from "@openbot-build/server-execution/execution/Workflows"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import { Auth } from "@openbot-build/identity-contract/auth/Auth"
-import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
-import { CredentialRejected } from "@openbot-build/server-kernel/auth/Model"
-import { layerBotAuth } from "@openbot-build/plugin-auth/HttpMiddleware"
-import { RateLimiter } from "@openbot-build/server-billing/billing/RateLimit"
+} from "@openbot-build/server-execution/Workflows"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import { type Caller, Identity } from "@openbot-build/domain/Identity"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
-import * as OrganizationFixture from "./OrganizationFixture.ts"
-import * as PostgresTest from "./PostgresTest.ts"
 
 class Revoked extends Context.Service<Revoked, Ref.Ref<boolean>>()(
 	"@openbot-build/server-testing/test/ExecutionHttp.test/Revoked",
 ) {}
-class Limited extends Context.Service<Limited, Ref.Ref<boolean>>()(
-	"@openbot-build/server-testing/test/ExecutionHttp.test/Limited",
-) {}
-const origin = "https://openbot.example.com"
 const actor = { kind: "member", organizationId: "org", userId: "user" } as const
-const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(PostgresTest.start, (db) =>
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),
@@ -76,41 +65,39 @@ const member = Option.getOrThrow(
 const readOnly = Policy.define(Authorization.OpenBot)(function* (_) {
 	yield* _.allow("read", Authorization.Chat)
 })
-const auth = Layer.mock(Auth, {
-	resolveSession: (credential) =>
-		Redacted.value(credential) !== "session"
-			? Effect.fail(CredentialRejected.make({ kind: "session" }))
-			: Effect.succeed({
-					userId: "user",
-					profile: {},
-					platformAdmin: false,
-					canCreateOrganization: false,
-					memberships: [
-						{
-							organizationId: "org",
-							name: "Org",
-							status: "active",
-							roles: ["member"],
-						},
-					],
-					expiresAt: "2099-01-01T00:00:00.000Z",
-					setCookies: [],
-				}),
-})
-const tokens = Layer.mock(Tokens, {
-	authenticate: (secret) =>
-		!Arr.contains(
-			["token", "read-only", "other-org", "other-user"],
-			Redacted.value(secret),
-		)
-			? Effect.fail(CredentialRejected.make({ kind: "token" }))
-			: Effect.succeed({
-					kind: "user_token",
-					organizationId:
-						Redacted.value(secret) === "other-org" ? "other" : "org",
-					userId: Redacted.value(secret) === "other-user" ? "other" : "user",
-					tokenId: TokenId.make(Redacted.value(secret)),
-				}),
+const tokenCallers: Readonly<Record<string, Caller>> = Rec.map(
+	{
+		token: actor,
+		"read-only": actor,
+		"other-org": { ...actor, organizationId: "other" },
+		"other-user": { ...actor, userId: "other" },
+	},
+	(owner, secret): Caller => ({
+		kind: "user_token",
+		organizationId: owner.organizationId,
+		userId: owner.userId,
+		tokenId: TokenId.make(secret),
+	}),
+)
+const sessionCallers: Readonly<Record<string, Caller>> = { session: actor }
+/** Runs the route as the caller of a known credential. Any other fails with 401. */
+const as = <A, E, R>(
+	callers: Readonly<Record<string, Caller>>,
+	credential: Redacted.Redacted<string>,
+	route: Effect.Effect<A, E, R | Identity>,
+) =>
+	Option.match(Rec.get(callers, Redacted.value(credential)), {
+		onNone: () => Effect.fail(AuthApi.AuthenticationRequired.make({})),
+		onSome: (caller) => Effect.provideService(route, Identity, caller),
+	})
+/**
+ * Each known test token or session names its caller. The auth plugin checks
+ * real credentials, the browser origin and the rate limit, and its own tests
+ * check them. This test checks the execution routes.
+ */
+const layerBotAuth = Layer.succeed(AuthApi.BotAuth, {
+	token: (route, { credential }) => as(tokenCallers, credential, route),
+	session: (route, { credential }) => as(sessionCallers, credential, route),
 })
 const policy = Layer.unwrap(
 	Effect.map(Revoked, (revoked) =>
@@ -179,33 +166,7 @@ const api = HttpApi.make("openbot-api").add(ExecutionsApi.ExecutionsApi)
 const routes = HttpApiBuilder.layer(api).pipe(
 	Layer.provide(Handlers.layer),
 	Layer.provide(HttpFailureBoundary.layer),
-	Layer.provide(
-		layerBotAuth.pipe(
-			Layer.provide(
-				Layer.mergeAll(
-					auth,
-					tokens,
-					OrganizationFixture.layerEveryoneAdministrator,
-					OrganizationFixture.layerSettings({ publicOrigin: origin }),
-					Layer.effect(
-						RateLimiter,
-						Effect.map(Limited, (limited) => ({
-							hit: () =>
-								Ref.get(limited).pipe(
-									Effect.flatMap((value) =>
-										value
-											? Effect.fail(
-													Billing.RateLimited.make({ retryAfterSeconds: 23 }),
-												)
-											: Effect.void,
-									),
-								),
-						})),
-					),
-				),
-			),
-		),
-	),
+	Layer.provide(layerBotAuth),
 )
 const services = HttpRouter.serve(
 	Layer.merge(routes, ErrorReporting.layerHttp),
@@ -220,7 +181,6 @@ const services = HttpRouter.serve(
 	Layer.provideMerge(Layer.merge(Store.layer, Records.layer)),
 	Layer.provide(policy),
 	Layer.provideMerge(Layer.effect(Revoked, Ref.make(false))),
-	Layer.provideMerge(Layer.effect(Limited, Ref.make(false))),
 	Layer.provide(Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11")))),
 	Layer.provideMerge(database),
 	Layer.provideMerge(NodeHttpServer.layerTest),
@@ -243,39 +203,9 @@ const submit = Effect.fn(function* (name: string, workflow = "http-test") {
 const token = (value: string) => HttpClientRequest.bearerToken(value)
 const cookie = HttpClientRequest.setHeaders({
 	cookie: `${AuthApi.SessionCookie}=session`,
-	origin,
 })
 
 layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
-	it.effect(
-		"rate limits return the same HTTP error for a token and a session",
-		() =>
-			Effect.gen(function* () {
-				const key = yield* submit("limited")
-				const client = yield* HttpClient.HttpClient
-				const limited = yield* Limited
-				yield* Effect.acquireUseRelease(
-					Ref.set(limited, true),
-					() =>
-						Effect.gen(function* () {
-							for (const credential of [token("token"), cookie]) {
-								const response = yield* client.execute(
-									HttpClientRequest.get(`/v1/executions/${key.id}`).pipe(
-										credential,
-									),
-								)
-								assert.strictEqual(response.status, 429)
-								assert.deepEqual(yield* response.json, {
-									_tag: "RateLimited",
-									retryAfterSeconds: 23,
-								})
-							}
-						}),
-					() => Ref.set(limited, false),
-				)
-			}),
-	)
-
 	it.effect(
 		"an execution whose workflow has no policy answers 503 FeatureUnavailable",
 		() =>
@@ -345,40 +275,26 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				)
 			}),
 	)
-	it.effect(
-		"cancel is idempotent and still checks the token ceiling and browser origin",
-		() =>
-			Effect.gen(function* () {
-				const key = yield* submit("cancel-http")
-				const client = yield* HttpClient.HttpClient
-				const request = HttpClientRequest.post(
-					`/v1/executions/${key.id}/cancel`,
-				).pipe(HttpClientRequest.bodyJsonUnsafe({ commandKey: "cancel" }))
-				assert.strictEqual(
-					(yield* client.execute(request.pipe(token("read-only")))).status,
-					403,
-				)
-				assert.strictEqual(
-					(yield* client.execute(
-						request.pipe(
-							cookie,
-							HttpClientRequest.setHeader(
-								"origin",
-								"https://other.example.com",
-							),
-						),
-					)).status,
-					403,
-				)
-				const first = yield* client.execute(request.pipe(cookie))
-				const second = yield* client.execute(request.pipe(cookie))
-				assert.strictEqual(first.status, 200)
-				assert.deepStrictEqual(yield* first.json, yield* second.json)
-				assert.strictEqual(
-					(yield* (yield* Store.Store).get(key)).status,
-					"cancelling",
-				)
-			}),
+	it.effect("cancel is idempotent and still checks the token ceiling", () =>
+		Effect.gen(function* () {
+			const key = yield* submit("cancel-http")
+			const client = yield* HttpClient.HttpClient
+			const request = HttpClientRequest.post(
+				`/v1/executions/${key.id}/cancel`,
+			).pipe(HttpClientRequest.bodyJsonUnsafe({ commandKey: "cancel" }))
+			assert.strictEqual(
+				(yield* client.execute(request.pipe(token("read-only")))).status,
+				403,
+			)
+			const first = yield* client.execute(request.pipe(cookie))
+			const second = yield* client.execute(request.pipe(cookie))
+			assert.strictEqual(first.status, 200)
+			assert.deepStrictEqual(yield* first.json, yield* second.json)
+			assert.strictEqual(
+				(yield* (yield* Store.Store).get(key)).status,
+				"cancelling",
+			)
+		}),
 	)
 	it.effect(
 		"events resume at a query cursor and the saved end can be read again",

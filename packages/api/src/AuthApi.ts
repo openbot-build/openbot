@@ -1,5 +1,7 @@
-import { ReturnTo } from "@openbot-build/domain"
-import { SettingsUnavailable } from "./SettingsErrors.ts"
+import type { Identity, Account } from "@openbot-build/domain/Identity"
+import { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import { Email } from "@openbot-build/domain/Email"
+import { ReturnTo } from "@openbot-build/domain/ReturnTo"
 import { Context, Redacted, Schema } from "effect"
 import {
 	HttpApiEndpoint,
@@ -8,8 +10,6 @@ import {
 	HttpApiSchema,
 	HttpApiSecurity,
 } from "effect/http-api"
-import { Email } from "./Email.ts"
-import { Account, Identity } from "./Identity.ts"
 
 export const SessionCookie = "__Host-openbot-session"
 /** Better Auth keeps the sign-in state in this cookie during an OpenID Connect round trip. */
@@ -20,7 +20,6 @@ export const AuthBasePath = "/auth"
  * A same-origin path to return to after a browser sign-in or authorization round trip.
  * OpenBot serves no pages. A client on the same origin owns these paths.
  */
-export { ReturnTo } from "@openbot-build/domain"
 export class AuthenticationRequired extends Schema.TaggedError<
 	AuthenticationRequired,
 	{ readonly brand: unique symbol }
@@ -47,7 +46,6 @@ export class OrganizationRequired extends Schema.TaggedError<
 	{ readonly brand: unique symbol }
 >()("OrganizationRequired", {}) {}
 import { RateLimited } from "@openbot-build/domain/Billing"
-export { RateLimited } from "@openbot-build/domain/Billing"
 /** The organization that a request with the session cookie acts in. Tokens belong to one organization, so they ignore it. */
 export const OrganizationHeader = "openbot-organization"
 export const AuthErrors = [
@@ -56,7 +54,6 @@ export const AuthErrors = [
 	AuthenticationUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
 import { SessionInfo } from "@openbot-build/domain/Accounts"
-export { Membership, SessionInfo } from "@openbot-build/domain/Accounts"
 export class AuthSession extends Context.Service<
 	AuthSession,
 	{

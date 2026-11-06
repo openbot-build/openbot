@@ -1,5 +1,6 @@
+import type { OpenWork as OpenWorkView } from "@openbot-build/domain/Chats"
 import type { Chat } from "@openbot-build/core"
-import type { Bots, OpenWork as OpenWorkView } from "@openbot-build/domain"
+import type { Bots } from "@openbot-build/domain"
 import { Context, Effect, Layer } from "effect"
 
 /**
@@ -15,8 +16,7 @@ export class OpenWork extends Context.Service<
 			chat: Chat.Id,
 		) => Effect.Effect<OpenWorkView, Bots.BotStorageUnavailable>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/chats/OpenWork") {}
+>()("@openbot-build/conversation-contract/chats/OpenWork") {}
 
 export const none: OpenWorkView = { delegations: 0, requests: 0, reminders: 0 }
 

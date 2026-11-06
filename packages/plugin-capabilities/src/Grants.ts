@@ -14,8 +14,6 @@ import {
 	type Grant,
 	Grants,
 } from "@openbot-build/conversation-contract/capabilities/Grants"
-export { Grants } from "@openbot-build/conversation-contract/capabilities/Grants"
-
 export const make: Effect.Effect<
 	typeof Grants.Service,
 	never,

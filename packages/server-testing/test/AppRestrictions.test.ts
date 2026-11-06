@@ -1,10 +1,10 @@
+import { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
 import { assert, it } from "@effect/vitest"
-import { Settings as Api } from "@openbot-build/api"
 import { AppIndex } from "@openbot-build/domain"
 import { Effect, HashMap, Layer, Option, Ref } from "effect"
 import * as Governance from "@openbot-build/plugin-apps/Governance"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as OrganizationFixture from "./OrganizationFixture.ts"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import * as OrganizationFixture from "../src/OrganizationFixture.ts"
 
 it.effect(
 	"App checks fail closed and each list keeps one restriction snapshot",
@@ -29,7 +29,7 @@ it.effect(
 				...source,
 				platform: Effect.gen(function* () {
 					if (!(yield* Ref.get(available)))
-						return yield* Api.SettingsUnavailable.make({})
+						return yield* SettingsUnavailable.make({})
 					return Option.some(yield* Ref.get(document))
 				}),
 			})

@@ -1,11 +1,14 @@
+import { BotId } from "@openbot-build/domain/BotId"
+import type { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import { ExecutionIdentity } from "@openbot-build/domain/Identity"
 import {
 	type MemberExecution,
 	Store,
 	storage,
 	type Key,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
-import type { BillingStorageError } from "@openbot-build/server-billing/billing/Billing"
+} from "@openbot-build/server-execution/Store"
+import type { BillingStorageError } from "@openbot-build/server-billing/Billing"
 import {
 	type ChatStore,
 	type Config,
@@ -15,14 +18,9 @@ import {
 } from "@openbot-build/core"
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
 import type { MemoryBudgetSpent } from "./MemoryBot.ts"
-import type { Paused } from "@openbot-build/server-execution/execution/Admission"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
-import {
-	type Settings as SettingsData,
-	Bots as Domain,
-	Execution,
-	ExecutionIdentity,
-} from "@openbot-build/domain"
+import type { Paused } from "@openbot-build/server-execution/Admission"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
+import { Bots as Domain, Execution } from "@openbot-build/domain"
 import { type SqlError, SqlClient } from "effect/sql"
 import {
 	type Cause,
@@ -44,13 +42,13 @@ import { LanguageModel, Prompt } from "effect/ai"
 import * as Db from "@openbot-build/server-database/Database"
 import { chatItems } from "@openbot-build/server-database/Schema"
 import { executions } from "@openbot-build/server-database/ExecutionSchema"
-import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
+import type { Authorize } from "@openbot-build/server-execution/Engine"
+import { Observation } from "@openbot-build/server-execution/Observation"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as Memory from "./memory/BotMemory.ts"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import * as Memory from "./BotMemory.ts"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
 import { BotMemories, homeOf, newId } from "./BotMemories.ts"
@@ -63,7 +61,7 @@ const Input = Schema.Struct({
 	parentExecutionId: Execution.Id,
 	chat: Chat.Id,
 	turn: Turn.Id,
-	home: Schema.Struct({ organizationId: Schema.String, bot: Domain.BotId }),
+	home: Schema.Struct({ organizationId: Schema.String, bot: BotId }),
 	own: Schema.Array(Schema.String),
 })
 const sameIdentity = Schema.toEquivalence(ExecutionIdentity)
@@ -110,7 +108,7 @@ export interface Service {
 		| Paused
 		| Schema.SchemaError
 		| SecretStorageError
-		| SettingsData.SettingsUnavailable
+		| SettingsUnavailable
 		| SqlError.SqlError
 		| Execution.StorageError
 		| Cause.TimeoutError
@@ -134,8 +132,7 @@ export interface Service {
 }
 
 export class MemoryLearning extends Context.Service<MemoryLearning, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-bots/MemoryLearning",
+	"@openbot-build/plugin-bots/MemoryLearning",
 ) {}
 
 const make = Effect.gen(function* () {

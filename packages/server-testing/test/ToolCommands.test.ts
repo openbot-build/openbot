@@ -1,3 +1,36 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { BotId } from "@openbot-build/domain/BotId"
+import { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import { ToolCommands as ToolCommandsToolCommands } from "@openbot-build/conversation-contract/chats/ToolCommands"
+import {
+	type Input,
+	noticeWorkflowName,
+} from "@openbot-build/conversation-contract/bots/DelegationSource"
+import { Delegations } from "@openbot-build/conversation-contract/bots/Delegations"
+import { TurnContext as TurnContextTurnContext } from "@openbot-build/conversation-contract/chats/TurnContext"
+import type { LimitControl } from "@openbot-build/domain/Delegations"
+import { WorkAdmission as WorkAdmissionWorkAdmission } from "@openbot-build/conversation-contract/chats/WorkAdmission"
+import {
+	type Input as AppCommandsInput,
+	AppCommands as AppCommandsAppCommands,
+	workflowName as AppCommandsWorkflowName,
+} from "@openbot-build/apps-contract/apps/AppCommands"
+import { Requests } from "@openbot-build/conversation-contract/capabilities/Requests"
+import {
+	stepId,
+	outputCodec,
+} from "@openbot-build/conversation-contract/chats/ToolSteps"
+import { workflowName as ToolRecordsWorkflowName } from "@openbot-build/conversation-contract/chats/ToolRecords"
+import {
+	CodeCommands as CodeCommandsCodeCommands,
+	workflowName as CodeCommandsWorkflowName,
+} from "@openbot-build/apps-contract/code/CodeCommands"
+import { codeModeDefaults } from "@openbot-build/domain/Settings"
+import { type Caller, executionCallers } from "@openbot-build/domain/Identity"
+import { TokenId } from "@openbot-build/domain/TokenId"
+import { ChatModelInvalid } from "@openbot-build/domain/Chats"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import * as TaskMessages from "@openbot-build/conversation-contract/chats/TaskMessages"
 import * as DelegationTools from "@openbot-build/plugin-bots/WorkflowTools"
 import * as DelegationWorkflow from "@openbot-build/plugin-bots/DelegationWorkflow"
@@ -5,7 +38,7 @@ import { eq } from "drizzle-orm"
 import { SqlClient, SqlError } from "effect/sql"
 import { delegationPeriods } from "@openbot-build/server-database/ExecutionSchema"
 import * as WorkAdmission from "@openbot-build/plugin-chats/WorkAdmission"
-import * as Admission from "@openbot-build/server-execution/execution/Admission"
+import * as Admission from "@openbot-build/server-execution/Admission"
 import * as PolicyOrigin from "@openbot-build/conversation-contract/capabilities/PolicyOrigin"
 import * as DelegationSessionModule from "@openbot-build/plugin-bots/DelegationSession"
 import * as RequestCommandsModule from "@openbot-build/plugin-capabilities/RequestCommands"
@@ -19,23 +52,24 @@ import * as DelegationCommands from "@openbot-build/plugin-bots/DelegationComman
 import * as DelegationsModule from "@openbot-build/plugin-bots/Delegations"
 import * as BotRecordsModule from "@openbot-build/plugin-bots/BotRecords"
 import * as DevelopmentModel from "@openbot-build/server-development/DevelopmentModel"
-import * as OrganizationFixture from "./OrganizationFixture.ts"
-import { ChatModelInvalid } from "@openbot-build/domain"
+import * as OrganizationFixture from "../src/OrganizationFixture.ts"
 import { Cause } from "effect"
 import { Config } from "@openbot-build/core"
-import * as ToolDefinitions from "@openbot-build/tools-contract/chats/ToolDefinitions"
+import * as ToolDefinitions from "@openbot-build/tools-contract/ToolDefinitions"
 import { Vaults as VaultDomain } from "@openbot-build/domain"
 import * as WorkflowTools from "@openbot-build/apps-contract/apps/WorkflowTools"
-import { InputState } from "@openbot-build/tools-contract/plugins/ToolEntry"
+import { InputState } from "@openbot-build/tools-contract/ToolEntry"
 import { names as codeNames } from "@openbot-build/apps-contract/code/ToolSchema"
 import * as ToolResults from "@openbot-build/conversation-contract/chats/ToolResults"
 import * as CodeCommands from "@openbot-build/plugin-code/CodeCommands"
 import * as CodeProgram from "@openbot-build/plugin-code/CodeProgram"
 import * as CodeWorkflow from "@openbot-build/plugin-code/CodeWorkflow"
 import * as SandboxModule from "@openbot-build/plugin-code/Sandbox"
-import { Settings as SettingsService } from "@openbot-build/server-kernel/settings/Settings"
-import { organizationDefaults } from "@openbot-build/server-kernel/settings/Documents"
-import { Settings as SettingsApi } from "@openbot-build/api"
+import { Settings as SettingsService } from "@openbot-build/server-kernel/Settings"
+import {
+	organizationDefaults,
+	platformDefaults,
+} from "@openbot-build/server-kernel/Documents"
 import { Vaults } from "@openbot-build/apps-contract/vaults/Vaults"
 import * as AppSessionModule from "@openbot-build/plugin-apps/AppSession"
 import { ConnectionSessions } from "@openbot-build/plugin-apps/ConnectionSessions"
@@ -53,15 +87,15 @@ import {
 	RequestCommands,
 	workflowName as requestWorkflowName,
 } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
 import * as AppWorkflow from "@openbot-build/plugin-apps/AppWorkflow"
 import { AppSession } from "@openbot-build/plugin-apps/AppSession"
 import { Client } from "@openbot-build/protocol"
 import * as AppCommands from "@openbot-build/plugin-apps/AppCommands"
 import * as AppCall from "@openbot-build/apps-contract/apps/AppCall"
 import { ActionPolicy } from "@openbot-build/plugin-apps/ActionPolicy"
-import { AppCalls, ConnectionId } from "@openbot-build/domain"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import { AppCalls } from "@openbot-build/domain"
+import { Billing } from "@openbot-build/server-billing/Billing"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
@@ -77,13 +111,7 @@ import {
 	Turn,
 	TurnState,
 } from "@openbot-build/core"
-import {
-	Execution,
-	TokenId,
-	executionCallers,
-	Bots as BotDomain,
-	type Caller,
-} from "@openbot-build/domain"
+import { Execution, Bots as BotDomain } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
@@ -102,10 +130,9 @@ import {
 	String as Str,
 } from "effect"
 import { Prompt, Response, Tool, Toolkit } from "effect/ai"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as Store from "@openbot-build/server-execution/Store"
+import { Calls } from "@openbot-build/server-execution/Calls"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import * as BotFixture from "./BotFixture.ts"
@@ -114,39 +141,41 @@ import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredC
 import * as CallFrame from "@openbot-build/conversation-contract/chats/CallFrame"
 import * as ToolOrigins from "@openbot-build/conversation-contract/chats/ToolOrigins"
 import * as ToolCommands from "@openbot-build/plugin-chats/ToolCommands"
-import * as CallsModule from "@openbot-build/server-execution/execution/Calls"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
-import * as EngineHost from "@openbot-build/server-execution/execution/EngineHost"
+import * as CallsModule from "@openbot-build/server-execution/Calls"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
+import * as EngineHost from "@openbot-build/server-execution/EngineHost"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"
-import * as Runner from "@openbot-build/server-execution/execution/Runner"
-import * as RunScope from "@openbot-build/server-execution/execution/RunScope"
+import * as Runner from "@openbot-build/server-execution/Runner"
+import * as RunScope from "@openbot-build/server-execution/RunScope"
 import * as ToolWorkflow from "@openbot-build/plugin-chats/ToolWorkflow"
 import { WorkflowEngine } from "effect/workflow"
 import { TestClock } from "effect/testing"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Records from "@openbot-build/server-kernel/Records"
 import * as ToolSession from "@openbot-build/plugin-chats/ToolSession"
 import * as TurnTools from "@openbot-build/plugin-chats/TurnTools"
-import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
+import { CallContext } from "@openbot-build/server-execution/CallContext"
 import * as ToolControls from "@openbot-build/plugin-chats/ToolControls"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
+import * as Observation from "@openbot-build/server-execution/Observation"
 import * as ToolSteps from "@openbot-build/plugin-chats/ToolSteps"
-import * as HostTools from "@openbot-build/tools-contract/chats/HostTools"
+import * as HostTools from "@openbot-build/tools-contract/HostTools"
 import { ExecutionFeatures } from "@openbot-build/plugin-chats/ExecutionFeatures"
 import * as TurnContext from "@openbot-build/plugin-chats/TurnContext"
-import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
+import {
+	InputCommands,
+	workflowName as InputCommandsWorkflowName,
+} from "@openbot-build/conversation-contract/chats/InputCommands"
 import * as InputCommandsModule from "@openbot-build/plugin-chats/InputCommands"
 import * as ToolNotices from "@openbot-build/plugin-chats/ToolNotices"
 import * as ToolNoticeWorkflow from "@openbot-build/plugin-chats/ToolNoticeWorkflow"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
-import { layerEveryoneAdministrator } from "./OrganizationFixture.ts"
-import * as PostgresTest from "./PostgresTest.ts"
+import { layerEveryoneAdministrator } from "../src/OrganizationFixture.ts"
 
-const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(PostgresTest.start, (db) =>
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),
@@ -208,10 +237,10 @@ const setup = Effect.fn(function* (
 	namespace: string,
 	actor: Caller = { kind: "member", organizationId: "org", userId: "speaker" },
 	owner = "owner",
-	botId?: BotDomain.BotId,
+	botId?: BotId,
 ) {
 	const store = yield* Store.Store
-	const tools = yield* ToolCommands.ToolCommands
+	const tools = yield* ToolCommandsToolCommands
 	const call = (id: string, secret: string = "private tool input") =>
 		Prompt.makePart("tool-call", {
 			id,
@@ -236,9 +265,7 @@ const setup = Effect.fn(function* (
 		...fixture.bot,
 		id:
 			botId ??
-			(owner === "owner"
-				? fixture.bot.id
-				: BotDomain.BotId.make(`bot_${owner}`)),
+			(owner === "owner" ? fixture.bot.id : BotId.make(`bot_${owner}`)),
 	}
 	const kind = fixture.kind
 	const chain = { ...fixture.chain, bots: [bot.id] }
@@ -364,6 +391,7 @@ const saveTaskSteps = Effect.fn(function* (
 				outputText: 0,
 				outputReasoning: 0,
 				costMicros: 0,
+				estimatedMicros: 0,
 				charged: false,
 			})
 			.onConflictDoNothing()
@@ -427,7 +455,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							find: (_, id) =>
 								Effect.succeedSome({
 									...BotFixture.bot,
-									id: BotDomain.BotId.make(id),
+									id: BotId.make(id),
 								}),
 							access: (_, id) =>
 								Effect.gen(function* () {
@@ -439,7 +467,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 											action: "delegate",
 											kind: "Bot",
 										})
-									return { ...BotFixture.bot, id: BotDomain.BotId.make(id) }
+									return { ...BotFixture.bot, id: BotId.make(id) }
 								}),
 						})
 					}),
@@ -486,8 +514,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			),
 		)
 	const delegationLayer = delegationLayerWithSettings()
-	const delegationInput: DelegationCommands.Input = {
-		bot: BotDomain.BotId.make("bot_child"),
+	const delegationInput: Input = {
+		bot: BotId.make("bot_child"),
 		task: "Read the note",
 		reason: "Help with the note",
 		limits: { timeMs: 60000, steps: 3 },
@@ -502,7 +530,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					organization: () =>
 						Effect.gen(function* () {
 							if (!(yield* Ref.get(readable)))
-								return yield* SettingsApi.SettingsUnavailable.make({})
+								return yield* SettingsUnavailable.make({})
 							return {
 								document: {
 									...organizationDefaults,
@@ -522,7 +550,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					})
 					const input = Struct.omit(delegationInput, ["limits"])
 					assert.ok(
-						Schema.is(SettingsApi.SettingsUnavailable)(
+						Schema.is(SettingsUnavailable)(
 							yield* commands
 								.submit(source, Execution.mainCall("call"), input)
 								.pipe(Effect.flip),
@@ -646,7 +674,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					test.key.namespace,
 					undefined,
 					"owner",
-					BotDomain.BotId.make("bot_other"),
+					BotId.make("bot_other"),
 				)
 				const otherTool = yield* other.submit("two")
 				const wrong = yield* test.store.takeOver({
@@ -849,7 +877,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				}
 				const test = yield* setup("delegation-command", actor)
 				const commands = yield* DelegationCommands.DelegationCommands
-				const records = yield* DelegationsModule.Delegations
+				const records = yield* Delegations
 				const tool = yield* test.submit("call")
 				const source = yield* test.store.takeOver({
 					namespace: test.key.namespace,
@@ -1247,10 +1275,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					namespace: key.namespace,
 					id: notice.executionId,
 				})
-				assert.equal(
-					notification.workflow,
-					DelegationCommands.noticeWorkflowName,
-				)
+				assert.equal(notification.workflow, noticeWorkflowName)
 				assert.deepEqual(notification.input, { delegationExecutionId: key.id })
 				assert.equal((yield* commands.view(key)).status, "cancelled")
 				assert.equal(
@@ -1807,7 +1832,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							test.key.namespace,
 							Execution.CommandKey.make("next-turn"),
 							{
-								workflow: InputCommandsModule.workflowName,
+								workflow: InputCommandsWorkflowName,
 								resource: { kind: "Turn", id: nextTurn },
 								identity: { ...original.identity, actor },
 								input: { chat: test.position.chat },
@@ -1891,12 +1916,12 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						access: (_, id) =>
 							Effect.succeed({
 								...BotFixture.bot,
-								id: BotDomain.BotId.make(id),
+								id: BotId.make(id),
 							}),
 					}),
 					Layer.mock(Billing, {}),
 					Layer.mock(ModelRegistry, { defaultModel: Option.none() }),
-					Layer.mock(TurnContext.TurnContext, {
+					Layer.mock(TurnContextTurnContext, {
 						prepare: (frame) =>
 							Effect.gen(function* () {
 								return {
@@ -2007,7 +2032,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						const key = { namespace: source.namespace, id: receipt.executionId }
 						const before = yield* test.store.takeOver(key)
 						const task = yield* commands.start(before)
-						const control: PolicyOrigin.Control = {
+						const control: LimitControl = {
 							kind: "delegationLimit",
 							turnExecutionId: task.executionId,
 							epoch: 1,
@@ -2037,7 +2062,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								yield* commands.resume(before, control).pipe(Effect.flip),
 							),
 						)
-						const admission = yield* WorkAdmission.WorkAdmission
+						const admission = yield* WorkAdmissionWorkAdmission
 						const taskKey = { namespace: key.namespace, id: task.executionId }
 						const blocked = yield* admission
 							.check(taskKey, false)
@@ -2268,7 +2293,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					)
 					assert.ok(
 						Schema.is(Admission.Paused)(
-							yield* (yield* WorkAdmission.WorkAdmission)
+							yield* (yield* WorkAdmissionWorkAdmission)
 								.check(taskKey, false)
 								.pipe(Effect.flip),
 						),
@@ -2305,7 +2330,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				id: receipt.executionId,
 			})
 			const task = yield* commands.start(fence)
-			const control: PolicyOrigin.Control = {
+			const control: LimitControl = {
 				kind: "delegationLimit",
 				turnExecutionId: test.key.id,
 				epoch: 1,
@@ -2363,7 +2388,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				yield* Effect.gen(function* () {
 					const test = yield* setup("delegation-send-limit")
 					const commands = yield* DelegationCommands.DelegationCommands
-					const admission = yield* WorkAdmission.WorkAdmission
+					const admission = yield* WorkAdmissionWorkAdmission
 					const source = yield* test.store.takeOver({
 						namespace: test.key.namespace,
 						id: (yield* test.submit("call")).executionId,
@@ -2445,7 +2470,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						.update(usageEvents)
 						.set({ status: "confirmed", costMicros: 100 })
 						.where(eq(usageEvents.id, `${task.id}:model:0`))
-					const records = yield* DelegationsModule.Delegations
+					const records = yield* Delegations
 					const saved = yield* commands.load(owner)
 					yield* records.change(
 						"org",
@@ -2479,7 +2504,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			yield* Effect.gen(function* () {
 				const test = yield* setup("reservation-lost-reply")
 				const commands = yield* DelegationCommands.DelegationCommands
-				const admission = yield* WorkAdmission.WorkAdmission
+				const admission = yield* WorkAdmissionWorkAdmission
 				const sql = yield* SqlClient.SqlClient
 				const source = yield* test.store.takeOver({
 					namespace: test.key.namespace,
@@ -2584,7 +2609,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				yield* Effect.gen(function* () {
 					const test = yield* setup("delegation-late-budget")
 					const commands = yield* DelegationCommands.DelegationCommands
-					const admission = yield* WorkAdmission.WorkAdmission
+					const admission = yield* WorkAdmissionWorkAdmission
 					const source = yield* test.store.takeOver({
 						namespace: test.key.namespace,
 						id: (yield* test.submit("call")).executionId,
@@ -2737,7 +2762,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		const runtime = EngineHost.layerHandlers.pipe(
 			Layer.provideMerge(DelegationWorkflow.layer),
 			Layer.provide(
-				Layer.mock(WorkAdmission.WorkAdmission, { check: () => Effect.void }),
+				Layer.mock(WorkAdmissionWorkAdmission, { check: () => Effect.void }),
 			),
 			Layer.provide(
 				Layer.mock(DelegationSessionModule.DelegationSession, {
@@ -2886,7 +2911,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					const runtime = EngineHost.layerHandlers.pipe(
 						Layer.provideMerge(DelegationWorkflow.layer),
 						Layer.provide(
-							Layer.mock(WorkAdmission.WorkAdmission, {
+							Layer.mock(WorkAdmissionWorkAdmission, {
 								check: () => Effect.void,
 							}),
 						),
@@ -2907,7 +2932,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 										yield* Deferred.succeed(paused, undefined)
 										yield* Deferred.await(allow)
 										const saved = yield* commands.load(fence)
-										const control: PolicyOrigin.Control = {
+										const control: LimitControl = {
 											kind: "delegationLimit",
 											epoch: saved.stored.limitEpoch!,
 											turnExecutionId: saved.stored.limitTurnExecutionId!,
@@ -3063,7 +3088,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						scope: "once",
 						grantedBy: { _tag: "Person", userId: "speaker" },
 					})
-					const control: PolicyOrigin.Control = {
+					const control: LimitControl = {
 						kind: "delegationLimit",
 						turnExecutionId: task.executionId,
 						epoch: 1,
@@ -3097,7 +3122,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			}),
 	)
 
-	const appInput: AppCommands.Input = {
+	const appInput: AppCommandsInput = {
 		source: {
 			connectionId: ConnectionId.make("notes"),
 			connectionName: "Notes",
@@ -3130,7 +3155,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		() =>
 			Effect.gen(function* () {
 				const test = yield* setup("app-command-submit")
-				const apps = yield* AppCommands.AppCommands
+				const apps = yield* AppCommandsAppCommands
 				const child = yield* test.submit("call")
 				const source = yield* test.store.takeOver({
 					namespace: test.key.namespace,
@@ -3183,7 +3208,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			() =>
 				Effect.gen(function* () {
 					const test = yield* setup(`app-command-input-${race}`)
-					const apps = yield* AppCommands.AppCommands
+					const apps = yield* AppCommandsAppCommands
 					const child = yield* test.submit("call")
 					const source = yield* test.store.takeOver({
 						namespace: test.key.namespace,
@@ -3265,7 +3290,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						const waiting = yield* Deferred.make<void>()
 						const release = yield* Deferred.make<void>()
 						const delayed = yield* Effect.gen(function* () {
-							const app = yield* AppCommands.AppCommands
+							const app = yield* AppCommandsAppCommands
 							return yield* app.respond(
 								key,
 								actor,
@@ -3508,7 +3533,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								Layer.mock(Bots, {}),
 								Layer.mock(Vaults, {}),
 								Layer.mock(Grants, {}),
-								Layer.mock(RequestsModule.Requests, {}),
+								Layer.mock(Requests, {}),
 								BotRecordsModule.layer,
 								Layer.mock(Rules, {}),
 								Layer.mock(Billing, {}),
@@ -3516,7 +3541,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								Layer.mock(RequestCommands, {
 									submitted: () => Effect.succeedSome({ _tag: "Allowed" }),
 								}),
-								Layer.mock(TurnContext.TurnContext, {
+								Layer.mock(TurnContextTurnContext, {
 									prepare: (frame) =>
 										Effect.gen(function* () {
 											return {
@@ -3604,7 +3629,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						),
 					)
 					yield* Effect.gen(function* () {
-						const apps = yield* AppCommands.AppCommands
+						const apps = yield* AppCommandsAppCommands
 						const child = yield* test.submit("call")
 						const source = yield* test.store.takeOver({
 							namespace: test.key.namespace,
@@ -3727,7 +3752,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			() =>
 				Effect.gen(function* () {
 					const test = yield* setup(`app-workflow-${mode}`)
-					const apps = yield* AppCommands.AppCommands
+					const apps = yield* AppCommandsAppCommands
 					const child = yield* test.submit("call")
 					const source = yield* test.store.takeOver({
 						namespace: test.key.namespace,
@@ -3914,7 +3939,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					const runtime = EngineHost.layerHandlers.pipe(
 						Layer.provideMerge(AppWorkflow.layer),
 						Layer.provide(
-							Layer.succeed(AppCommands.AppCommands, {
+							Layer.succeed(AppCommandsAppCommands, {
 								...apps,
 								phase: (fence, status) =>
 									Effect.gen(function* () {
@@ -4540,7 +4565,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			const fence = yield* test.store.takeOver(key)
 			const call = yield* test.store.writeAttempt(
 				fence,
-				ToolSteps.stepId(test.position.item, "call"),
+				stepId(test.position.item, "call"),
 				{
 					value: "input",
 				},
@@ -4553,11 +4578,11 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				isFailure: false,
 				preliminary: false,
 			}
-			const encoded = yield* Schema.encodeEffect(ToolSteps.outputCodec)(output)
+			const encoded = yield* Schema.encodeEffect(outputCodec)(output)
 			yield* test.store.finishCall(fence, call.id, encoded, [
 				{
 					_tag: "ToolOutput",
-					step: ToolSteps.stepId(test.position.item, "call"),
+					step: stepId(test.position.item, "call"),
 					attempt: 0,
 					output: encoded,
 				},
@@ -5120,7 +5145,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					if (outcome !== "denied") {
 						const call = yield* test.store.writeAttempt(
 							child,
-							ToolSteps.stepId(test.position.item, "one"),
+							stepId(test.position.item, "one"),
 							{},
 						)
 						yield* test.store.sending(child, call.id)
@@ -5297,7 +5322,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 									)
 									const call = yield* test.store.writeAttempt(
 										fence,
-										ToolSteps.stepId(test.position.item, "one"),
+										stepId(test.position.item, "one"),
 										{
 											private: "input",
 										},
@@ -5351,7 +5376,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				const services = EngineHost.layerHandlers.pipe(
 					Layer.provideMerge(ToolWorkflow.layer),
 					Layer.provide(
-						Layer.succeed(ToolCommands.ToolCommands, {
+						Layer.succeed(ToolCommandsToolCommands, {
 							...test.tools,
 							authorize: () => Effect.void,
 						}),
@@ -5360,7 +5385,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				)
 				yield* Effect.gen(function* () {
 					const registry = yield* Workflows.Workflows
-					const registered = yield* registry.get(ToolCommands.workflowName)
+					const registered = yield* registry.get(ToolRecordsWorkflowName)
 					assert.ok(Option.isSome(registered))
 					yield* ToolWorkflow.workflow.execute(key, { discard: true })
 					yield* Deferred.await(firstSend).pipe(Effect.timeout("5 seconds"))
@@ -5657,7 +5682,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				const owner = yield* test.store.takeOver(source)
 				const call = yield* test.store.writeAttempt(
 					owner,
-					ToolSteps.stepId(test.position.item, "one"),
+					stepId(test.position.item, "one"),
 					{},
 				)
 				yield* test.store.sending(owner, call.id)
@@ -5712,7 +5737,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						),
 					),
 					Layer.provide(
-						Layer.succeed(ToolCommands.ToolCommands, {
+						Layer.succeed(ToolCommandsToolCommands, {
 							...test.tools,
 							authorize: () => check,
 						}),
@@ -5797,7 +5822,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			const fence = yield* test.store.takeOver(key)
 			const call = yield* test.store.writeAttempt(
 				fence,
-				ToolSteps.stepId(test.position.item, "one"),
+				stepId(test.position.item, "one"),
 				{},
 			)
 			yield* test.store.sending(fence, call.id)
@@ -5817,7 +5842,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				}),
 			}
 			const result = yield* Effect.gen(function* () {
-				const tools = yield* ToolCommands.ToolCommands
+				const tools = yield* ToolCommandsToolCommands
 				return yield* tools.finish(fence, { status: "completed" })
 			}).pipe(
 				Effect.provide(
@@ -5840,7 +5865,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			const fence = yield* test.store.takeOver(key)
 			const call = yield* test.store.writeAttempt(
 				fence,
-				ToolSteps.stepId(test.position.item, "one"),
+				stepId(test.position.item, "one"),
 				{},
 			)
 			yield* test.store.sending(fence, call.id)
@@ -5889,7 +5914,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				const fence = yield* test.store.takeOver(key)
 				const call = yield* test.store.writeAttempt(
 					fence,
-					ToolSteps.stepId(test.position.item, "one"),
+					stepId(test.position.item, "one"),
 					{},
 					retry,
 				)
@@ -5939,7 +5964,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			const fence = yield* test.store.takeOver(key)
 			const call = yield* test.store.writeAttempt(
 				fence,
-				ToolSteps.stepId(test.position.item, "one"),
+				stepId(test.position.item, "one"),
 				{},
 			)
 			yield* test.store.sending(fence, call.id)
@@ -6149,7 +6174,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					count: string
 				}>`select count(*)::text as count from openbot_executions where namespace = ${test.key.namespace}`
 				assert.strictEqual(records[0]?.count, "1")
-				const commands = yield* test.store.pending([ToolCommands.workflowName])
+				const commands = yield* test.store.pending([ToolRecordsWorkflowName])
 				assert.isFalse(
 					Arr.some(
 						commands,
@@ -6340,7 +6365,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			const readable = yield* Ref.make(false)
 			const runtime = CodeProgram.layer.pipe(
 				Layer.provideMerge(CodeCommands.layer),
-				Layer.provide(Layer.mock(AppCommands.AppCommands, {})),
+				Layer.provide(Layer.mock(AppCommandsAppCommands, {})),
 				Layer.provide(Layer.mock(Vaults, {})),
 				Layer.provide(
 					Layer.mock(TurnAccess, {
@@ -6352,16 +6377,17 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					Layer.mock(SettingsService, {
 						platform: Effect.gen(function* () {
 							if (!(yield* Ref.get(readable)))
-								return yield* SettingsApi.SettingsUnavailable.make({})
+								return yield* SettingsUnavailable.make({})
 							return Option.some({
 								document: {
+									...platformDefaults,
 									publicOrigin: "https://openbot.example",
 									authSecret: "test",
 									identityProvider: null,
 									organizationCreation: "anyone" as const,
 									ceiling: Authorization.emptyPolicy,
 									appRestrictions: [],
-									codeMode: { ...SettingsApi.codeModeDefaults, enabled: true },
+									codeMode: { ...codeModeDefaults, enabled: true },
 								},
 								version: 1,
 								updatedAt: 0,
@@ -6379,7 +6405,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				),
 			)
 			yield* Effect.gen(function* () {
-				const code = yield* CodeCommands.CodeCommands
+				const code = yield* CodeCommandsCodeCommands
 				const runner = yield* CodeProgram.CodeProgram
 				yield* WorkflowsFixture.register(
 					CodeWorkflow.workflow,
@@ -6485,10 +6511,10 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				})
 				const failOnce = yield* Ref.make(true)
 				const appCommands = Layer.effect(
-					AppCommands.AppCommands,
+					AppCommandsAppCommands,
 					Effect.gen(function* () {
-						const original = yield* AppCommands.AppCommands
-						return AppCommands.AppCommands.of({
+						const original = yield* AppCommandsAppCommands
+						return AppCommandsAppCommands.of({
 							...original,
 							submit: (...args) =>
 								Effect.gen(function* () {
@@ -6532,6 +6558,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							Layer.mock(SettingsService, {
 								platform: Effect.succeedSome({
 									document: {
+										...platformDefaults,
 										publicOrigin: "https://openbot.example",
 										authSecret: "test",
 										identityProvider: null,
@@ -6539,7 +6566,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 										ceiling: Authorization.emptyPolicy,
 										appRestrictions: [],
 										codeMode: {
-											...SettingsApi.codeModeDefaults,
+											...codeModeDefaults,
 											enabled: true,
 										},
 									},
@@ -6565,8 +6592,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					),
 				)
 				yield* Effect.gen(function* () {
-					const code = yield* CodeCommands.CodeCommands
-					const apps = yield* AppCommands.AppCommands
+					const code = yield* CodeCommandsCodeCommands
+					const apps = yield* AppCommandsAppCommands
 					yield* WorkflowsFixture.register(
 						CodeWorkflow.workflow,
 						code.authorize,
@@ -6788,6 +6815,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							Layer.mock(SettingsService, {
 								platform: Effect.succeedSome({
 									document: {
+										...platformDefaults,
 										publicOrigin: "https://openbot.example",
 										authSecret: "test",
 										identityProvider: null,
@@ -6795,7 +6823,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 										ceiling: Authorization.emptyPolicy,
 										appRestrictions: [],
 										codeMode: {
-											...SettingsApi.codeModeDefaults,
+											...codeModeDefaults,
 											enabled: true,
 										},
 									},
@@ -6835,8 +6863,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					),
 				)
 				yield* Effect.gen(function* () {
-					const code = yield* CodeCommands.CodeCommands
-					const apps = yield* AppCommands.AppCommands
+					const code = yield* CodeCommandsCodeCommands
+					const apps = yield* AppCommandsAppCommands
 					yield* WorkflowsFixture.register(
 						AppWorkflow.workflow,
 						apps.authorize,
@@ -6979,8 +7007,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		)
 	}
 	for (const workflow of [
-		AppCommands.workflowName,
-		CodeCommands.workflowName,
+		AppCommandsWorkflowName,
+		CodeCommandsWorkflowName,
 		requestWorkflowName,
 	] as const) {
 		for (const end of ["cancel", "fail", "deadline"] as const) {
@@ -7011,7 +7039,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 										)
 										const call = yield* test.store.writeAttempt(
 											fence,
-											ToolSteps.stepId(test.position.item, "one"),
+											stepId(test.position.item, "one"),
 											null,
 											"local",
 										)
@@ -7083,7 +7111,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					const runtime = EngineHost.layerHandlers.pipe(
 						Layer.provideMerge(ToolWorkflow.layer),
 						Layer.provide(
-							Layer.succeed(ToolCommands.ToolCommands, {
+							Layer.succeed(ToolCommandsToolCommands, {
 								...test.tools,
 								authorize: () => Effect.void,
 							}),
@@ -7247,6 +7275,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								Layer.mock(SettingsService, {
 									platform: Effect.succeedSome({
 										document: {
+											...platformDefaults,
 											publicOrigin: "https://openbot.example",
 											authSecret: "test",
 											identityProvider: null,
@@ -7254,7 +7283,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 											ceiling: Authorization.emptyPolicy,
 											appRestrictions: [],
 											codeMode: {
-												...SettingsApi.codeModeDefaults,
+												...codeModeDefaults,
 												enabled: true,
 											},
 										},
@@ -7281,8 +7310,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					)
 					yield* Effect.gen(function* () {
 						const workflows = yield* WorkflowTools.make
-						const code = yield* CodeCommands.CodeCommands
-						const apps = yield* AppCommands.AppCommands
+						const code = yield* CodeCommandsCodeCommands
+						const apps = yield* AppCommandsAppCommands
 						yield* WorkflowsFixture.register(
 							Engine.define("openbot.chat-turn"),
 							() => Effect.void,
@@ -7447,7 +7476,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 															workflows.restore(fence, definition),
 														),
 												}),
-												Layer.mock(TurnContext.TurnContext, {}),
+												Layer.mock(TurnContextTurnContext, {}),
 												HostTools.none,
 												Layer.mock(InputCommands, {}),
 											),
@@ -7518,9 +7547,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						const output = yield* invoke(owner).pipe(
 							Effect.timeout("5 seconds"),
 						)
-						const decoded = yield* Schema.decodeEffect(ToolSteps.outputCodec)(
-							output,
-						)
+						const decoded = yield* Schema.decodeEffect(outputCodec)(output)
 						const value = yield* Schema.decodeUnknownEffect(
 							Schema.Struct({ executionId: Execution.Id }),
 						)(decoded.result)
@@ -7550,7 +7577,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					request: { consent: true },
 				}
 				const services = Layer.mergeAll(
-					Layer.mock(AppCommands.AppCommands, {
+					Layer.mock(AppCommandsAppCommands, {
 						submit: () =>
 							Effect.succeed({
 								executionId: test.key.id,
@@ -7569,7 +7596,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								})),
 							),
 					}),
-					Layer.mock(CodeCommands.CodeCommands, {}),
+					Layer.mock(CodeCommandsCodeCommands, {}),
 					Layer.mock(Observation.Observation, {
 						observe: () =>
 							Stream.succeed({

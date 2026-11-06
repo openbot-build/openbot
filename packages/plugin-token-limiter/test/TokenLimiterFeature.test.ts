@@ -4,7 +4,6 @@ import { Execution } from "@openbot-build/domain"
 import { Cause, Effect, Exit, Schema } from "effect"
 import { Prompt, Response } from "effect/ai"
 import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
-import * as TokenLimiter from "../src/TokenLimiter.ts"
 import * as TokenLimiterFeature from "../src/TokenLimiterFeature.ts"
 
 const fence = {
@@ -76,11 +75,17 @@ it.effect("a Turn keeps the limit of its pin when the config changes", () =>
 				id: TokenLimiterFeature.id,
 				version: 1,
 				settings: { maxTokens: 5 },
+				missing: BotFeatures.skip,
 			},
 		])
 		// The pin of a Turn that started when the limit was 1.
 		const [held] = yield* features.hold([
-			{ id: TokenLimiterFeature.id, version: 1, settings: { maxTokens: 1 } },
+			{
+				id: TokenLimiterFeature.id,
+				version: 1,
+				settings: { maxTokens: 1 },
+				missing: BotFeatures.skip,
+			},
 		])
 		assert.deepStrictEqual(held!.pin.settings, { maxTokens: 1 })
 		const feature = yield* TokenLimiterFeature.contribution({
@@ -91,8 +96,9 @@ it.effect("a Turn keeps the limit of its pin when the config changes", () =>
 		const stopped = yield* registration.beforeStep!(step(1)).pipe(Effect.flip)
 		assert.ok(Schema.is(BotFeatures.FeatureStopped)(stopped))
 		assert.strictEqual(stopped.feature, TokenLimiterFeature.id)
+		assert.strictEqual(stopped.category, "limited")
 		const cause = stopped.cause
-		assert.ok(Schema.is(TokenLimiter.TokenLimitExceeded)(cause))
+		assert.ok(Schema.is(TokenLimiterFeature.TokenLimitExceeded)(cause))
 		assert.strictEqual(cause.maxTokens, 1)
 		assert.strictEqual(cause.usedTokens, 1)
 	}).pipe(Effect.scoped),

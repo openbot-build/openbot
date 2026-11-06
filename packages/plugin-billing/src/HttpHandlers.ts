@@ -1,15 +1,13 @@
+import { UsageQueryInvalid, type Budget } from "@openbot-build/domain/Billing"
+import { Identity, type Caller } from "@openbot-build/domain/Identity"
 import { BillingApi, OpenBotApi } from "@openbot-build/api"
 
-import { type Caller, Identity } from "@openbot-build/domain"
 import { Clock, DateTime, Effect, Layer, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import { organizationKey } from "@openbot-build/identity-contract/audit/Resources"
-import {
-	Billing,
-	periodStart,
-} from "@openbot-build/server-billing/billing/Billing"
+import { organizationKey } from "@openbot-build/domain/AuditResources"
+import { Billing, periodStart } from "@openbot-build/server-billing/Billing"
 
 /** Fails with `BillingUnavailable` in place of an inside failure, and logs the failure. */
 const unavailable = (message: string) =>
@@ -34,7 +32,7 @@ const rangeOf = (query: { readonly from?: string; readonly to?: string }) =>
 				: Option.match(DateTime.make(value), {
 						onNone: () =>
 							Effect.fail(
-								BillingApi.UsageQueryInvalid.make({
+								UsageQueryInvalid.make({
 									message: `"${value}" is not an ISO 8601 time.`,
 								}),
 							),
@@ -43,7 +41,7 @@ const rangeOf = (query: { readonly from?: string; readonly to?: string }) =>
 		const from = yield* parse(query.from, periodStart("month", now))
 		const to = yield* parse(query.to, now + 1)
 		if (from >= to)
-			return yield* BillingApi.UsageQueryInvalid.make({
+			return yield* UsageQueryInvalid.make({
 				message: "`from` must be before `to`.",
 			})
 		return { from, to }
@@ -104,7 +102,7 @@ const budgets = HttpApiBuilder.group(OpenBotApi, "budgets", (handlers) =>
 			caller: Caller,
 			action: "budget.created" | "budget.updated" | "budget.deleted",
 			budget: Pick<
-				BillingApi.Budget,
+				Budget,
 				"id" | "scope" | "scopeId" | "period" | "limitMicros" | "mode"
 			>,
 		) =>

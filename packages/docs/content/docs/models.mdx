@@ -323,12 +323,6 @@ must be a `language` model, because the memory Bot writes text. Otherwise
 OpenBot returns `400` with `SettingsInvalid`. The catalog gives the `type` of
 each model, and a Chat can choose only `language` models.
 
-Older versions of OpenBot had `defaultModel` and `helperModel`. When you
-upgrade, OpenBot gives the old `defaultModel` to each Bot that has no model.
-`rulesModel` and `botMemoryModel` get the old helper model: `helperModel`, or
-else `defaultModel`. When both were `null`, the new values stay empty, and you
-must set them.
-
 For example, to give a Bot a model, send its current `revision` as `expected`:
 
 ```sh

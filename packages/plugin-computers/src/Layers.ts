@@ -1,7 +1,7 @@
 import { Layer } from "effect"
 import * as ComputerProviders from "./ComputerProviders.ts"
 import * as Computers from "./Computers.ts"
-import * as Connectors from "./connector/Connectors.ts"
+import * as Connectors from "./Connectors.ts"
 import * as Lifecycle from "./Lifecycle.ts"
 import * as Pairings from "./Pairings.ts"
 import * as Sessions from "./Sessions.ts"

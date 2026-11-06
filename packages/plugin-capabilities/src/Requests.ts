@@ -1,4 +1,6 @@
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import type { BotId } from "@openbot-build/domain/BotId"
+import { CapabilityRequestId } from "@openbot-build/domain/CapabilityRequestId"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import type { Chat } from "@openbot-build/core"
 import { Requests as RequestDomain } from "@openbot-build/domain"
 import { Bots as BotsApi } from "@openbot-build/domain"
@@ -20,24 +22,14 @@ import {
 	Rules,
 	deciderKey,
 } from "@openbot-build/conversation-contract/capabilities/Rules"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
-import type { Records } from "@openbot-build/server-kernel/errors/Records"
+import * as Report from "@openbot-build/server-kernel/Report"
+import type { Records } from "@openbot-build/server-kernel/Records"
 import {
 	type Request,
 	Stored,
 	type Decision,
 	Requests,
 } from "@openbot-build/conversation-contract/capabilities/Requests"
-export {
-	Stored,
-	Requests,
-} from "@openbot-build/conversation-contract/capabilities/Requests"
-export type {
-	Decision,
-	Ask,
-	Outcome,
-} from "@openbot-build/conversation-contract/capabilities/Requests"
-
 type Approver = Request["approver"]
 
 /**
@@ -49,9 +41,9 @@ export const superior = ({
 	userId,
 	bot,
 }: {
-	readonly deciders: ReadonlyArray<BotsApi.BotId>
+	readonly deciders: ReadonlyArray<BotId>
 	readonly userId: string
-	readonly bot: BotsApi.BotId
+	readonly bot: BotId
 }): Approver =>
 	pipe(
 		Arr.findFirstIndex(deciders, (id) => id === bot),
@@ -63,7 +55,7 @@ export const superior = ({
 		}),
 	)
 
-const above = (stored: Stored, bot: BotsApi.BotId) =>
+const above = (stored: Stored, bot: BotId) =>
 	superior({
 		deciders: stored.request.chain,
 		userId: stored.chain.userId,
@@ -81,7 +73,7 @@ export const chatOf = ({
 	current,
 }: {
 	readonly chain: Chain
-	readonly bot: BotsApi.BotId
+	readonly bot: BotId
 	readonly current: Chat.Id
 }): Chat.Id =>
 	pipe(
@@ -224,7 +216,7 @@ export const make: Effect.Effect<
 				const found = yield* requests.find(organizationId, id)
 				if (Option.isNone(found))
 					return yield* RequestDomain.RequestNotFound.make({
-						request: RequestDomain.CapabilityRequestId.make(id),
+						request: CapabilityRequestId.make(id),
 					})
 				const stored = found.value
 				const request = stored.request
@@ -407,7 +399,7 @@ export const make: Effect.Effect<
 					chain: input.chain,
 					...(input.call === undefined ? {} : { call: input.call }),
 					request: {
-						id: RequestDomain.CapabilityRequestId.make("req_" + (yield* newId)),
+						id: CapabilityRequestId.make("req_" + (yield* newId)),
 						bot: input.bot,
 						capability: input.capability,
 						reason: input.reason,

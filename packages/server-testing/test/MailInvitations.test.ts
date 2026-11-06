@@ -1,23 +1,35 @@
-import { assert, layer } from "@effect/vitest"
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { PlatformSettings } from "@openbot-build/domain/Settings"
 import {
-	BotsApi,
-	Mail,
-	OrganizationApi,
-	Settings as SettingsApi,
-	UserTokensApi,
-} from "@openbot-build/api"
+	CreateInvitationResponse,
+	Invitation,
+} from "@openbot-build/domain/Organizations"
+import { Mail } from "@openbot-build/domain"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
+import { Bot } from "@openbot-build/domain/Bots"
+import {
+	BotInvitationSecret,
+	BotInvitation,
+} from "@openbot-build/domain/BotSharing"
+import { assert, layer } from "@effect/vitest"
 import { Array as Arr, Effect, Layer, Ref, Schema } from "effect"
 import {
 	Transport,
 	TransportError,
 	type Message,
 } from "@openbot-build/identity-contract/mail/Transport"
-import * as BrowserHost from "./BrowserHost.ts"
-import * as Caller from "./Caller.ts"
+import * as BrowserHost from "../src/BrowserHost.ts"
+import * as Caller from "../src/Caller.ts"
 
 const publicOrigin = "https://mail.example.com"
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"an invitation stays saved after a mail failure and can be sent again",
 		() =>
@@ -43,11 +55,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const send = Caller.withCookie({ address, publicOrigin })
 				const admin = yield* host.login("mail-admin")
 				const settings = yield* Caller.read(
-					SettingsApi.PlatformSettings,
+					PlatformSettings,
 					send(admin.session, "/v1/platform/settings"),
 				)
 				yield* Caller.read(
-					SettingsApi.PlatformSettings,
+					PlatformSettings,
 					send(admin.session, "/v1/platform/settings", "PATCH", {
 						expectedVersion: settings.version,
 						mail: {
@@ -65,7 +77,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const invite = (email: string) =>
 					send(admin.session, "/v1/organization/invitations", "POST", { email })
 				const invitation = yield* Caller.read(
-					OrganizationApi.CreateInvitationResponse,
+					CreateInvitationResponse,
 					invite("Mail-Guest@example.com"),
 					201,
 				)
@@ -80,7 +92,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual((yield* Ref.get(attempts)).length, 1)
 				const list = () =>
 					Caller.read(
-						Schema.Struct({ items: Schema.Array(OrganizationApi.Invitation) }),
+						Schema.Struct({ items: Schema.Array(Invitation) }),
 						send(admin.session, "/v1/organization/invitations"),
 					)
 				const saved = (yield* list()).items[0]
@@ -107,7 +119,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.include(delivered.html, invitation.email)
 
 				const token = yield* Caller.read(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					send(admin.session, "/v1/user/tokens", "POST", {
 						name: "Send Bot invitations",
 					}),
@@ -115,7 +127,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				const keyed = Caller.withToken(address)
 				const bot = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					keyed(token.secret, "/v1/bots", "POST", {
 						name: "Guide",
 						role: "Answers questions",
@@ -125,7 +137,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				const path = `/v1/bots/${bot.id}/invitations`
 				const first = yield* Caller.read(
-					BotsApi.BotInvitationSecret,
+					BotInvitationSecret,
 					keyed(token.secret, path, "POST", { email: "bot-guest@example.com" }),
 					201,
 				)
@@ -137,7 +149,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.include((yield* Ref.get(attempts))[2]!.text, "Guide")
 				const link = yield* Caller.read(
-					BotsApi.BotInvitationSecret,
+					BotInvitationSecret,
 					keyed(token.secret, path, "POST", { path: "/join" }),
 					201,
 				)
@@ -145,7 +157,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual((yield* Ref.get(attempts)).length, 3)
 				yield* Ref.set(fail, true)
 				const failed = yield* Caller.read(
-					BotsApi.BotInvitationSecret,
+					BotInvitationSecret,
 					keyed(token.secret, path, "POST", {
 						email: "another-guest@example.com",
 					}),
@@ -166,7 +178,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					{ status: "sent" },
 				)
 				const listed = yield* Caller.read(
-					Schema.Array(BotsApi.BotInvitation),
+					Schema.Array(BotInvitation),
 					keyed(token.secret, path),
 				)
 				assert.ok(

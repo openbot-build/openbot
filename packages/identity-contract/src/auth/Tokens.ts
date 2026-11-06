@@ -1,10 +1,10 @@
+import type { Caller } from "@openbot-build/domain/Identity"
 import type { Tokens as TokensModel } from "@openbot-build/domain"
-import type { Caller } from "@openbot-build/domain"
 import { Context, type Effect, type Option, type Redacted } from "effect"
 import type {
 	AuthUnavailable,
 	CredentialRejected,
-} from "@openbot-build/server-kernel/auth/Model"
+} from "@openbot-build/server-kernel/AuthModel"
 
 interface Owner {
 	readonly userId: string
@@ -48,5 +48,4 @@ export class Tokens extends Context.Service<
 			secret: Redacted.Redacted<string>,
 		) => Effect.Effect<Caller, CredentialRejected | AuthUnavailable>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/identity-contract/auth/Tokens") {}
+>()("@openbot-build/identity-contract/auth/Tokens") {}

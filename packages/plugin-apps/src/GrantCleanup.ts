@@ -1,3 +1,14 @@
+import * as AuthorizationCommands from "./AuthorizationCommands.ts"
+import * as ConnectionCommands from "./ConnectionCommands.ts"
+import * as TestCleanup from "./TestCleanup.ts"
+import * as TestCommands from "./TestCommands.ts"
+import { Scope as GrantScope } from "@openbot-build/apps-contract/apps/GrantUses"
+import { scopeOf } from "@openbot-build/apps-contract/apps/GrantUses"
+import {
+	ServiceId,
+	ExecutionIdentity,
+	ServiceIdentity,
+} from "@openbot-build/domain/Identity"
 import {
 	type Loaded,
 	type MemberExecution,
@@ -6,17 +17,11 @@ import {
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
-import {
-	type Developers,
-	Execution,
-	ExecutionIdentity,
-	ServiceIdentity,
-	ServiceId,
-} from "@openbot-build/domain"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+} from "@openbot-build/server-execution/Store"
+import { type Developers, Execution } from "@openbot-build/domain"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import * as GrantUses from "@openbot-build/apps-contract/apps/GrantUses"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
 import * as Rows from "./DeveloperRows.ts"
 import {
 	Authorization,
@@ -39,8 +44,8 @@ import {
 	appConnections,
 	developerTests,
 } from "@openbot-build/server-database/Schema"
-import type { End } from "@openbot-build/server-execution/execution/Program"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
+import type { End } from "@openbot-build/server-execution/Program"
+import * as Observation from "@openbot-build/server-execution/Observation"
 import * as Connections from "@openbot-build/apps-contract/apps/StoredConnections"
 
 export const workflowName = "openbot.app-grant-cleanup"
@@ -69,9 +74,6 @@ export const installed = (
 	resource: { kind: "InstalledAppGrant", id: callId },
 	revision: 0,
 })
-export const GrantScope = GrantUses.Scope
-export type GrantScope = GrantUses.Scope
-export const scopeOf = GrantUses.scopeOf
 const organizationOf = (identity: ExecutionIdentity | ServiceIdentity) =>
 	Schema.is(ExecutionIdentity)(identity)
 		? identity.owner.organizationId
@@ -193,8 +195,7 @@ export interface Service {
 }
 
 export class GrantCleanup extends Context.Service<GrantCleanup, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-apps/GrantCleanup",
+	"@openbot-build/plugin-apps/GrantCleanup",
 ) {}
 
 const make = Effect.gen(function* () {
@@ -202,7 +203,7 @@ const make = Effect.gen(function* () {
 	const sql = yield* SqlClient.SqlClient
 	const store = yield* Store
 	const uses = yield* GrantUses.make
-	const indexNamespace = yield* IndexNamespace
+	const indexNamespace = yield* instanceNamespace
 	const observation = yield* Observation.Observation
 	/** Call only from Calls.onResult, in the result transaction. */
 	const enqueue = (
@@ -288,15 +289,15 @@ const make = Effect.gen(function* () {
 					ref.credential.binding.owner !== key.namespace ||
 					ref.credential.binding.connectionId !== source.record.resource.id ||
 					!(
-						(source.workflow === "openbot.app-authorization" &&
+						(source.workflow === AuthorizationCommands.workflowName &&
 							source.record.resource.kind === "AppAuthorization" &&
 							Schema.is(ExecutionIdentity)(source.identity) &&
 							Connections.ownerKey(source.identity.owner) === key.namespace) ||
-						(source.workflow === "openbot.app-connection" &&
+						(source.workflow === ConnectionCommands.workflowName &&
 							source.record.resource.kind === "AppConnection" &&
 							source.identity.actor.kind !== "service" &&
 							Connections.ownerKey(source.identity.actor) === key.namespace) ||
-						(source.workflow === "openbot.developer-test-cleanup" &&
+						(source.workflow === TestCleanup.workflowName &&
 							source.record.resource.kind === "DeveloperTestCleanup" &&
 							Schema.is(ServiceIdentity)(source.identity) &&
 							source.identity.actor.serviceId === "developer-test-cleanup" &&
@@ -337,9 +338,9 @@ const make = Effect.gen(function* () {
 				saved.identity.owner.organizationId !==
 					source.identity.owner.organizationId ||
 				!(
-					(source.workflow === "openbot.app-authorization" &&
+					(source.workflow === AuthorizationCommands.workflowName &&
 						source.record.resource.kind === "AppAuthorization") ||
-					(source.workflow === "openbot.developer-test" &&
+					(source.workflow === TestCommands.workflowName &&
 						source.record.resource.kind === "DeveloperTest")
 				) ||
 				Connections.ownerKey(source.identity.owner) !== key.namespace

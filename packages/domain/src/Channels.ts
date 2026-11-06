@@ -64,16 +64,14 @@ export const Channel = Schema.Struct({
 	 */
 	actor: Schema.String,
 	enabled: Schema.Boolean,
-	/** True when a saved change must set a caller before this Channel can work. */
-	needsAuthorization: Schema.Boolean,
 	/**
 	 * A path on the public origin where your client lets a person link their account.
 	 * OpenBot adds `?code=...`. Without it, the bot sends only the code.
 	 */
 	linkPath: Schema.NullOr(Schema.String),
 	credentials: ChannelCredentialsView,
-	/** The saved configuration or removal work. Older records need data conversion. */
-	executionId: Schema.NullOr(Execution.Id),
+	/** The saved configuration or removal work. */
+	executionId: Execution.Id,
 	version: Version,
 	createdAt: Schema.Finite,
 	updatedAt: Schema.Finite,

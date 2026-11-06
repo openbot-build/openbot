@@ -4,7 +4,7 @@ import { Effect, String as Str } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url, Hex } from "effect/encoding"
 import type { LinkSecret } from "@openbot-build/identity-contract/organization/Organization"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 
 /** The sealed secret is bound to its hash, so it cannot move to another invitation. */
 const binding = (hash: string) => "bot_invitation:" + hash

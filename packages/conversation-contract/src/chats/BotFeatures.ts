@@ -1,3 +1,4 @@
+import type { Identity } from "@openbot-build/domain/Identity"
 import type {
 	Bot,
 	Chat,
@@ -6,9 +7,10 @@ import type {
 	Plugin,
 	Turn,
 } from "@openbot-build/core"
-import type { Identity } from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
+	Clock,
 	Context,
 	Duration,
 	Effect,
@@ -22,17 +24,50 @@ import {
 	SubscriptionRef,
 } from "effect"
 import type { Entry } from "@openbot-build/apps-contract/apps/WorkflowTools"
-import type { Fence } from "@openbot-build/server-execution/execution/Store"
-import type { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
+import type { Fence } from "@openbot-build/server-execution/Store"
+import type { Definition } from "@openbot-build/tools-contract/ToolDefinitions"
 import type { Gate } from "../capabilities/Gate.ts"
 import type { Work } from "../capabilities/Work.ts"
 import type * as ChatHost from "./ChatHost.ts"
+
+/**
+ * What a later phase of a Turn does when a feature of its pin is not on the
+ * server, for example because an operator turned its plugin off.
+ *
+ * - `skip`: the phase goes on without the feature. Limits use it, so turning
+ *   a limit off never stops a Turn.
+ * - `wait`: the phase waits for the feature, but not longer than `millis`.
+ *   Then it fails with `FeatureMissing`. Tool features use it, because a Turn
+ *   may have saved calls of their tools.
+ *
+ * The pin keeps the policy, so it works also when the plugin is gone.
+ */
+export const Missing = Schema.Union([
+	Schema.TaggedStruct("skip", {}),
+	Schema.TaggedStruct("wait", {
+		millis: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+	}),
+])
+export type Missing = typeof Missing.Type
+
+/** Go on without the feature when it is not on the server. */
+export const skip: Missing = { _tag: "skip" }
+
+/** The time that `wait` gives when it gets no time. */
+export const defaultWait = Duration.seconds(30)
+
+/** Wait for the feature when it is not on the server, but not longer than `bound`. */
+export const wait = (bound: Duration.Input = defaultWait): Missing => ({
+	_tag: "wait",
+	millis: Duration.toMillis(Duration.fromInputUnsafe(bound)),
+})
 
 /** One feature that a Turn uses. The Turn keeps the list in its workflow journal. */
 export const Pin = Schema.Struct({
 	id: Schema.String,
 	version: Schema.Int,
 	settings: Schema.Json,
+	missing: Missing,
 })
 export type Pin = typeof Pin.Type
 export const Pins = Schema.Array(Pin)
@@ -87,11 +122,26 @@ export interface Feature {
 	) => Effect.Effect<Bot.ToolRegistration>
 }
 
-/** A feature ended the Turn, for example at a limit. `cause` is the typed failure of the feature. */
+/**
+ * A feature ended the Turn, for example at a limit. `cause` is the typed
+ * failure of the feature, and `category` is the failure category of that
+ * cause, such as `limited` for a limit.
+ */
 export class FeatureStopped extends Schema.TaggedError<
 	FeatureStopped,
 	{ readonly brand: unique symbol }
->()("BotFeatureStopped", { feature: Schema.String, cause: Schema.Defect() }) {
+>()(
+	"BotFeatureStopped",
+	{
+		feature: Schema.String,
+		category: Execution.Category,
+		cause: Schema.Defect(),
+	},
+	// The type is written out, because the class can not name itself here.
+	Execution.category(
+		(error: { readonly category: Execution.Category }) => error.category,
+	),
+) {
 	override get message() {
 		return `The bot feature ${this.feature} stopped the Turn.`
 	}
@@ -117,7 +167,15 @@ export const fromPlugin = <E>(
 	feature: string,
 	plugin: Plugin.Plugin<{}, E>,
 ): PluginFeature => {
-	const stop = (cause: E) => FeatureStopped.make({ feature, cause })
+	const stop = (cause: E) =>
+		FeatureStopped.make({
+			feature,
+			category: Option.getOrElse(
+				Execution.categoryOf(cause),
+				() => "unavailable" as const,
+			),
+			cause,
+		})
 	return {
 		register: () =>
 			Effect.map(
@@ -166,6 +224,8 @@ export interface Contribution {
 	readonly review: boolean
 	/** Names of saved tool calls that only this feature gives back (see `Feature.restoreTool`). */
 	readonly restores: ReadonlyArray<string>
+	/** What a later phase does when the feature is gone. The pin keeps it. */
+	readonly missing: Missing
 	/** The settings that the pin keeps, for example the limits of a limiter. */
 	readonly settings: Effect.Effect<Schema.Json>
 	/**
@@ -197,6 +257,24 @@ export interface Held {
 	readonly contribution: Contribution
 }
 
+/**
+ * A Turn waited for features of its pin with the policy `wait`, and they did
+ * not come back in time. Its category is `unavailable`, so a client can try
+ * again later.
+ */
+export class FeatureMissing extends Schema.TaggedError<
+	FeatureMissing,
+	{ readonly brand: unique symbol }
+>()(
+	"BotFeatureMissing",
+	{ ids: Schema.Array(Schema.String) },
+	Execution.category("unavailable"),
+) {
+	override get message() {
+		return `The bot features ${Arr.join(this.ids, ", ")} are not on the server.`
+	}
+}
+
 /** Two features have the same id. */
 export class DuplicateFeature extends Schema.TaggedError<
 	DuplicateFeature,
@@ -221,21 +299,27 @@ export interface Service {
 	/** The present features, with their settings now, in merge order. */
 	readonly snapshot: Effect.Effect<ReadonlyArray<Pin>>
 	/**
-	 * Holds every pinned feature until the scope closes. It holds all of them
-	 * or none of them. It waits while one is absent. It fails only when a
-	 * pinned feature has a different version.
+	 * Holds the pinned features until the scope closes. A pinned feature with
+	 * a different version fails the hold. An absent feature follows the
+	 * `missing` policy of its pin: `skip` leaves it out, and `wait` waits,
+	 * holding nothing, until the bound of the pin. Then the hold fails with
+	 * `FeatureMissing`. The hold holds all the features that it gives, or
+	 * none.
 	 */
 	readonly hold: (
 		pins: ReadonlyArray<Pin>,
-	) => Effect.Effect<ReadonlyArray<Held>, FeatureVersionChanged, Scope.Scope>
+	) => Effect.Effect<
+		ReadonlyArray<Held>,
+		FeatureVersionChanged | FeatureMissing,
+		Scope.Scope
+	>
 	/** Holds every present feature with its settings now. For work with no pin. */
 	readonly holdPresent: Effect.Effect<ReadonlyArray<Held>, never, Scope.Scope>
 }
 
 /** The Bot tools that features give to every Turn. */
 export class BotFeatures extends Context.Service<BotFeatures, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/conversation-contract/chats/BotFeatures",
+	"@openbot-build/conversation-contract/chats/BotFeatures",
 ) {}
 
 /** Merge order: the order number first, then the id. */
@@ -369,6 +453,7 @@ export const make = (options: { readonly drain: Duration.Input }) =>
 					id: contribution.id,
 					version: contribution.version,
 					settings,
+					missing: contribution.missing,
 				})),
 			)
 		})
@@ -397,8 +482,12 @@ export const make = (options: { readonly drain: Duration.Input }) =>
 			)
 			if (Option.isSome(changed))
 				return [{ _tag: "Changed", error: changed.value }, current]
+			// An absent feature with the policy `skip` is left out of the hold.
 			const missing = Arr.map(
-				Arr.filter(found, ({ live }) => Option.isNone(live)),
+				Arr.filter(
+					found,
+					({ pin, live }) => Option.isNone(live) && pin.missing._tag === "wait",
+				),
 				({ pin }) => pin.id,
 			)
 			if (missing.length > 0)
@@ -470,18 +559,28 @@ export const make = (options: { readonly drain: Duration.Input }) =>
 		const hold = (pins: ReadonlyArray<Pin>) =>
 			Effect.gen(function* () {
 				if (pins.length === 0) return []
+				const start = yield* Clock.currentTimeMillis
 				while (true) {
 					const decision = yield* attempt(() => pins)
 					if (decision._tag === "Held") return decision.held
 					if (decision._tag === "Changed") return yield* decision.error
 					// The wait holds nothing, so a release that waits for its holders cannot
-					// wait for this Turn. The wait has no time limit, because the set of
-					// features does not change while the server runs. At shutdown the engine
-					// stops before the features close, so no Turn waits here then.
+					// wait for this Turn. An operator can turn a plugin off while Turns
+					// run, so the wait ends at the first bound of the absent features.
 					const ids = decision.ids
+					const bound = Arr.reduce(
+						Arr.filter(pins, (pin) => Arr.contains(ids, pin.id)),
+						Number.POSITIVE_INFINITY,
+						(least, pin) =>
+							pin.missing._tag === "wait"
+								? Math.min(least, pin.missing.millis)
+								: least,
+					)
+					const left = start + bound - (yield* Clock.currentTimeMillis)
+					if (left <= 0) return yield* FeatureMissing.make({ ids })
 					yield* until((current) =>
 						Arr.every(ids, (id) => HashMap.has(current.live, id)),
-					)
+					).pipe(Effect.timeoutOption(Duration.millis(left)))
 				}
 			})
 		/** The settings are read after the hold, so the hold takes one step. */
@@ -490,6 +589,7 @@ export const make = (options: { readonly drain: Duration.Input }) =>
 				id: live.contribution.id,
 				version: live.contribution.version,
 				settings: null,
+				missing: live.contribution.missing,
 			})),
 		).pipe(
 			Effect.flatMap((decision) =>

@@ -1,6 +1,10 @@
+import { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import { State } from "@openbot-build/domain/AppAuthorizations"
+import { Action } from "@openbot-build/domain/AppAuthorizations"
+import { AppAuthorizationFailed } from "@openbot-build/domain/AppAuthorizations"
+import { AppAuthorizationUnavailable } from "@openbot-build/domain/AppAuthorizations"
 import { AppAuthorizations, Execution } from "@openbot-build/domain"
 import { errors as ExecutionErrors } from "./ExecutionsApi.ts"
-import { SettingsUnavailable } from "./SettingsErrors.ts"
 import { Authorization, Document } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
@@ -17,20 +21,6 @@ export const Request = Schema.Struct({
 	commandKey: Execution.CommandKey,
 })
 export type Request = typeof Request.Type
-export const Started = AppAuthorizations.Started
-export type Started = AppAuthorizations.Started
-export const State = AppAuthorizations.State
-export type State = AppAuthorizations.State
-export const Revocation = AppAuthorizations.Revocation
-export type Revocation = AppAuthorizations.Revocation
-export const Action = AppAuthorizations.Action
-export type Action = AppAuthorizations.Action
-export const AppAuthorizationFailed = AppAuthorizations.AppAuthorizationFailed
-export type AppAuthorizationFailed = AppAuthorizations.AppAuthorizationFailed
-export const AppAuthorizationUnavailable =
-	AppAuthorizations.AppAuthorizationUnavailable
-export type AppAuthorizationUnavailable =
-	AppAuthorizations.AppAuthorizationUnavailable
 export const Errors = [
 	...ExecutionErrors,
 	AppAuthorizationUnavailable.pipe(HttpApiSchema.status(503)),

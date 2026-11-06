@@ -1,21 +1,18 @@
+import { ExecutionIdentity } from "@openbot-build/domain/Identity"
 import {
 	type MemberExecution,
 	Store,
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import * as Hex from "effect/encoding/Hex"
-import {
-	Execution,
-	ExecutionIdentity,
-	ToolExecution,
-} from "@openbot-build/domain"
+import { Execution, ToolExecution } from "@openbot-build/domain"
 import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect"
 import { Digest } from "effect/crypto"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
-import { type Authorize } from "@openbot-build/server-execution/execution/Engine"
+import { type Authorize } from "@openbot-build/server-execution/Engine"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import { Chat, ToolStep, Turn } from "@openbot-build/core"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
@@ -102,8 +99,7 @@ export interface Service {
 export class ReminderCommands extends Context.Service<
 	ReminderCommands,
 	Service
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-work/ReminderCommands") {}
+>()("@openbot-build/plugin-work/ReminderCommands") {}
 
 const make = Effect.gen(function* () {
 	const store = yield* Store

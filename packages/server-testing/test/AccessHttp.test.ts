@@ -1,11 +1,18 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { SessionInfo } from "@openbot-build/domain/Accounts"
 import { assert, it } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import { AuthApi } from "@openbot-build/api"
 import * as Model from "@openbot-build/domain/Access"
-import { Effect, Option, Schema } from "effect"
-import { Cookies, Headers, HttpClientResponse } from "effect/http"
-import * as BrowserHost from "./BrowserHost.ts"
-import * as Caller from "./Caller.ts"
+import { Effect, Option, Schema, Layer } from "effect"
+import {
+	Cookies,
+	Headers,
+	HttpClientResponse,
+	FetchHttpClient,
+} from "effect/http"
+import * as BrowserHost from "../src/BrowserHost.ts"
+import * as Caller from "../src/Caller.ts"
 
 const page = Schema.Struct({
 	items: Schema.Array(Model.Request),
@@ -34,9 +41,7 @@ it.live(
 				payload?: unknown,
 			) => call(admin.session, path, method, payload)
 			const me = yield* asAdmin("/auth/session")
-			const session = yield* HttpClientResponse.schemaBodyJson(
-				AuthApi.SessionInfo,
-			)(me)
+			const session = yield* HttpClientResponse.schemaBodyJson(SessionInfo)(me)
 			assert.strictEqual(session.platformAdmin, true)
 			assert.strictEqual(session.memberships.length, 1)
 			assert.strictEqual(session.memberships[0]?.kind, "personal")
@@ -128,7 +133,16 @@ it.live(
 			assert.ok(
 				Option.isSome(Cookies.getValue(invited.cookies, AuthApi.SessionCookie)),
 			)
-		}).pipe(Effect.scoped, Effect.provide(BrowserHost.layerPlatform)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(
+				Layer.mergeAll(
+					NodeServices.layer,
+					NodeCrypto.layer,
+					FetchHttpClient.layer,
+				),
+			),
+		),
 	{ timeout: 120000 },
 )
 
@@ -214,6 +228,15 @@ it.live(
 				Option.getOrNull(Headers.get(changed.headers, "location")),
 				"https://groups.example.com/sign-in?reason=groups",
 			)
-		}).pipe(Effect.scoped, Effect.provide(BrowserHost.layerPlatform)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(
+				Layer.mergeAll(
+					NodeServices.layer,
+					NodeCrypto.layer,
+					FetchHttpClient.layer,
+				),
+			),
+		),
 	{ timeout: 120000 },
 )

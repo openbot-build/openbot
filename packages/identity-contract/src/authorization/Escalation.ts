@@ -1,5 +1,5 @@
+import { type Caller, Identity } from "@openbot-build/domain/Identity"
 import { Authorization } from "@openbot-build/domain"
-import { type Caller, Identity } from "@openbot-build/domain"
 import { Condition, Policy } from "@nmnmcc/ability"
 import { Array as Arr, Effect, HashMap, Option } from "effect"
 import type { Errors } from "./Check.ts"

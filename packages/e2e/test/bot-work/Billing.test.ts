@@ -1,14 +1,32 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import {
+	UsageEvent,
+	ModelPrice,
+	UsageSummary,
+	UsageQueryInvalid,
+	Credits,
+	CreditGrant,
+	Budget,
+	BudgetConflict,
+	BudgetInvalid,
+	RateLimited,
+} from "@openbot-build/domain/Billing"
+import {
+	Model,
+	ModelProvider,
+	ModelProviderInvalid,
+	ModelCatalog,
+} from "@openbot-build/domain/Models"
+import {
+	PlatformSettings,
+	OrganizationSettings,
+} from "@openbot-build/domain/Settings"
 import { Execution } from "@openbot-build/domain"
 import { assert, layer } from "@effect/vitest"
-import {
-	AuthApi,
-	BillingApi,
-	ChatSummary,
-	ModelProvidersApi,
-	Settings,
-} from "@openbot-build/api"
+import { ChatsApi } from "@openbot-build/api"
 import { Turn } from "@openbot-build/core"
-import { Array as Arr, Effect, Option, pipe, Schema } from "effect"
+import { Array as Arr, Effect, Option, pipe, Schema, Layer } from "effect"
 import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
 
 const { bot, message, settled } = Messages
@@ -109,10 +127,15 @@ const json = <S extends Schema.Constraint>(
 
 /** One page of usage events. */
 const UsageEvents = Schema.Struct({
-	items: Schema.Array(BillingApi.UsageEvent),
+	items: Schema.Array(UsageEvent),
 })
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"model calls are metered, priced, limited by budgets and paid with credits",
 		() =>
@@ -138,7 +161,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// The platform shares a model that it pays for.
 				yield* json(
-					ModelProvidersApi.Model,
+					Model,
 					send(root.session, "/v1/platform/models", "POST", {
 						id: "large",
 						name: "Large",
@@ -148,7 +171,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					}),
 				)
 				const platformProvider = yield* json(
-					ModelProvidersApi.ModelProvider,
+					ModelProvider,
 					send(root.session, "/v1/platform/model_providers", "POST", {
 						kind: "openai-compat",
 						name: "Platform",
@@ -160,7 +183,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				// Alice adds a model with the key of her organization.
 				yield* json(
-					ModelProvidersApi.Model,
+					Model,
 					send(alice.session, "/v1/organization/models", "POST", {
 						id: "small",
 						name: "Small",
@@ -169,7 +192,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					}),
 				)
 				const ownProvider = yield* json(
-					ModelProvidersApi.ModelProvider,
+					ModelProvider,
 					send(alice.session, "/v1/organization/model_providers", "POST", {
 						kind: "openai-compat",
 						name: "Own key",
@@ -181,7 +204,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// Prices. A provider can only price the models that it offers.
 				const platformPrice = yield* json(
-					BillingApi.ModelPrice,
+					ModelPrice,
 					send(
 						root.session,
 						`/v1/platform/model_providers/${platformProvider.id}/prices`,
@@ -199,7 +222,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(platformPrice.timeZone, "UTC")
 				assert.deepStrictEqual(platformPrice.periods, [])
 				yield* json(
-					BillingApi.ModelPrice,
+					ModelPrice,
 					send(
 						alice.session,
 						`/v1/organization/model_providers/${ownProvider.id}/prices`,
@@ -208,7 +231,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					),
 				)
 				const unknown = yield* json(
-					ModelProvidersApi.ModelProviderInvalid,
+					ModelProviderInvalid,
 					send(
 						alice.session,
 						`/v1/organization/model_providers/${ownProvider.id}/prices`,
@@ -219,7 +242,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(unknown._tag, "ModelProviderInvalid")
 				const catalog = yield* json(
-					ModelProvidersApi.ModelCatalog,
+					ModelCatalog,
 					send(alice.session, "/v1/organization/model_catalog"),
 				)
 				assert.strictEqual(
@@ -274,7 +297,8 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				/**
 				 * Sends one message to the Bot and checks that the billing stops its
 				 * Turn before the model call. No credits and a spent hard budget give
-				 * the same safe failure class. The inside reason stays in the error log.
+				 * the same safe failure category, `limited`. The inside reason stays in
+				 * the error log.
 				 */
 				const stopped = (botId: string) =>
 					Effect.gen(function* () {
@@ -282,10 +306,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						assert.ok(status._tag === "Failed", status._tag)
 						assert.strictEqual(execution.status, "failed")
 						assert.ok(execution.failure !== null)
-						assert.strictEqual(execution.failure.category, "forbidden")
+						assert.strictEqual(execution.failure.category, "limited")
+						assert.strictEqual(status.code, "limited")
 						assert.strictEqual(
 							status.message,
-							`The execution failed. Error ID: ${execution.failure.errorId}`,
+							`A limit stopped the Turn. Error ID: ${execution.failure.errorId}`,
 						)
 					})
 				const events = Effect.map(
@@ -306,7 +331,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const [first] = yield* turnEvents
 				assert.ok(first !== undefined)
 				const platformChat = yield* json(
-					Schema.Array(ChatSummary),
+					Schema.Array(ChatsApi.ChatSummary),
 					send(alice.session, `/v1/chats?bot=${platformBot}`),
 				)
 				assert.strictEqual(platformChat.length, 1)
@@ -323,7 +348,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(first.charged, false)
 
 				const byMember = yield* json(
-					BillingApi.UsageSummary,
+					UsageSummary,
 					send(alice.session, "/v1/organization/usage?groupBy=member"),
 				)
 				assert.strictEqual(byMember.groupBy, "member")
@@ -336,7 +361,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(
 					(yield* json(
-						BillingApi.UsageQueryInvalid,
+						UsageQueryInvalid,
 						send(alice.session, "/v1/organization/usage?from=yesterday"),
 						400,
 					))._tag,
@@ -345,7 +370,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// A time without a zone is in UTC, whatever the zone of the server is.
 				assert.strictEqual(
 					(yield* json(
-						BillingApi.UsageSummary,
+						UsageSummary,
 						send(
 							alice.session,
 							"/v1/organization/usage?from=2020-01-01T00:00:00",
@@ -357,13 +382,12 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// Credits are off until a platform admin turns them on.
 				const credits = `/v1/platform/organizations/${organizationId}/credits`
 				assert.strictEqual(
-					(yield* json(BillingApi.Credits, send(root.session, credits)))
-						.enabled,
+					(yield* json(Credits, send(root.session, credits))).enabled,
 					false,
 				)
 				assert.strictEqual((yield* send(alice.session, credits)).status, 403)
 				yield* json(
-					BillingApi.Credits,
+					Credits,
 					send(root.session, credits, "PATCH", { enabled: true }),
 				)
 				const before = (yield* turnEvents).length
@@ -371,7 +395,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				yield* stopped(platformBot)
 				assert.strictEqual((yield* turnEvents).length, before)
 				const grant = yield* json(
-					BillingApi.CreditGrant,
+					CreditGrant,
 					send(root.session, credits + "/grants", "POST", {
 						amountMicros: 10_000,
 						note: "Trial credits",
@@ -387,7 +411,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.ok(charged >= callCost)
 				const paid = yield* json(
-					BillingApi.Credits,
+					Credits,
 					send(alice.session, "/v1/organization/credits"),
 				)
 				assert.strictEqual(paid.enabled, true)
@@ -403,7 +427,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(own?.costMicros, callCost)
 				assert.strictEqual(
 					(yield* json(
-						BillingApi.Credits,
+						Credits,
 						send(alice.session, "/v1/organization/credits"),
 					)).balanceMicros,
 					10_000 - charged,
@@ -411,7 +435,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// A spent hard budget stops calls on any key. A soft budget only says so.
 				const hard = yield* json(
-					BillingApi.Budget,
+					Budget,
 					send(alice.session, "/v1/organization/budgets", "POST", {
 						scope: "organization",
 						period: "day",
@@ -423,7 +447,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(hard.exceeded, true)
 				assert.strictEqual(hard.scopeId, organizationId)
 				const soft = yield* json(
-					BillingApi.Budget,
+					Budget,
 					send(alice.session, "/v1/organization/budgets", "POST", {
 						scope: "member",
 						scopeId: alice.identity.userId,
@@ -436,7 +460,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(soft.exceeded, true)
 				assert.ok(soft.spentMicros >= 3 * callCost)
 				const twice = yield* json(
-					BillingApi.BudgetConflict,
+					BudgetConflict,
 					send(alice.session, "/v1/organization/budgets", "POST", {
 						scope: "organization",
 						period: "day",
@@ -447,7 +471,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(twice._tag, "BudgetConflict")
 				const stranger = yield* json(
-					BillingApi.BudgetInvalid,
+					BudgetInvalid,
 					send(alice.session, "/v1/organization/budgets", "POST", {
 						scope: "member",
 						scopeId: "not-a-member",
@@ -461,7 +485,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// An own key never takes credits, so only the hard budget stops this Turn.
 				yield* stopped(ownBot)
 				const raised = yield* json(
-					BillingApi.Budget,
+					Budget,
 					send(alice.session, "/v1/organization/budgets/" + hard.id, "PATCH", {
 						expectedVersion: hard.version,
 						limitMicros: 1_000_000,
@@ -476,7 +500,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(removed.status, 204, yield* removed.text)
 				const listed = yield* json(
-					Schema.Struct({ items: Schema.Array(BillingApi.Budget) }),
+					Schema.Struct({ items: Schema.Array(Budget) }),
 					send(alice.session, "/v1/organization/budgets"),
 				)
 				assert.deepStrictEqual(
@@ -501,12 +525,12 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// The rate limit counts the requests of each caller in each minute.
 				const settings = yield* json(
-					Settings.PlatformSettings,
+					PlatformSettings,
 					send(root.session, "/v1/platform/settings"),
 				)
 				assert.deepStrictEqual(settings.rateLimit, { requestsPerMinute: null })
 				const limited = yield* json(
-					Settings.PlatformSettings,
+					PlatformSettings,
 					send(root.session, "/v1/platform/settings", "PATCH", {
 						expectedVersion: settings.version,
 						rateLimit: { requestsPerMinute: 3 },
@@ -525,13 +549,13 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const answer = Arr.head(refused)
 				assert.ok(Option.isSome(answer))
 				const body = yield* Caller.json(
-					Schema.toCodecJson(AuthApi.RateLimited),
+					Schema.toCodecJson(RateLimited),
 					429,
 				)(answer.value)
 				assert.strictEqual(body._tag, "RateLimited")
 				assert.ok(body.retryAfterSeconds >= 1 && body.retryAfterSeconds <= 60)
 				yield* json(
-					Settings.PlatformSettings,
+					PlatformSettings,
 					send(root.session, "/v1/platform/settings", "PATCH", {
 						expectedVersion: limited.version,
 						rateLimit: { requestsPerMinute: null },
@@ -541,7 +565,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// Token rates slow the work down. They never make it fail.
 				const platform = yield* json(
-					Settings.PlatformSettings,
+					PlatformSettings,
 					send(root.session, "/v1/platform/settings"),
 				)
 				assert.deepStrictEqual(platform.tokenRate, {
@@ -551,7 +575,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					token: null,
 				})
 				yield* json(
-					Settings.PlatformSettings,
+					PlatformSettings,
 					send(root.session, "/v1/platform/settings", "PATCH", {
 						expectedVersion: platform.version,
 						tokenRate: {
@@ -563,11 +587,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					}),
 				)
 				const organizationSettings = yield* json(
-					Settings.OrganizationSettings,
+					OrganizationSettings,
 					send(alice.session, "/v1/organization/settings"),
 				)
 				yield* json(
-					Settings.OrganizationSettings,
+					OrganizationSettings,
 					send(alice.session, "/v1/organization/settings", "PATCH", {
 						expectedVersion: organizationSettings.version,
 						tokenRate: {

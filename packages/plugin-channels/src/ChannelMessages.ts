@@ -1,3 +1,4 @@
+import { CapabilityRequestId } from "@openbot-build/domain/CapabilityRequestId"
 import { Requests as RequestDomain } from "@openbot-build/domain"
 import {
 	Array as Arr,
@@ -43,7 +44,7 @@ type Choice = typeof Choice.Type
 
 /** The value of an approval button: the request, the choice and the revision it saw. */
 const Button = Schema.TemplateLiteralParser([
-	RequestDomain.CapabilityRequestId,
+	CapabilityRequestId,
 	" ",
 	Choice,
 	" ",
@@ -52,7 +53,7 @@ const Button = Schema.TemplateLiteralParser([
 	Schema.decodeTo(
 		Schema.toType(
 			Schema.Struct({
-				request: RequestDomain.CapabilityRequestId,
+				request: CapabilityRequestId,
 				choice: Choice,
 				revision: Schema.Int,
 			}),
@@ -70,7 +71,7 @@ const Button = Schema.TemplateLiteralParser([
 )
 
 const buttonValue = (
-	request: RequestDomain.CapabilityRequestId,
+	request: CapabilityRequestId,
 	choice: Choice,
 	revision: number,
 ) =>

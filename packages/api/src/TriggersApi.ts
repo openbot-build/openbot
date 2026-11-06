@@ -1,5 +1,15 @@
-import { SecretOutput } from "./Secret.ts"
-import { DelegationId } from "./DelegationsApi.ts"
+import { BotId } from "@openbot-build/domain/BotId"
+import { DelegationId } from "@openbot-build/domain/DelegationId"
+import { SecretOutput } from "@openbot-build/domain/Secret"
+import { TriggerId } from "@openbot-build/domain/TriggerId"
+import { Trigger } from "@openbot-build/domain/Triggers"
+import { Schedule } from "@openbot-build/domain/Triggers"
+import { TriggerNotFound } from "@openbot-build/domain/Triggers"
+import { TriggerConflict } from "@openbot-build/domain/Triggers"
+import { TriggerInvalid } from "@openbot-build/domain/Triggers"
+import { TriggerStorageUnavailable } from "@openbot-build/domain/Triggers"
+import { TriggerHookDenied } from "@openbot-build/domain/Triggers"
+import { Change as UpdateTriggerRequest } from "@openbot-build/domain/Triggers"
 import { Schema } from "effect"
 import {
 	HttpApi,
@@ -8,7 +18,6 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import { BotId } from "./BotsApi.ts"
 import { BotAuth } from "./AuthApi.ts"
 import {
 	Authorize,
@@ -16,30 +25,8 @@ import {
 	GroupRequired,
 } from "./Authorization.ts"
 
-export { TriggerId } from "./TriggerId.ts"
-import { TriggerId } from "./TriggerId.ts"
-
 import { Execution } from "@openbot-build/domain"
 import { errors as executionErrors } from "./ExecutionsApi.ts"
-import { Triggers as Domain } from "@openbot-build/domain"
-export const {
-	Trigger,
-	TriggerOwner,
-	Schedule,
-	TriggerNotFound,
-	TriggerConflict,
-	TriggerInvalid,
-	TriggerStorageUnavailable,
-	TriggerHookDenied,
-} = Domain
-export type Trigger = Domain.Trigger
-export type TriggerOwner = Domain.TriggerOwner
-export type Schedule = Domain.Schedule
-export type TriggerNotFound = Domain.TriggerNotFound
-export type TriggerConflict = Domain.TriggerConflict
-export type TriggerInvalid = Domain.TriggerInvalid
-export type TriggerStorageUnavailable = Domain.TriggerStorageUnavailable
-export type TriggerHookDenied = Domain.TriggerHookDenied
 const Prompt = Schema.String.check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(20000),
@@ -54,9 +41,6 @@ export const CreateTriggerRequest = Schema.Struct({
 	enabled: Schema.optionalKey(Schema.Boolean),
 })
 export type CreateTriggerRequest = typeof CreateTriggerRequest.Type
-
-export const UpdateTriggerRequest = Domain.Change
-export type UpdateTriggerRequest = Domain.Change
 
 /** The secret of a webhook. OpenBot shows it only once. */
 export const WebhookSecret = Schema.Struct({
@@ -102,7 +86,7 @@ export class TriggersApi extends HttpApiGroup.make("triggers")
 			error: TriggerErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Changes a trigger and clears needsAuthorization. The caller becomes its actor, so the new tasks work for the caller.",
+			"Changes a trigger. The caller becomes its actor, so the new tasks work for the caller.",
 		),
 		HttpApiEndpoint.delete("deleteTrigger", "/v1/triggers/:triggerId", {
 			params: triggerParams,

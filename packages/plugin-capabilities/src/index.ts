@@ -4,7 +4,6 @@ import { Authorization } from "@openbot-build/domain"
 import { Layer } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
 import { SqlClient } from "effect/sql"
-import { AppApprovals } from "@openbot-build/apps-contract/apps/AppApprovals"
 import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import { Delegations } from "@openbot-build/conversation-contract/bots/Delegations"
@@ -18,17 +17,16 @@ import { InputCommands } from "@openbot-build/conversation-contract/chats/InputC
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import { TurnContext } from "@openbot-build/conversation-contract/chats/TurnContext"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
-import { Runner } from "@openbot-build/server-execution/execution/Runner"
-import { RunScope } from "@openbot-build/server-execution/execution/RunScope"
-import { Store } from "@openbot-build/server-execution/execution/Store"
-import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
-import { ImportedRecords } from "@openbot-build/server-execution/imported/ImportedRecords"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
+import { Billing } from "@openbot-build/server-billing/Billing"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import { Observation } from "@openbot-build/server-execution/Observation"
+import { Runner } from "@openbot-build/server-execution/Runner"
+import { RunScope } from "@openbot-build/server-execution/RunScope"
+import { Store } from "@openbot-build/server-execution/Store"
+import { Workflows } from "@openbot-build/server-execution/Workflows"
+import { Records } from "@openbot-build/server-kernel/Records"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import * as Feature from "@openbot-build/server-plugin/Feature"
 import * as GatesLayer from "./Gates.ts"
 import * as GrantsLayer from "./Grants.ts"
@@ -65,12 +63,10 @@ export default Feature.make("@openbot-build/plugin-capabilities")
 	.stage({
 		name: "requests",
 		inject: [
-			AppApprovals,
 			AuditLog,
 			Authorization.Auth,
 			Bots,
 			Delegations,
-			ImportedRecords,
 			InputCommands,
 			ModelRegistry,
 			TurnAccess,

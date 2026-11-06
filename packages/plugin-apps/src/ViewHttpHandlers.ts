@@ -1,9 +1,9 @@
+import { Identity } from "@openbot-build/domain/Identity"
 import { OpenBotApi } from "@openbot-build/api"
 
-import { Identity } from "@openbot-build/domain"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
+import * as HttpErrors from "@openbot-build/server-execution/HttpErrors"
 import { Views } from "./Views.ts"
 export const layer = HttpApiBuilder.group(OpenBotApi, "appViews", (handlers) =>
 	Effect.gen(function* () {

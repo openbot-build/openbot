@@ -2,6 +2,7 @@
 	"name": "@openbot-build/server-development",
 	"version": "0.1.0",
 	"license": "AGPL-3.0-only",
+	"private": true,
 	"type": "module",
 	"description": "The OpenBot development server, with a local test account, simulated models and a simulated App",
 	"sideEffects": false,
@@ -13,10 +14,8 @@
 		"./Development": "./dist/Development.js",
 		"./DevelopmentAppUi": "./dist/DevelopmentAppUi.js",
 		"./DevelopmentApps": "./dist/DevelopmentApps.js",
-		"./DevelopmentAuthorization": "./dist/DevelopmentAuthorization.js",
 		"./DevelopmentBusiness": "./dist/DevelopmentBusiness.js",
 		"./DevelopmentModel": "./dist/DevelopmentModel.js",
-		"./DevelopmentProofs": "./dist/DevelopmentProofs.js",
 		"./DevelopmentScenarios": "./dist/DevelopmentScenarios.js"
 	},
 	"scripts": {
@@ -51,6 +50,7 @@
 		"@openbot-build/plugin-work": "workspace:*",
 		"@openbot-build/protocol": "workspace:*",
 		"@openbot-build/server-billing": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
 		"@openbot-build/server-execution": "workspace:*",
 		"@openbot-build/server-kernel": "workspace:*",
 		"@openbot-build/tools-contract": "workspace:*",

@@ -1,11 +1,13 @@
-import { Settings as SettingsApi } from "@openbot-build/api"
-import { AuthApi } from "@openbot-build/api"
+import { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import type { Membership } from "@openbot-build/domain/Accounts"
+import { RateLimited } from "@openbot-build/domain/Billing"
 import {
-	Account,
-	type AccountCaller,
 	type Caller,
 	Identity,
-} from "@openbot-build/domain"
+	type AccountCaller,
+	Account,
+} from "@openbot-build/domain/Identity"
+import { AuthApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Effect,
@@ -20,19 +22,13 @@ import { Auth } from "@openbot-build/identity-contract/auth/Auth"
 import {
 	AuthUnavailable,
 	CredentialRejected,
-} from "@openbot-build/server-kernel/auth/Model"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+} from "@openbot-build/server-kernel/AuthModel"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
-import { RateLimiter } from "@openbot-build/server-billing/billing/RateLimit"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { RateLimiter } from "@openbot-build/server-billing/RateLimit"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import { setSessionCookies } from "@openbot-build/identity-contract/auth/SessionHttp"
-export {
-	setSessionCookies,
-	optionalSession,
-	layerNoStore,
-} from "@openbot-build/identity-contract/auth/SessionHttp"
-
 /** The public error for a credential that failed to resolve. */
 const publicError = (error: AuthUnavailable | CredentialRejected) =>
 	Match.value(error).pipe(
@@ -54,7 +50,7 @@ export const layerOrigin = Layer.effect(
 			Effect.gen(function* () {
 				const request = yield* HttpServerRequest.HttpServerRequest
 				const publicOrigin = yield* Platform.publicOriginOr(settings, () =>
-					SettingsApi.SettingsUnavailable.make({}),
+					SettingsUnavailable.make({}),
 				)
 				if (request.headers["origin"] !== publicOrigin)
 					return yield* AuthApi.ForbiddenOrigin.make({})
@@ -88,11 +84,12 @@ export const layerSessionAuth = Layer.effect(
 /**
  * The organization of a request with the session cookie. The
  * `OpenBot-Organization` header, or the `organization` query of a WebSocket,
- * picks one. Without them, the only active organization of the account is the
- * answer.
+ * picks one. Without them, a caller with exactly one active organization that
+ * is not personal uses it. A caller with only personal organizations uses its
+ * only one. In every other case the request needs the header.
  */
 const chooseOrganization = (
-	session: { readonly memberships: ReadonlyArray<AuthApi.Membership> },
+	session: { readonly memberships: ReadonlyArray<Membership> },
 	named: Option.Option<string>,
 ) => {
 	const active = Arr.filter(
@@ -108,7 +105,7 @@ const chooseOrganization = (
 				? Effect.succeed(organizationId)
 				: Effect.fail(AuthApi.MembershipRequired.make({})),
 		onNone: () =>
-			// Keep the old implicit organization when a private space is added.
+			// A personal organization counts only when the caller has no other.
 			Arr.match(
 				Arr.some(active, (m) => m.kind !== "personal")
 					? Arr.filter(active, (m) => m.kind !== "personal")
@@ -206,15 +203,15 @@ export const layerBotAuth = Layer.effect(
 		const hit = (caller: Caller) =>
 			limiter.hit(caller).pipe(
 				Effect.mapError((error) =>
-					AuthApi.RateLimited.make({
+					RateLimited.make({
 						retryAfterSeconds: error.retryAfterSeconds,
 					}),
 				),
 			)
 		// Effect tries the next credential after a middleware error. An active
 		// caller over its limit needs a final response, so no other key is tried.
-		const limited = (error: AuthApi.RateLimited) =>
-			HttpServerResponse.schemaJson(AuthApi.RateLimited)(error, {
+		const limited = (error: RateLimited) =>
+			HttpServerResponse.schemaJson(RateLimited)(error, {
 				status: 429,
 			}).pipe(Effect.orDie)
 		return {

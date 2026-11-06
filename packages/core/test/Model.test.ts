@@ -30,7 +30,6 @@ import {
 	Model,
 	Provider,
 } from "@openbot-build/core"
-import * as ConfigModule from "@openbot-build/core/Config"
 import { ChatTest } from "./ChatTest.ts"
 import { finish, LanguageModelTest, textParts } from "./LanguageModelTest.ts"
 
@@ -49,8 +48,6 @@ it.effect(
 	"configuration catalogs and selections round-trip without runtime capabilities",
 	() =>
 		Effect.gen(function* () {
-			assert.strictEqual(ConfigModule.Selection, Config.Selection)
-			assert.strictEqual(ConfigModule.Compaction, Config.Compaction)
 			const schema = Schema.Struct({
 				providers: Schema.Array(Config.Provider),
 				models: Schema.Array(Config.Model),

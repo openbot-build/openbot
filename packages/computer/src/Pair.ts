@@ -1,3 +1,9 @@
+import type {
+	Pairing,
+	PairingInvalid,
+	ComputersUnavailable,
+	ComputerId,
+} from "@openbot-build/domain/Computers"
 import { ComputersApi } from "@openbot-build/api"
 import {
 	Cause,
@@ -23,15 +29,15 @@ const HooksApi = HttpApi.make("computerHooks").add(
 export interface Output {
 	/** Tells the person the code to approve. */
 	readonly showCode: (
-		pairing: ComputersApi.Pairing,
+		pairing: Pairing,
 		approveUrl: string,
 	) => Effect.Effect<void>
 }
 
 /** The ways a pairing call can fail. */
 type PairingFailure =
-	| ComputersApi.PairingInvalid
-	| ComputersApi.ComputersUnavailable
+	| PairingInvalid
+	| ComputersUnavailable
 	| HttpClientError.HttpClientError
 	| Schema.SchemaError
 
@@ -78,7 +84,7 @@ export const pair = (options: {
 	readonly output: Output
 }): Effect.Effect<
 	{
-		readonly computer: ComputersApi.ComputerId
+		readonly computer: ComputerId
 		readonly config: Config.ComputerConfig
 	},
 	Config.ComputerError,

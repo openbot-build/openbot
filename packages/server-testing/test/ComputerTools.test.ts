@@ -1,6 +1,14 @@
-import { Execution, TokenId, restrictExecution } from "@openbot-build/domain"
+import type { Tools } from "@openbot-build/tools-contract/ToolEntry"
+import {
+	type ExecRequest,
+	ComputersUnavailable,
+	ComputerNotFound,
+	type Computer,
+} from "@openbot-build/domain/Computers"
+import { TokenId } from "@openbot-build/domain/TokenId"
+import { restrictExecution } from "@openbot-build/domain/Identity"
+import { Execution } from "@openbot-build/domain"
 import { assert, describe, it } from "@effect/vitest"
-import { ComputersApi } from "@openbot-build/api"
 import { Chat, Turn } from "@openbot-build/core"
 import {
 	Array as Arr,
@@ -19,13 +27,13 @@ import {
 	Gate,
 } from "@openbot-build/conversation-contract/capabilities/Gate"
 import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
-import type { Machine } from "@openbot-build/plugin-computers/Computer"
+import type { Machine } from "@openbot-build/apps-contract/computers/Computer"
 import { ComputerProviders } from "@openbot-build/plugin-computers/ComputerProviders"
 import { Computers } from "@openbot-build/plugin-computers/Computers"
 import { Sessions } from "@openbot-build/plugin-computers/Sessions"
 import * as ComputerTools from "@openbot-build/plugin-computers/ComputerTools"
 import { bot } from "./BotFixture.ts"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { Records } from "@openbot-build/server-kernel/Records"
 
 const { names } = ComputerTools
 
@@ -34,7 +42,7 @@ interface Seen {
 	/** The actions that went to the Gate. */
 	readonly checks: Ref.Ref<ReadonlyArray<string>>
 	/** The requests that went to `Sessions.exec`. */
-	readonly runs: Ref.Ref<ReadonlyArray<ComputersApi.ExecRequest>>
+	readonly runs: Ref.Ref<ReadonlyArray<ExecRequest>>
 }
 
 interface Fakes {
@@ -118,7 +126,7 @@ const makeWork = Effect.succeed(
 const inTurn = <A, E>(
 	work: Work["Service"],
 	use: (
-		toolkit: Toolkit.WithHandler<ComputerTools.Tools>,
+		toolkit: Toolkit.WithHandler<Tools>,
 	) => Effect.Effect<A, E, Work | Chat.Approvals | Gate>,
 ) =>
 	Effect.gen(function* () {
@@ -137,13 +145,13 @@ const withPlugin = <A, E>(
 	test: (input: {
 		readonly seen: Seen
 		readonly work: Work["Service"]
-		readonly toolkit: Toolkit.WithHandler<ComputerTools.Tools>
+		readonly toolkit: Toolkit.WithHandler<Tools>
 	}) => Effect.Effect<A, E, Work | Chat.Approvals | Gate>,
 ) =>
 	Effect.gen(function* () {
 		const seen = yield* Effect.all({
 			checks: Ref.make<ReadonlyArray<string>>([]),
-			runs: Ref.make<ReadonlyArray<ComputersApi.ExecRequest>>([]),
+			runs: Ref.make<ReadonlyArray<ExecRequest>>([]),
 		})
 		const work = yield* makeWork
 		return yield* inTurn(work, (toolkit) => test({ seen, work, toolkit })).pipe(
@@ -164,7 +172,7 @@ const needsApproval = (tool: Tool.Any, params: unknown, toolCallId: string) => {
  * runtime does before it runs the handler.
  */
 const decide = (
-	toolkit: Toolkit.WithHandler<ComputerTools.Tools>,
+	toolkit: Toolkit.WithHandler<Tools>,
 	name: string,
 	params: Record<string, unknown>,
 	toolCallId: string,
@@ -188,10 +196,7 @@ const decide = (
 	})
 
 /** The JSON Schema that the model sees for a tool, with its properties. */
-const schemaOf = (
-	toolkit: Toolkit.WithHandler<ComputerTools.Tools>,
-	name: string,
-) => {
+const schemaOf = (toolkit: Toolkit.WithHandler<Tools>, name: string) => {
 	const tool = toolkit.tools[name]
 	const schema: Record<string, unknown> =
 		tool === undefined ? {} : Tool.getJsonSchema(tool)
@@ -204,8 +209,7 @@ const schemaOf = (
 	}
 }
 
-const unavailable = () =>
-	Effect.fail(ComputersApi.ComputersUnavailable.make({}))
+const unavailable = () => Effect.fail(ComputersUnavailable.make({}))
 
 describe("Computer tools", () => {
 	it.effect("a saved Computer tool needs no model tool list", () =>
@@ -213,7 +217,7 @@ describe("Computer tools", () => {
 			const work = yield* makeWork
 			const seen = yield* Effect.all({
 				checks: Ref.make<ReadonlyArray<string>>([]),
-				runs: Ref.make<ReadonlyArray<ComputersApi.ExecRequest>>([]),
+				runs: Ref.make<ReadonlyArray<ExecRequest>>([]),
 			})
 			const checked = yield* Ref.make(false)
 			const registration = yield* Effect.gen(function* () {
@@ -262,7 +266,7 @@ describe("Computer tools", () => {
 				const checked = yield* Ref.make<ReadonlyArray<string>>([])
 				const seen = yield* Effect.all({
 					checks: Ref.make<ReadonlyArray<string>>([]),
-					runs: Ref.make<ReadonlyArray<ComputersApi.ExecRequest>>([]),
+					runs: Ref.make<ReadonlyArray<ExecRequest>>([]),
 				})
 				const fakes: Fakes = {
 					computers: {
@@ -272,9 +276,7 @@ describe("Computer tools", () => {
 								checked,
 								Arr.append(`${who.tokenId}:${id}:${need}`),
 							).pipe(
-								Effect.andThen(
-									Effect.fail(ComputersApi.ComputerNotFound.make({ id })),
-								),
+								Effect.andThen(Effect.fail(ComputerNotFound.make({ id }))),
 							),
 						machine: () =>
 							Effect.die("A denied token must not open the Computer."),
@@ -408,7 +410,7 @@ describe("Computer tools", () => {
 						holds: () => Effect.succeed(true),
 						machine: () =>
 							Effect.succeed({
-								computer: {} as ComputersApi.Computer,
+								computer: {} as Computer,
 								machine: {} as Machine,
 							}),
 						work: Effect.orDie,
@@ -441,8 +443,7 @@ describe("Computer tools", () => {
 				{
 					computers: {
 						holds: () => Effect.succeed(false),
-						get: (_caller, id) =>
-							Effect.fail(ComputersApi.ComputerNotFound.make({ id })),
+						get: (_caller, id) => Effect.fail(ComputerNotFound.make({ id })),
 					},
 				},
 				({ seen, toolkit }) =>

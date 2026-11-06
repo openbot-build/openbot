@@ -1,12 +1,14 @@
-import { OpenBotApi, Settings as Api } from "@openbot-build/api"
+import { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import { SettingsInvalid } from "@openbot-build/domain/Settings"
+import { Identity } from "@openbot-build/domain/Identity"
+import { OpenBotApi } from "@openbot-build/api"
 
-import { Identity } from "@openbot-build/domain"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import * as DefaultBot from "@openbot-build/conversation-contract/bots/DefaultBot"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as Views from "@openbot-build/server-kernel/settings/Views"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import * as Views from "@openbot-build/server-kernel/Views"
 
 /** The settings of the caller. Each member reads and changes only their own. */
 export const layerMember = HttpApiBuilder.group(
@@ -21,7 +23,7 @@ export const layerMember = HttpApiBuilder.group(
 				Failures.replaceTag(
 					tag,
 					"OpenBot could not check the default Bot.",
-					() => Api.SettingsUnavailable.make({}),
+					() => SettingsUnavailable.make({}),
 				)
 			return handlers
 				.handle("getMemberSettings", () =>
@@ -42,25 +44,25 @@ export const layerMember = HttpApiBuilder.group(
 								Effect.catchTags({
 									BotNotFound: (error) =>
 										Effect.fail(
-											Api.SettingsInvalid.make({
+											SettingsInvalid.make({
 												message: `There is no Bot ${error.bot}.`,
 											}),
 										),
 									Forbidden: () =>
 										Effect.fail(
-											Api.SettingsInvalid.make({
+											SettingsInvalid.make({
 												message: `You cannot give work to Bot ${chosen}.`,
 											}),
 										),
 									Pending: () =>
 										Effect.fail(
-											Api.SettingsInvalid.make({
+											SettingsInvalid.make({
 												message: `You cannot give work to Bot ${chosen}.`,
 											}),
 										),
 									BotInvalid: (error) =>
 										Effect.fail(
-											Api.SettingsInvalid.make({ message: error.message }),
+											SettingsInvalid.make({ message: error.message }),
 										),
 								}),
 							)

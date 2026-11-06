@@ -1,20 +1,13 @@
-import { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
+import { ExecutionIdentity } from "@openbot-build/domain/Identity"
+import { Definition } from "@openbot-build/tools-contract/ToolDefinitions"
 import { Chat, Turn } from "@openbot-build/core"
-import {
-	Execution,
-	ExecutionIdentity,
-	ToolExecution,
-} from "@openbot-build/domain"
+import { Execution, ToolExecution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option, Schema } from "effect"
 import { Prompt } from "effect/ai"
 import * as Db from "@openbot-build/server-database/Database"
 import { toolExecutions } from "@openbot-build/server-database/ExecutionSchema"
-import {
-	Store,
-	storage,
-	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+import { Store, storage, type Key } from "@openbot-build/server-execution/Store"
 import * as ChatHost from "./ChatHost.ts"
 
 export const workflowName = "openbot.tool-call"

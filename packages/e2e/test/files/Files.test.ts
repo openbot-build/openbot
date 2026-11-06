@@ -1,3 +1,6 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { FileObject, DirectUpload } from "@openbot-build/domain/Files"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
 import {
 	BrowserHost,
 	Caller,
@@ -6,7 +9,7 @@ import {
 	Wait,
 } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
-import { FilesApi, ChatCommandReceipt, UserTokensApi } from "@openbot-build/api"
+import { ChatsApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Effect,
@@ -19,9 +22,10 @@ import {
 	Schema,
 	Stream,
 	String as Str,
+	Layer,
 } from "effect"
 import { LanguageModel, type Prompt } from "effect/ai"
-import { HttpClient, HttpClientRequest } from "effect/http"
+import { HttpClient, HttpClientRequest, FetchHttpClient } from "effect/http"
 
 const { settled } = Messages
 type Send = Messages.Send
@@ -185,7 +189,12 @@ const upload = (
 		},
 	}).pipe(HttpClientRequest.bodyFormData(body), HttpClient.execute)
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"files upload to S3, go to the model, and go away when nothing uses them",
 		() =>
@@ -252,7 +261,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						{ cookie: Caller.sessionCookie(alice.session) },
 						form("dot.png", "image/png", "PNGDATA"),
 					),
-					Caller.json(FilesApi.FileObject, 201),
+					Caller.json(FileObject, 201),
 				)
 				assert.strictEqual(image.status, "ready")
 				assert.strictEqual(image.bytes, 7)
@@ -261,7 +270,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// Through the server, with a user token.
 				const { secret } = yield* Effect.flatMap(
 					call(alice.session, "/v1/user/tokens", "POST", { name: "files" }),
-					Caller.json(UserTokensApi.CreatedToken),
+					Caller.json(CreatedToken),
 				)
 				const noteFile = yield* Effect.flatMap(
 					upload(
@@ -269,7 +278,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						{ token: Redacted.value(secret) },
 						form("note.txt", "text/plain", "a note"),
 					),
-					Caller.json(FilesApi.FileObject, 201),
+					Caller.json(FileObject, 201),
 				)
 				const keyed = Caller.withToken(address)
 				assert.strictEqual(
@@ -306,7 +315,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						mediaType: "text/plain",
 						bytes: 6,
 					}),
-					Caller.json(FilesApi.DirectUpload),
+					Caller.json(DirectUpload),
 				)
 				assert.strictEqual(direct.file.status, "pending")
 				assert.ok(Str.startsWith(storageOrigin + "/openbot/files/")(direct.url))
@@ -320,7 +329,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(put.status, 200)
 				const completed = yield* Effect.flatMap(
 					asAlice(`/v1/files/${direct.file.id}/complete`, "POST"),
-					Caller.json(FilesApi.FileObject, 200),
+					Caller.json(FileObject, 200),
 				)
 				assert.strictEqual(completed.status, "ready")
 				const content = yield* asAlice(
@@ -336,7 +345,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						mediaType: "text/plain",
 						bytes: 5,
 					}),
-					Caller.json(FilesApi.DirectUpload),
+					Caller.json(DirectUpload),
 				)
 				assert.strictEqual(
 					(yield* asAlice(`/v1/files/${early2.file.id}/complete`, "POST"))
@@ -365,7 +374,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 							},
 						],
 					}),
-					Caller.json(ChatCommandReceipt, 202),
+					Caller.json(ChatsApi.ChatCommandReceipt, 202),
 				)
 				yield* settled(asAlice, receipt.chat)
 				const part = Arr.last(yield* seen)
@@ -453,7 +462,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						{ cookie: Caller.sessionCookie(alice.session) },
 						form("gone.txt", "text/plain", "bye"),
 					),
-					Caller.json(FilesApi.FileObject),
+					Caller.json(FileObject),
 				)
 				yield* storage.failDeletes(true)
 				assert.strictEqual(
@@ -590,11 +599,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// Ready and pending files both use the quota.
 				const keptFile = yield* Effect.flatMap(
 					send(alice.session, "123456"),
-					Caller.json(FilesApi.FileObject, 201),
+					Caller.json(FileObject, 201),
 				)
 				yield* Effect.flatMap(
 					direct(alice.session, 3),
-					Caller.json(FilesApi.DirectUpload, 201),
+					Caller.json(DirectUpload, 201),
 				)
 
 				const error = yield* Effect.flatMap(

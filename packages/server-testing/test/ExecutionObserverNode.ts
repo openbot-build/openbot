@@ -1,4 +1,4 @@
-import * as ErrorRecords from "@openbot-build/server-kernel/errors/Records"
+import * as ErrorRecords from "@openbot-build/server-kernel/Records"
 import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Execution } from "@openbot-build/domain"
@@ -11,10 +11,9 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Observation from "@openbot-build/server-execution/Observation"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 
 const main = Effect.gen(function* () {
 	const url = yield* Config.Redacted("OBSERVE_DATABASE_URL")
@@ -26,7 +25,7 @@ const main = Effect.gen(function* () {
 		Layer.provideMerge(
 			Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 		),
-		Layer.provideMerge(DatabasePostgres.layer({ databaseUrl: url })),
+		Layer.provideMerge(PgClient.layer({ url: url })),
 	)
 	yield* Effect.gen(function* () {
 		const sql = yield* PgClient.PgClient

@@ -1,7 +1,7 @@
-import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
+import { Identity } from "@openbot-build/domain/Identity"
+import * as HttpErrors from "@openbot-build/server-execution/HttpErrors"
 import { OpenBotApi } from "@openbot-build/api"
 
-import { Identity } from "@openbot-build/domain"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Files } from "@openbot-build/apps-contract/files/Files"

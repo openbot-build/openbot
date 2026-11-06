@@ -1,8 +1,8 @@
-import type { Paused } from "@openbot-build/server-execution/execution/Admission"
+import type { Paused } from "@openbot-build/server-execution/Admission"
 import { type Developers, Execution } from "@openbot-build/domain"
-import type { CallContext } from "@openbot-build/server-execution/execution/CallContext"
-import * as DecisionWait from "@openbot-build/server-execution/execution/DecisionWait"
-import * as ToolDefinitions from "@openbot-build/tools-contract/chats/ToolDefinitions"
+import type { CallContext } from "@openbot-build/server-execution/CallContext"
+import * as DecisionWait from "@openbot-build/server-execution/DecisionWait"
+import * as ToolDefinitions from "@openbot-build/tools-contract/ToolDefinitions"
 import {
 	Operation,
 	type Operations,
@@ -23,18 +23,21 @@ import {
 } from "effect"
 import { Response, type Prompt, type Tool } from "effect/ai"
 import * as Db from "@openbot-build/server-database/Database"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import { Observation } from "@openbot-build/server-execution/Observation"
 import {
 	Store,
 	storage,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import * as ToolResults from "@openbot-build/conversation-contract/chats/ToolResults"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import { ToolCommands } from "@openbot-build/conversation-contract/chats/ToolCommands"
-import { outputCodec } from "@openbot-build/conversation-contract/chats/ToolSteps"
-import { ToolSteps, beforeSend, stepId } from "./ToolSteps.ts"
+import {
+	outputCodec,
+	stepId,
+} from "@openbot-build/conversation-contract/chats/ToolSteps"
+import { ToolSteps, beforeSend } from "./ToolSteps.ts"
 
 type Part = Response.StreamPart<Record<string, Tool.Any>>
 const outputPart = (output: typeof outputCodec.Type): Part =>
@@ -82,8 +85,7 @@ export interface Service {
 }
 
 export class TurnTools extends Context.Service<TurnTools, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-chats/TurnTools",
+	"@openbot-build/plugin-chats/TurnTools",
 ) {}
 
 const make = Effect.gen(function* () {

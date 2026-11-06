@@ -3,7 +3,7 @@ title: Deploy
 description: Run OpenBot on your own server.
 ---
 
-See [account access](/access) for invitation-only upgrade defaults, email login,
+See [account access](/access) for invitation-only defaults, email login,
 approvals, group roles and admin recovery.
 
 For platform operators. These tasks affect the whole deployment. Have server
@@ -66,12 +66,12 @@ The OpenBot image has Node.js, the bundled server, the bundled migration and
 setup programs, and the database migrations. It has no build tools and no
 secrets.
 
-| Path in the image           | What it is                                                |
-| --------------------------- | --------------------------------------------------------- |
-| `/app/dist/app/Main.mjs`    | The server. The image runs it by default.                 |
-| `/app/dist/app/Migrate.mjs` | The migration program. It prepares the database.          |
-| `/app/dist/app/Setup.mjs`   | The setup program. It writes the first platform settings. |
-| `/app/migrations`           | The database migrations.                                  |
+| Path in the image       | What it is                                                |
+| ----------------------- | --------------------------------------------------------- |
+| `/app/dist/Main.mjs`    | The server. The image runs it by default.                 |
+| `/app/dist/Migrate.mjs` | The migration program. It prepares the database.          |
+| `/app/dist/Setup.mjs`   | The setup program. It writes the first platform settings. |
+| `/app/migrations`       | The database migrations.                                  |
 
 The server in the image listens on `0.0.0.0:3000`. The image has a health check
 that calls `/health` every five seconds.
@@ -113,35 +113,29 @@ node. The private RPC client is separate from the App network guard.
 
 ### Prepare the database
 
-The migration program needs `OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS`.
-Stop all OpenBot instances before you run it. Back up the database and the list
-of object storage keys. Keep the old secret keys: the data move needs them to
-open old records. Run it before the first server start and each new release:
+The migration program needs only `OPENBOT_DATABASE_URL`. Stop all OpenBot
+instances before you run it, and back up the database. Run it before the first
+server start and each new release:
 
 ```sh
 docker run --rm --env-file openbot.env \
-  openbot:$OPENBOT_RELEASE /app/dist/app/Migrate.mjs
+  openbot:$OPENBOT_RELEASE /app/dist/Migrate.mjs
 ```
 
-The same migration changes supported UUID columns from text to PostgreSQL
-`uuid`. These columns store each ID in 16 bytes. Old v4 values keep their value;
-new stored IDs use v7 where time order helps. Columns with mixed or outside IDs
-keep their text form. Run this change with all servers stopped, as above.
+All migrations of one run go in one transaction. When one fails, the database
+keeps its old schema.
 
-Run the same command again after a stopped data move. Each batch commits its
-changes and progress together. A bad record stops the move and saves a sealed
-failure report. The program checks counts, references, secrets and states before
-it marks the data version ready. A server cannot start before that check passes.
-Live servers hold a shared database lock; the data move needs the only lock.
+This version needs a new database. It does not read data in the forms of older
+versions, and it does not move such data. When the database holds data of an
+older version, the migration stops with this error and changes nothing:
 
-Keep resource IDs, history and pending decisions in the backup. An old outside
-action with no known result stays `outcome_unknown`. Work with no safe
-checkpoint is marked `interrupted` with its reason. A missing original token
-never becomes an unrestricted member call.
+```text
+This database holds data of an older OpenBot version (...). This version works
+only with a new database. Make a new database and run openbot migrate on it.
+```
 
-Before traffic returns, you can restore the backup. Once outside actions start
-again, repair data by moving forward. Do not restore old data and repeat those
-actions.
+The words in the brackets say what the migration found. Make a new, empty
+database for this version, and run the migration on it.
 
 </Step>
 <Step>
@@ -153,7 +147,7 @@ Run the setup program once, on a new database:
 ```sh
 docker run --rm --env-file openbot.env \
   -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
-  /app/dist/app/Setup.mjs \
+  /app/dist/Setup.mjs \
   --config=/run/setup.json
 ```
 
@@ -174,8 +168,9 @@ docker run -d --name openbot --env-file openbot.env \
   -p 127.0.0.1:8080:3000 openbot:$OPENBOT_RELEASE
 ```
 
-When the server starts, it checks the tables and the completed data version. If
-either check fails, it stops and writes an error to the log.
+When the server starts, it checks that the newest migration ran and that every
+table has its columns. If either check fails, it stops and writes an error to
+the log.
 
 </Step>
 <Step>
@@ -242,8 +237,8 @@ and `OPENBOT_CLUSTER_SECRET` as files in `/run/secrets`. Their values come from
 `.env.production`. The `openbot` service also gets `OPENBOT_OUTBOUND_ALLOW`,
 `OPENBOT_CLUSTER_HOST`, and `OPENBOT_PLUGINS_FILE`. Compose mounts
 `deploy/docker/plugins.yml` read only at `/etc/openbot/plugins.yml`. Product
-settings live in the database. The `migrate` service needs
-`OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS`.
+settings live in the database. The `migrate` service needs only
+`OPENBOT_DATABASE_URL`.
 
 In the template, `OPENBOT_DATABASE_URL` uses `${POSTGRES_PASSWORD}`, so you set
 the password only once.
@@ -305,7 +300,7 @@ Run the setup program once, after the first `up`:
 
 ```sh
 docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
-  run --rm -v "$PWD/setup.json:/run/setup.json:ro" openbot /app/dist/app/Setup.mjs \
+  run --rm -v "$PWD/setup.json:/run/setup.json:ro" openbot /app/dist/Setup.mjs \
   --config=/run/setup.json
 ```
 

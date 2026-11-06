@@ -1,9 +1,11 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import * as Read from "./Read.ts"
 import {
 	BrowserHost,
 	Caller,
-	Messages,
 	Chats,
+	Messages,
 } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -14,10 +16,11 @@ import {
 	Schema,
 	Stream,
 	String as Str,
+	Layer,
 } from "effect"
 import { LanguageModel, Response } from "effect/ai"
 import { Execution } from "@openbot-build/domain"
-import { HostTools } from "@openbot-build/openbot"
+import * as HostTools from "@openbot-build/tools-contract/HostTools"
 
 const usage = {
 	inputTokens: { total: 1, uncached: 1, cacheRead: 0, cacheWrite: 0 },
@@ -27,10 +30,13 @@ const usage = {
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 
 // The database is a real server, so the test runs on the real clock.
-layer(BrowserHost.layerPlatform, {
-	excludeTestServices: true,
-	timeout: "60 seconds",
-})((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+		timeout: "60 seconds",
+	},
+)((it) => {
 	it.effect(
 		"a long Chat gets a summary of its older context when it gets near the window of its model",
 		() =>

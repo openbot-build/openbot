@@ -1,12 +1,27 @@
+import { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
 import {
-	type Roles as RolesApi,
-	OrganizationApi,
-	OpenBotApi,
-	Settings as SettingsApi,
-} from "@openbot-build/api"
+	OrganizationStorageUnavailable,
+	type AuditAction,
+	type Member,
+	type UpdateMemberRequest,
+	MemberNotFound,
+	RoleNotFound,
+	RoleReadOnly,
+	RoleInUse,
+	OrganizationCreationDisabled,
+} from "@openbot-build/domain/Organizations"
+import {
+	type UpdateOrganizationSettingsRequest,
+	SettingsInvalid,
+} from "@openbot-build/domain/Settings"
+import {
+	InvitationNotFound,
+	InvitationInvalid,
+} from "@openbot-build/domain/Invitation"
+import { type Caller, Identity, Account } from "@openbot-build/domain/Identity"
+import { OpenBotApi } from "@openbot-build/api"
 
-import { Authorization } from "@openbot-build/domain"
-import { Account, type Caller, Identity } from "@openbot-build/domain"
+import { Authorization, type Roles as RolesApi } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
@@ -18,24 +33,20 @@ import {
 	Struct,
 } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import { noMoreThanCaller } from "@openbot-build/identity-contract/authorization/Escalation"
-import {
-	organizationKey,
-	userKey,
-} from "@openbot-build/identity-contract/audit/Resources"
+import { organizationKey, userKey } from "@openbot-build/domain/AuditResources"
 import { Roles } from "@openbot-build/identity-contract/authorization/Roles"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as Views from "@openbot-build/server-kernel/settings/Views"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import * as Views from "@openbot-build/server-kernel/Views"
 import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
 import { Mail } from "@openbot-build/identity-contract/mail/Mail"
 
 const superAdministrator = "super_administrator"
-const storageUnavailable = () =>
-	OrganizationApi.OrganizationStorageUnavailable.make({})
+const storageUnavailable = () => OrganizationStorageUnavailable.make({})
 /** Logs a storage failure, then fails with the public error in its place. */
 const replaceStorage = (message: string) =>
 	Failures.replace(message, storageUnavailable)
@@ -72,7 +83,7 @@ const organizationGroup = HttpApiBuilder.group(
 			const audit = yield* AuditLog
 			const record = (
 				caller: Caller,
-				action: OrganizationApi.AuditAction,
+				action: AuditAction,
 				resource: string,
 				details: Parameters<typeof audit.record>[0]["details"],
 			) =>
@@ -91,10 +102,7 @@ const organizationGroup = HttpApiBuilder.group(
 			 */
 			const checkModels = (
 				caller: Caller,
-				changes: Omit<
-					SettingsApi.UpdateOrganizationSettingsRequest,
-					"expectedVersion"
-				>,
+				changes: Omit<UpdateOrganizationSettingsRequest, "expectedVersion">,
 			) =>
 				Effect.gen(function* () {
 					const { botMemoryModel } = changes
@@ -103,7 +111,7 @@ const organizationGroup = HttpApiBuilder.group(
 						.view(caller.organizationId)
 						.pipe(
 							Failures.replace("OpenBot could not read the model catalog", () =>
-								SettingsApi.SettingsUnavailable.make({}),
+								SettingsUnavailable.make({}),
 							),
 						)
 					const model = Arr.findFirst(
@@ -113,7 +121,7 @@ const organizationGroup = HttpApiBuilder.group(
 							model.id === botMemoryModel.model,
 					)
 					if (Option.isSome(model) && model.value.type !== "language")
-						return yield* SettingsApi.SettingsInvalid.make({
+						return yield* SettingsInvalid.make({
 							message: `botMemoryModel cannot be a ${model.value.type} model.`,
 						})
 				})
@@ -147,8 +155,8 @@ const organizationGroup = HttpApiBuilder.group(
 			 */
 			const guardSuperAdministrator = (
 				caller: Caller,
-				target: OrganizationApi.Member,
-				patch: OrganizationApi.UpdateMemberRequest,
+				target: Member,
+				patch: UpdateMemberRequest,
 			) =>
 				target.roles.includes(superAdministrator) ||
 				(patch.roles?.includes(superAdministrator) ?? false) ||
@@ -161,9 +169,7 @@ const organizationGroup = HttpApiBuilder.group(
 					.pipe(
 						replaceStorage("OpenBot could not read the member"),
 						Effect.flatMap(
-							Effect.fromOption(() =>
-								OrganizationApi.MemberNotFound.make({ userId }),
-							),
+							Effect.fromOption(() => MemberNotFound.make({ userId })),
 						),
 					)
 			const findRole = (caller: Caller, roleId: RolesApi.RoleId) =>
@@ -172,9 +178,7 @@ const organizationGroup = HttpApiBuilder.group(
 					.pipe(
 						replaceStorage("OpenBot could not read the role"),
 						Effect.flatMap(
-							Effect.fromOption(() =>
-								OrganizationApi.RoleNotFound.make({ roleId }),
-							),
+							Effect.fromOption(() => RoleNotFound.make({ roleId })),
 						),
 					)
 			/**
@@ -223,12 +227,12 @@ const organizationGroup = HttpApiBuilder.group(
 												.pipe(
 													Failures.replace(
 														"OpenBot could not read the role",
-														() => SettingsApi.SettingsUnavailable.make({}),
+														() => SettingsUnavailable.make({}),
 													),
 												),
 										)
 									)
-										return yield* SettingsApi.SettingsInvalid.make({
+										return yield* SettingsInvalid.make({
 											message: `The role ${roleId} does not exist.`,
 										})
 							}
@@ -426,7 +430,7 @@ const organizationGroup = HttpApiBuilder.group(
 									(item) => item.id === params.invitationId,
 								),
 								() =>
-									OrganizationApi.InvitationNotFound.make({
+									InvitationNotFound.make({
 										invitationId: params.invitationId,
 									}),
 							)
@@ -437,7 +441,7 @@ const organizationGroup = HttpApiBuilder.group(
 								invitation.status !== "pending" ||
 								expiresAt <= (yield* Clock.currentTimeMillis)
 							)
-								return yield* OrganizationApi.InvitationInvalid.make({
+								return yield* InvitationInvalid.make({
 									message:
 										"Only a pending invitation that has not ended can be sent.",
 								})
@@ -550,7 +554,7 @@ const organizationGroup = HttpApiBuilder.group(
 							const caller = yield* Identity
 							const role = yield* findRole(caller, params.roleId)
 							if (role.builtin)
-								return yield* OrganizationApi.RoleReadOnly.make({
+								return yield* RoleReadOnly.make({
 									roleId: role.id,
 								})
 							if (
@@ -562,7 +566,7 @@ const organizationGroup = HttpApiBuilder.group(
 										),
 									)
 							)
-								return yield* OrganizationApi.RoleInUse.make({
+								return yield* RoleInUse.make({
 									roleId: role.id,
 								})
 							yield* roles
@@ -609,7 +613,7 @@ const organizationsGroup = HttpApiBuilder.group(
 			const record = (
 				userId: string,
 				organizationId: string,
-				action: OrganizationApi.AuditAction,
+				action: AuditAction,
 				details: Parameters<typeof audit.record>[0]["details"],
 			) =>
 				audit
@@ -626,7 +630,7 @@ const organizationsGroup = HttpApiBuilder.group(
 				Effect.gen(function* () {
 					const account = yield* Account
 					if (account.tokenId !== undefined)
-						return yield* OrganizationApi.InvitationInvalid.make({
+						return yield* InvitationInvalid.make({
 							message: "Use the session cookie to answer an invitation.",
 						})
 					const invitation = yield* organization
@@ -693,9 +697,7 @@ const organizationsGroup = HttpApiBuilder.group(
 										),
 									))
 							)
-								return yield* OrganizationApi.OrganizationCreationDisabled.make(
-									{},
-								)
+								return yield* OrganizationCreationDisabled.make({})
 							return yield* organization
 								.create({ name: payload.name, owner: { id: account.userId } })
 								.pipe(replaceStorage("OpenBot could not make the organization"))
@@ -712,7 +714,7 @@ const organizationsGroup = HttpApiBuilder.group(
 								account.organizationId !== undefined &&
 								account.organizationId !== params.organizationId
 							)
-								return yield* OrganizationApi.MemberNotFound.make({
+								return yield* MemberNotFound.make({
 									userId: account.userId,
 								})
 							yield* organization

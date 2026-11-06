@@ -20,9 +20,9 @@ import {
 	HttpServerResponse,
 } from "effect/http"
 import { fetch as undiciFetch, getGlobalDispatcher } from "undici"
-import * as EnvironmentConfiguration from "@openbot-build/server-kernel/configuration/EnvironmentConfiguration"
-import * as OutboundGuard from "@openbot-build/server-kernel/network/OutboundGuard"
-import * as OutboundPolicy from "@openbot-build/server-kernel/network/OutboundPolicy"
+import * as EnvironmentConfiguration from "@openbot-build/server-kernel/EnvironmentConfiguration"
+import * as OutboundGuard from "@openbot-build/server-kernel/OutboundGuard"
+import * as OutboundPolicy from "@openbot-build/server-kernel/OutboundPolicy"
 
 /**
  * Starts a test HTTP server on 127.0.0.1. It counts the requests that reach

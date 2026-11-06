@@ -9,8 +9,6 @@ import {
 	OAuthAuthorization,
 	Store,
 } from "@openbot-build/protocol"
-import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
-import { OutboundPolicy } from "@openbot-build/server-kernel/network/OutboundPolicy"
 import {
 	Array as Arr,
 	Context,
@@ -23,20 +21,18 @@ import {
 import { SecureRandom } from "effect/crypto"
 import { ProtocolStores, toStoreError } from "./ProtocolStores.ts"
 import type { PgClient } from "@effect/sql-pg"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
 import { Governance } from "./Governance.ts"
 import type {
 	AppConnections as ConnectionDomain,
 	AppIndex,
 } from "@openbot-build/domain"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import * as HostApp from "./HostApp.ts"
-import { Probe } from "./Probe.ts"
+import { Probe } from "@openbot-build/apps-contract/apps/Probe"
 import * as Db from "@openbot-build/server-database/Database"
 import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
-export { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
-
 type AuthorizationError =
 	| Authorization.AuthorizationError
 	| Network.NetworkError
@@ -73,21 +69,6 @@ export type BoundApp = Omit<HostApp.Service, "add"> & {
 	>
 }
 
-export const layerNetwork = Layer.effect(
-	AppNetwork,
-	Effect.gen(function* () {
-		const policy = yield* OutboundPolicy
-		return {
-			layer: (owner: string, origins: ReadonlyArray<string>) =>
-				NodeHttpServer.layerUserNetwork({
-					owner,
-					allowedOrigins: origins,
-					allowAddress: policy.allowAddress,
-				}),
-		}
-	}),
-)
-
 /** Build a closed App service for the current owner and invocation policy. */
 export class AppHost extends Context.Service<
 	AppHost,
@@ -97,8 +78,7 @@ export class AppHost extends Context.Service<
 			policy: typeof Client.InvocationPolicy.Service,
 		) => BoundApp
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/AppHost") {}
+>()("@openbot-build/plugin-apps/AppHost") {}
 
 export const make: Effect.Effect<
 	typeof AppHost.Service,

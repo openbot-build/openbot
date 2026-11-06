@@ -1,11 +1,10 @@
 import {
+	ExperienceStorageUnavailable,
 	type ExperienceInputInvalid,
 	type ExperienceNotFound,
-	AppConnections,
-	Authorization,
-	ExperienceStorageUnavailable,
-	Identity,
-} from "@openbot-build/domain"
+} from "@openbot-build/domain/ExperienceErrors"
+import { Identity } from "@openbot-build/domain/Identity"
+import { AppConnections, Authorization } from "@openbot-build/domain"
 import type { Discovery } from "@openbot-build/protocol"
 import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
@@ -14,7 +13,7 @@ import { Array as Arr, Context, Effect, Layer } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Connections, type Error as ConnectionsError } from "./Connections.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 
 /**
  * Keep the Experience errors of a Connections call. The other Connections
@@ -109,8 +108,7 @@ export interface Service {
 }
 
 export class Experience extends Context.Service<Experience, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-apps/Experience",
+	"@openbot-build/plugin-apps/Experience",
 ) {}
 
 export const make = Effect.gen(function* () {

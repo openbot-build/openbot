@@ -1,5 +1,7 @@
-import { Files as FilesApi, type MessageInput } from "@openbot-build/domain"
-import { Authorization, Execution, type Caller } from "@openbot-build/domain"
+import type { Caller } from "@openbot-build/domain/Identity"
+import type { MessageInput } from "@openbot-build/domain/Chats"
+import { Files as FilesApi } from "@openbot-build/domain"
+import { Authorization, Execution } from "@openbot-build/domain"
 import { Context, Effect, Option, Stream } from "effect"
 import { Prompt } from "effect/ai"
 import { Multipart } from "effect/http"
@@ -90,7 +92,6 @@ export class Files extends Context.Service<
 			id: string,
 		) => Effect.Effect<Option.Option<Content>, FilesApi.FilesUnavailable>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/apps-contract/files/Files") {}
+>()("@openbot-build/apps-contract/files/Files") {}
 
 export { type Failure }

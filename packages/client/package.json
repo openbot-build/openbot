@@ -8,7 +8,8 @@
 	"exports": {
 		".": "./dist/index.js",
 		"./Api": "./dist/Api.js",
-		"./Core": "./dist/Core.js"
+		"./Core": "./dist/Core.js",
+		"./Domain": "./dist/Domain.js"
 	},
 	"files": [
 		"dist",

@@ -1,5 +1,6 @@
+import { ServiceId } from "@openbot-build/domain/Identity"
 import { assert, it } from "@effect/vitest"
-import { Execution, ServiceId } from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Deferred,
@@ -11,14 +12,14 @@ import {
 	Schema,
 	Scope,
 } from "effect"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import * as Engine from "@openbot-build/server-execution/Engine"
 import {
 	Duplicate,
 	Policy,
 	Unavailable,
 	Workflows,
 	layer,
-} from "@openbot-build/server-execution/execution/Workflows"
+} from "@openbot-build/server-execution/Workflows"
 
 const key = { namespace: "test", id: Execution.Id.make("work") }
 const member = {

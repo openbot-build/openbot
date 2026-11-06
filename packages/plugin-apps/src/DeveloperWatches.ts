@@ -1,3 +1,4 @@
+import { ServiceId, type ServiceIdentity } from "@openbot-build/domain/Identity"
 import {
 	type ServiceExecution,
 	Store,
@@ -5,14 +6,9 @@ import {
 	transactionFailures,
 	type Key,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
-import {
-	type Developers,
-	Execution,
-	ServiceId,
-	type ServiceIdentity,
-} from "@openbot-build/domain"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+} from "@openbot-build/server-execution/Store"
+import { type Developers, Execution } from "@openbot-build/domain"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
 import { type SqlError, SqlClient } from "effect/sql"
 import { and, eq } from "drizzle-orm"
@@ -21,7 +17,7 @@ import { Digest, SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import * as Db from "@openbot-build/server-database/Database"
 import { developerWatches } from "@openbot-build/server-database/Schema"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
 
 export const workflowName = "openbot.developer-watch"
 export const serviceId = ServiceId.make("developer-monitor")
@@ -104,8 +100,7 @@ export interface Service {
 export class DeveloperWatches extends Context.Service<
 	DeveloperWatches,
 	Service
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/DeveloperWatches") {}
+>()("@openbot-build/plugin-apps/DeveloperWatches") {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
@@ -113,7 +108,7 @@ const make = Effect.gen(function* () {
 	const store = yield* Store
 	const crypto = yield* SecureRandom.SecureRandom
 	const hashes = yield* Digest.Digest
-	const namespace = yield* IndexNamespace
+	const namespace = yield* instanceNamespace
 	const executionNamespace = `developer-monitor:${namespace}`
 	const where = (ref: Reference) =>
 		and(

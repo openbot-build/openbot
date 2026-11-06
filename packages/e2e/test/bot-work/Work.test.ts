@@ -1,3 +1,10 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { ChatTodos } from "@openbot-build/domain/Todos"
+import {
+	OrganizationSettings,
+	MemberSettings,
+} from "@openbot-build/domain/Settings"
+import { Bot } from "@openbot-build/domain/Bots"
 import {
 	BrowserHost,
 	Caller,
@@ -7,14 +14,7 @@ import {
 import { assert, layer } from "@effect/vitest"
 import { Item } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
-import {
-	BotsApi,
-	ExecutionsApi,
-	ChatTodos,
-	ChatView,
-	RequestsApi,
-	Settings,
-} from "@openbot-build/api"
+import { ExecutionsApi, RequestsApi, ChatsApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Clock,
@@ -27,9 +27,10 @@ import {
 	Schema,
 	Stream,
 	String as Str,
+	Layer,
 } from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
-import type { HttpMethod } from "effect/http"
+import { type HttpMethod, FetchHttpClient } from "effect/http"
 
 const publicOrigin = "https://work.example.com"
 const usage = {
@@ -308,7 +309,12 @@ const chat = Effect.fn("Work.chat")(function* (
 })
 
 // The host is a real server with real time.
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"a Bot keeps working while its todos are open, and a person reads and replaces the list",
 		() =>
@@ -344,7 +350,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const path = yield* work.path
 				const current = yield* work.view
 				const replaced = yield* json(
-					ChatView,
+					ChatsApi.ChatView,
 					send(alice.session, path + "/todos", "PUT", {
 						revision: current.chat.revision,
 						items: [todo("c", "pending")],
@@ -492,7 +498,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const { send, json } = client(host)
 				const alice = yield* host.login("plan-alice")
 				const organization = yield* json(
-					Settings.OrganizationSettings,
+					OrganizationSettings,
 					send(alice.session, "/v1/organization/settings"),
 				)
 				assert.deepStrictEqual(organization.planApproval, {
@@ -502,7 +508,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				})
 				// Alice says that her plans stay plans when nobody answers within one second.
 				const mine = yield* json(
-					Settings.MemberSettings,
+					MemberSettings,
 					send(alice.session, "/v1/me/settings", "PATCH", {
 						expectedVersion: 0,
 						planApproval: {
@@ -616,7 +622,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// 4. A Bot setting comes before the member setting.
 				const main = yield* json(
-					BotsApi.Bot,
+					Bot,
 					send(alice.session, "/v1/bots/" + defaultBot),
 				)
 				const changed = yield* send(

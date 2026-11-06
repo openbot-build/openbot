@@ -1,3 +1,4 @@
+import { TokenId } from "@openbot-build/domain/TokenId"
 import { Schema } from "effect"
 import {
 	HttpApiEndpoint,
@@ -5,8 +6,6 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import { TokenId } from "./TokenId.ts"
-export { TokenId } from "./TokenId.ts"
 import { NoStore } from "./AuthApi.ts"
 import { Required } from "./Authorization.ts"
 import {
@@ -18,19 +17,6 @@ import {
 	TokenLimitReached,
 	TokenStorageUnavailable,
 } from "@openbot-build/domain/Tokens"
-export {
-	SecretPrefix,
-	MaxTokens,
-	TokenName,
-	Token,
-	CreateTokenRequest,
-	CreatedToken,
-	TokenVerification,
-	TokenNotFound,
-	TokenLimitReached,
-	TokenStorageUnavailable,
-} from "@openbot-build/domain/Tokens"
-
 const errors = [
 	TokenStorageUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const

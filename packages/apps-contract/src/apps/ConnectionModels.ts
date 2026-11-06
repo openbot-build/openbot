@@ -1,4 +1,5 @@
-import { AppConnections, ConnectionId } from "@openbot-build/domain"
+import type { ConnectionId } from "@openbot-build/domain/ConnectionId"
+import { AppConnections } from "@openbot-build/domain"
 import { Discovery, Document } from "@openbot-build/protocol"
 import { Schema } from "effect"
 

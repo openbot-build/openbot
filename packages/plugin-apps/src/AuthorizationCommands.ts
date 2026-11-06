@@ -1,3 +1,10 @@
+import { scopeOf } from "@openbot-build/apps-contract/apps/GrantUses"
+import {
+	Caller,
+	executionCallers,
+	type ExecutionIdentity,
+} from "@openbot-build/domain/Identity"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
 import {
 	type MemberExecution,
 	Store,
@@ -5,24 +12,20 @@ import {
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import {
 	type SecretStorageError,
 	Secrets,
-} from "@openbot-build/server-kernel/secrets/Secrets"
+} from "@openbot-build/server-kernel/Secrets"
 import {
 	type Developers,
 	AppAuthorizations,
 	Authorization,
-	Caller,
-	ConnectionId,
 	Execution,
-	ExecutionIdentity,
-	executionCallers,
 } from "@openbot-build/domain"
 import * as GrantUses from "@openbot-build/apps-contract/apps/GrantUses"
 import * as GrantCleanup from "./GrantCleanup.ts"
-import * as RetryingCall from "@openbot-build/server-execution/execution/RetryingCall"
+import * as RetryingCall from "@openbot-build/server-execution/RetryingCall"
 import {
 	Authorization as OAuth,
 	OAuthAuthorization,
@@ -47,8 +50,8 @@ import {
 	appConnections,
 	appSecrets,
 } from "@openbot-build/server-database/Schema"
-import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
-import type { End } from "@openbot-build/server-execution/execution/Program"
+import type { Authorize } from "@openbot-build/server-execution/Engine"
+import type { End } from "@openbot-build/server-execution/Program"
 import { Governance } from "./Governance.ts"
 import * as Connections from "@openbot-build/apps-contract/apps/StoredConnections"
 
@@ -194,8 +197,7 @@ export interface Service {
 export class AuthorizationCommands extends Context.Service<
 	AuthorizationCommands,
 	Service
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/AuthorizationCommands") {}
+>()("@openbot-build/plugin-apps/AuthorizationCommands") {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
@@ -415,7 +417,6 @@ const make = Effect.gen(function* () {
 							if (
 								row.status !== "Received" ||
 								row.callback === null ||
-								row.actor === null ||
 								row.expiresAt <= (yield* Clock.currentTimeMillis) ||
 								row.revision !== current.value.revision
 							)
@@ -539,9 +540,7 @@ const make = Effect.gen(function* () {
 					const { saved, input } = yield* guard(fence)
 					const grant = result?.grant ?? null
 					if (grant !== null)
-						yield* cleanup.assertInstallable(
-							GrantCleanup.scopeOf(grant.credential),
-						)
+						yield* cleanup.assertInstallable(scopeOf(grant.credential))
 					if (result !== null) {
 						if (input._tag !== "Complete" && input._tag !== "Refresh")
 							return yield* Execution.Conflict.make({ id: fence.id })

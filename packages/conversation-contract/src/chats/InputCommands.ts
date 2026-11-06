@@ -1,11 +1,12 @@
+import { ExecutionIdentity, Caller } from "@openbot-build/domain/Identity"
 import { type ChatStore, Chat, Item, Turn } from "@openbot-build/core"
 import { type SqlError } from "effect/sql"
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
-import { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
-import { Caller, Execution, ExecutionIdentity } from "@openbot-build/domain"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
+import { Definition } from "@openbot-build/tools-contract/ToolDefinitions"
+import { Execution } from "@openbot-build/domain"
 import { Context, Effect, Option, Schema } from "effect"
-import { type Fence } from "@openbot-build/server-execution/execution/Store"
+import { type Fence } from "@openbot-build/server-execution/Store"
 
 export const Input = Schema.Struct({
 	chat: Chat.Id,
@@ -127,6 +128,5 @@ export interface Service {
 }
 
 export class InputCommands extends Context.Service<InputCommands, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/conversation-contract/chats/InputCommands",
+	"@openbot-build/conversation-contract/chats/InputCommands",
 ) {}

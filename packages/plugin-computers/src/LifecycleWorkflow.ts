@@ -1,23 +1,17 @@
 import { Computers as ComputerData } from "@openbot-build/domain"
 import { Effect, Layer, Option, Schema } from "effect"
 import { WorkAdmission } from "@openbot-build/conversation-contract/chats/WorkAdmission"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import {
-	Policy,
-	Workflows,
-} from "@openbot-build/server-execution/execution/Workflows"
-import * as Program from "@openbot-build/server-execution/execution/Program"
-import {
-	Store,
-	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import { Policy, Workflows } from "@openbot-build/server-execution/Workflows"
+import * as Program from "@openbot-build/server-execution/Program"
+import { Store, type Fence } from "@openbot-build/server-execution/Store"
 import { workflowName } from "./Activity.ts"
-import type { ComputerError } from "./Computer.ts"
+import type { ComputerError } from "@openbot-build/apps-contract/computers/Computer"
 import { ComputerProviders } from "./ComputerProviders.ts"
-import { Drivers } from "./Drivers.ts"
+import { Drivers } from "@openbot-build/apps-contract/computers/Drivers"
 import { Lifecycle, Result } from "./Lifecycle.ts"
-import { Connectors } from "./connector/Connectors.ts"
+import { Connectors } from "./Connectors.ts"
 
 export const workflow = Engine.define(workflowName)
 /** Only the workflow can write provider lifecycle results into Computer state. */

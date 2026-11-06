@@ -23,27 +23,27 @@ import {
 	DecisionModel,
 	Telemetry,
 } from "effect/ai"
-import type * as Report from "@openbot-build/server-kernel/errors/Report"
-import { decodeEvent } from "@openbot-build/model-providers/providers/openai/OpenAiRealtime"
-import { snapshot } from "@openbot-build/server-kernel/errors/Snapshot"
+import type * as Report from "@openbot-build/server-kernel/Report"
+import { decodeEvent } from "@openbot-build/model-providers/OpenAiRealtime"
+import { snapshot } from "@openbot-build/server-kernel/Snapshot"
 import { TestClock } from "effect/testing"
 import {
 	type Billing,
 	BillingStorageError,
 	SpendingBlocked,
 	type Tokens,
-} from "@openbot-build/server-billing/billing/Billing"
+} from "@openbot-build/server-billing/Billing"
 import {
 	meter,
 	meterDecision,
 	CurrentCallIdentity,
 	attribute,
-} from "@openbot-build/server-billing/billing/MeteredModel"
+} from "@openbot-build/server-billing/MeteredModel"
 import {
 	type Scope,
 	TokenThrottle,
 	Unavailable as TokenRateUnavailable,
-} from "@openbot-build/server-billing/billing/TokenThrottle"
+} from "@openbot-build/server-billing/TokenThrottle"
 
 const unexpectedReport: Report.Report = () =>
 	Effect.die("No report is expected.")

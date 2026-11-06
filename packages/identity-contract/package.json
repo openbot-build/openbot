@@ -12,7 +12,6 @@
 	"exports": {
 		"./access/Access": "./dist/access/Access.js",
 		"./audit/AuditLog": "./dist/audit/AuditLog.js",
-		"./audit/Resources": "./dist/audit/Resources.js",
 		"./auth/Auth": "./dist/auth/Auth.js",
 		"./auth/SessionHttp": "./dist/auth/SessionHttp.js",
 		"./auth/Tokens": "./dist/auth/Tokens.js",
@@ -44,6 +43,7 @@
 	"devDependencies": {
 		"@effect/platform-node": "4.1.2",
 		"@effect/vitest": "4.1.2",
+		"@openbot-build/server-database": "workspace:*",
 		"vitest": "5.0.5"
 	},
 	"repository": {

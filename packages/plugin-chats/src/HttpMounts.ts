@@ -1,8 +1,8 @@
 import { AuthApi, Authorization, FailureApi } from "@openbot-build/api"
 import { Effect, Layer } from "effect"
-import { HttpHost } from "@openbot-build/server-kernel/errors/HttpHost"
+import { HttpHost } from "@openbot-build/server-kernel/HttpHost"
 import * as ChatHandlers from "./ChatHandlers.ts"
-import * as LiveHandlers from "./live/LiveHandlers.ts"
+import * as LiveHandlers from "./LiveHandlers.ts"
 import * as ToolHandlers from "./ToolHttpHandlers.ts"
 
 /**

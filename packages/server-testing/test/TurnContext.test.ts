@@ -1,3 +1,10 @@
+import {
+	TurnContext as TurnContextModel,
+	MemberInactive,
+} from "@openbot-build/conversation-contract/chats/TurnContext"
+import type { ExecutionIdentity } from "@openbot-build/domain/Identity"
+import { TokenId } from "@openbot-build/domain/TokenId"
+import { BotId } from "@openbot-build/domain/BotId"
 import { assert, it } from "@effect/vitest"
 import {
 	ChatStoreRepository,
@@ -5,19 +12,14 @@ import {
 	Store,
 	Turn,
 } from "@openbot-build/core"
-import {
-	Execution,
-	TokenId,
-	BotId,
-	type ExecutionIdentity,
-} from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import { Effect, Layer, Schema } from "effect"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import * as TurnContext from "@openbot-build/plugin-chats/TurnContext"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
 import { bot } from "./BotFixture.ts"
-import { layerEveryoneAdministrator } from "./OrganizationFixture.ts"
+import { layerEveryoneAdministrator } from "../src/OrganizationFixture.ts"
 
 const turn = Turn.Id.make("turn_1")
 const identity: ExecutionIdentity = {
@@ -81,7 +83,7 @@ const services = TurnContext.layer.pipe(
 
 it.effect("a Turn keeps its speaker and token apart from its owner", () =>
 	Effect.gen(function* () {
-		const context = yield* TurnContext.TurnContext
+		const context = yield* TurnContextModel
 		const view = yield* fixture
 		const first = yield* context.prepare({
 			identity,
@@ -100,7 +102,7 @@ for (const removed of ["owner_1", "speaker_1"]) {
 	it.effect(`a Turn stops when ${removed} is no longer active`, () =>
 		Effect.gen(function* () {
 			const original = yield* Organization
-			const context = yield* TurnContext.TurnContext.pipe(
+			const context = yield* TurnContextModel.pipe(
 				Effect.provide(
 					TurnContext.layer.pipe(
 						Layer.provide(bots),
@@ -128,14 +130,14 @@ for (const removed of ["owner_1", "speaker_1"]) {
 					turn,
 				})
 				.pipe(Effect.flip)
-			assert.instanceOf(failure, TurnContext.MemberInactive)
+			assert.instanceOf(failure, MemberInactive)
 		}).pipe(Effect.provide(layerEveryoneAdministrator)),
 	)
 }
 
 it.effect("a saved tool keeps its original Turn after the Chat moves on", () =>
 	Effect.gen(function* () {
-		const context = yield* TurnContext.TurnContext
+		const context = yield* TurnContextModel
 		const view = yield* fixture
 		const original = Turn.Id.make("old_turn")
 		const work = yield* context.prepare({
@@ -157,7 +159,7 @@ for (const bad of [
 ] as const) {
 	it.effect("a Turn rejects an identity for another resource", () =>
 		Effect.gen(function* () {
-			const context = yield* TurnContext.TurnContext
+			const context = yield* TurnContextModel
 			const failure = yield* context
 				.prepare({
 					identity: bad,

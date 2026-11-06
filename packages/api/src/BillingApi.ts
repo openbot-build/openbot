@@ -12,44 +12,6 @@ import {
 	BudgetConflict,
 	BudgetInvalid,
 } from "@openbot-build/domain/Billing"
-export {
-	CreditConflict,
-	UsageStatus,
-	UsageQueryInvalid,
-	Micros,
-	NonNegativeMicros,
-	Rates,
-	PriceTier,
-	PriceTiers,
-	TimeOfDay,
-	Weekday,
-	TimeWindow,
-	PricePeriod,
-	TimeZone,
-	PriceSchedule,
-	ModelPrice,
-	SetModelPriceRequest,
-	ModelPrices,
-	UsageSource,
-	UsageEvent,
-	UsageTotals,
-	UsageGroupBy,
-	UsageSummary,
-	CreditGrant,
-	Credits,
-	UpdateCreditsRequest,
-	GrantCreditsRequest,
-	BudgetScope,
-	BudgetPeriod,
-	BudgetMode,
-	BudgetId,
-	Budget,
-	CreateBudgetRequest,
-	UpdateBudgetRequest,
-	BudgetNotFound,
-	BudgetConflict,
-	BudgetInvalid,
-} from "@openbot-build/domain/Billing"
 import { Schema } from "effect"
 import {
 	HttpApi,
@@ -87,7 +49,7 @@ const budgetErrors = [
 const range = {
 	/** The start, as an ISO time. Leave it out for the start of the current month in UTC. */
 	from: Schema.optionalKey(Schema.String),
-	/** The end, as an ISO time. Leave it out for now. */
+	/** The end, as an ISO time. Leave it out for the current time. */
 	to: Schema.optionalKey(Schema.String),
 }
 

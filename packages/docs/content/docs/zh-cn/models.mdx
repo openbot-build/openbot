@@ -291,11 +291,6 @@ OpenBot 从不替你选模型。没有默认模型。每种用途都要指明自
 必须是 `language` 模型，因为记忆 Bot 要写文本。否则 OpenBot 返回 `400` 和
 `SettingsInvalid`。目录会给出每个模型的 `type`，Chat 只能选择 `language` 模型。
 
-旧版本的 OpenBot 有 `defaultModel` 和 `helperModel`。升级时，OpenBot 把旧的
-`defaultModel` 给每个没有模型的 Bot。`rulesModel` 和 `botMemoryModel`
-得到旧的辅助模型：`helperModel`，没有时用 `defaultModel`。如果两者都是
-`null`，新的值保持为空，你必须设置它们。
-
 例如，要给一个 Bot 设置模型，把它当前的 `revision` 作为 `expected` 发送：
 
 ```sh

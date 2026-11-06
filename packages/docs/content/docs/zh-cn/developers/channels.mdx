@@ -33,9 +33,6 @@ description: 在 Slack、Lark、Telegram 或你自己的聊天系统中与 Bot �
 `{ "commandKey": "remove-channel-1" }`。HTTP
 202 返回执行回执。Channel 先停止接受新工作。移除等待已保存的工作释放资源，再删除 Channel 和账户关联。Chat 保留。
 
-升级后的 Channel 可能有 `needsAuthorization: true`。数据和 `enabled`
-设置保留，但不会启动输入或投递。用当前权限保存修改或轮换机密，以设置新调用人并清除该标记。旧的未知发送不会以新调用人的身份重放。
-
 ## 关联你的账户
 
 机器人只为组织的成员工作。当一个还没有关联的人给机器人写消息时，什么都不会运行。机器人会改为给他发一个**关联码**（link

@@ -1,3 +1,4 @@
+import { Forbidden as ExecutionForbidden } from "@openbot-build/domain/Execution"
 import { Execution } from "@openbot-build/domain"
 import { Schema } from "effect"
 import {
@@ -9,15 +10,10 @@ import {
 import { BotAuth } from "./AuthApi.ts"
 import { RequestFailed } from "./FailureApi.ts"
 
-export { Execution } from "@openbot-build/domain"
-
 export class ExecutionUnavailable extends Schema.TaggedError<
 	ExecutionUnavailable,
 	{ readonly brand: unique symbol }
 >()("ExecutionUnavailable", { errorId: Execution.ErrorId }) {}
-export const ExecutionForbidden = Execution.Forbidden
-export type ExecutionForbidden = Execution.Forbidden
-
 export const errors = [
 	Execution.NotFound.pipe(HttpApiSchema.status(404)),
 	Execution.Conflict.pipe(HttpApiSchema.status(409)),

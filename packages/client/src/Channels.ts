@@ -1,3 +1,4 @@
+import type { ChannelId } from "@openbot-build/domain/Channels"
 import { type Execution } from "@openbot-build/domain"
 import { type ChannelsApi } from "@openbot-build/api"
 import { Effect, type PlatformError } from "effect"
@@ -24,7 +25,7 @@ export const create = Effect.fn("Channels.create")(function* (
 	)
 })
 export const update = Effect.fn("Channels.update")(function* (
-	channelId: ChannelsApi.ChannelId,
+	channelId: ChannelId,
 	input: Input<ChannelsApi.UpdateChannelRequest>,
 ): Effect.fn.Return<
 	Command<ChannelsApi.Channel, ClientError>,
@@ -43,7 +44,7 @@ export const update = Effect.fn("Channels.update")(function* (
 })
 /** A lost reply returns the same secret. It never rotates a second time. */
 export const rotateSecret = Effect.fn("Channels.rotateSecret")(function* (
-	channelId: ChannelsApi.ChannelId,
+	channelId: ChannelId,
 	input: {
 		readonly expectedVersion: number
 		readonly commandKey?: Execution.CommandKey
@@ -66,7 +67,7 @@ export const rotateSecret = Effect.fn("Channels.rotateSecret")(function* (
 
 /** Delete after active Channel work has released its resources. */
 export const remove = Effect.fn("Channels.remove")(function* (
-	channelId: ChannelsApi.ChannelId,
+	channelId: ChannelId,
 	commandKey?: Execution.CommandKey,
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,

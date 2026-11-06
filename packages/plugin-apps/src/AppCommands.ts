@@ -1,10 +1,11 @@
+import type { Caller } from "@openbot-build/domain/Identity"
 import {
 	Store,
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
-import { AppCalls, Caller, Execution } from "@openbot-build/domain"
+} from "@openbot-build/server-execution/Store"
+import { AppCalls, Execution } from "@openbot-build/domain"
 import { Client, McpClient } from "@openbot-build/protocol"
 import { and, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Layer, Option, Schema } from "effect"
@@ -24,8 +25,8 @@ import {
 import {
 	type Authorize,
 	type Decide,
-} from "@openbot-build/server-execution/execution/Engine"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+} from "@openbot-build/server-execution/Engine"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import { ActionPolicy } from "./ActionPolicy.ts"
 import * as AppCall from "@openbot-build/apps-contract/apps/AppCall"
 import {
@@ -35,13 +36,6 @@ import {
 	Response,
 	AppCommands,
 } from "@openbot-build/apps-contract/apps/AppCommands"
-export {
-	workflowName,
-	Input,
-	AppCommands,
-} from "@openbot-build/apps-contract/apps/AppCommands"
-export type { Service } from "@openbot-build/apps-contract/apps/AppCommands"
-
 const savedCodec = Schema.toCodecJson(Saved)
 
 const responseCodec = Schema.fromJsonString(Response)

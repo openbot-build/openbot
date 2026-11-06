@@ -1,15 +1,22 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Execution } from "@openbot-build/domain"
-import { Array as Arr, Effect } from "effect"
+import { Array as Arr, Effect, Layer } from "effect"
 import { Artifacts } from "@openbot-build/plugin-artifacts/Artifacts"
-import { Store } from "@openbot-build/server-execution/execution/Store"
-import * as BrowserHost from "./BrowserHost.ts"
-import * as Caller from "./Caller.ts"
-import * as Messages from "./Messages.ts"
+import { Store } from "@openbot-build/server-execution/Store"
+import * as BrowserHost from "../src/BrowserHost.ts"
+import * as Caller from "../src/Caller.ts"
+import * as Messages from "../src/Messages.ts"
 
 const origin = "https://artifact-links.example.com"
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"an artifact command saves its child link once with the parent fence",
 		() =>

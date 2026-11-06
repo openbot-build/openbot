@@ -19,9 +19,9 @@ import {
 } from "@openbot-build/server-database/Schema"
 import { IndexWork } from "@openbot-build/apps-contract/apps/IndexWork"
 import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 
 export interface OwnedStores {
 	readonly apps: typeof Store.AppStore.Service
@@ -36,8 +36,7 @@ export class ProtocolStores extends Context.Service<
 	{
 		readonly bind: (owner: string) => OwnedStores
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/ProtocolStores") {}
+>()("@openbot-build/plugin-apps/ProtocolStores") {}
 
 /**
  * Turn a failure of the stored connections into the error of the protocol

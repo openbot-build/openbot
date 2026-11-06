@@ -11,12 +11,7 @@
 	],
 	"exports": {
 		".": "./dist/index.js",
-		"./HttpHandlers": "./dist/HttpHandlers.js",
-		"./HttpMounts": "./dist/HttpMounts.js",
-		"./ModelProvidersPostgres": "./dist/ModelProvidersPostgres.js",
-		"./ModelRegistry": "./dist/ModelRegistry.js",
-		"./ProviderOAuth": "./dist/ProviderOAuth.js",
-		"./Wiring": "./dist/Wiring.js"
+		"./ModelRegistry": "./dist/ModelRegistry.js"
 	},
 	"scripts": {
 		"build": "tsdown",
@@ -41,6 +36,7 @@
 	"devDependencies": {
 		"@effect/platform-node": "4.1.2",
 		"@effect/vitest": "4.1.2",
+		"@nmnmcc/ability": "3.2.0",
 		"vitest": "5.0.5"
 	},
 	"repository": {

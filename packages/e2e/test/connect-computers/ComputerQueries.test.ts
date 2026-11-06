@@ -1,12 +1,13 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
+import { ComputerProviderId, Computer } from "@openbot-build/domain/Computers"
+import { BotId } from "@openbot-build/domain/BotId"
+import type { ExecutionIdentity } from "@openbot-build/domain/Identity"
 import { changed, finished } from "./Commands.ts"
 import { assert, layer } from "@effect/vitest"
-import { ComputersApi, UserTokensApi } from "@openbot-build/api"
-import {
-	Authorization,
-	BotId,
-	type ExecutionIdentity,
-} from "@openbot-build/domain"
-import { Array as Arr, Effect, Schema } from "effect"
+import { Authorization } from "@openbot-build/domain"
+import { Array as Arr, Effect, Schema, Layer } from "effect"
 import {
 	BrowserHost,
 	Caller,
@@ -15,7 +16,12 @@ import {
 } from "@openbot-build/server-testing"
 
 const publicOrigin = "https://computer-reads.example.com"
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"Computer lists apply every caller limit before decoding rows",
 		() =>
@@ -32,7 +38,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					"/v1/user/tokens",
 					"POST",
 					{ name: "Computer commands" },
-				).pipe(Effect.flatMap(Caller.json(UserTokensApi.CreatedToken, 201)))
+				).pipe(Effect.flatMap(Caller.json(CreatedToken, 201)))
 				const command = {
 					commandKey: "connector-by-token",
 					name: "Token box",
@@ -72,7 +78,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				const first = made[0]!
 				const second = made[1]!
-				const providerId = ComputersApi.ComputerProviderId.make("cpp_first")
+				const providerId = ComputerProviderId.make("cpp_first")
 				const bot = BotId.make("bot")
 				yield* host.run(
 					ComputerScenarios.prepareListRows(
@@ -94,7 +100,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 							when: ($) => $.eq("id", providerId),
 						})
 					}),
-				}).pipe(Effect.flatMap(Caller.json(UserTokensApi.CreatedToken, 201)))
+				}).pipe(Effect.flatMap(Caller.json(CreatedToken, 201)))
 				const identity: ExecutionIdentity = {
 					owner: member.identity,
 					actor: member.identity,
@@ -121,7 +127,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					[providerId],
 				)
 				const direct = yield* tokenSend(token.secret, "/v1/computers").pipe(
-					Effect.flatMap(Caller.json(Schema.Array(ComputersApi.Computer))),
+					Effect.flatMap(Caller.json(Schema.Array(Computer))),
 				)
 				assert.deepStrictEqual(
 					Arr.map(direct, (row) => row.id),

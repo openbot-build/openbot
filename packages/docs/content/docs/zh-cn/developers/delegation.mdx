@@ -119,7 +119,7 @@ Added the endpoint and two tests.
 这条通知经过那个 Chat 的[收件箱](/zh-cn/developers/chats#收件箱)。Chat 空闲时，它会启动一个新 Turn，Bot 带着结果继续工作。当 Bot 把工作交给了很多 Bots 时，每个结果一准备好就单独回来。
 
 task 人可以在已结束的 task
-Chat 中开始新一轮工作。消息命令在同一个数据库事务中创建新的委派和 Turn。使用同一个命令键重试会返回同一个 Turn。旧工作保留原来的结果。新一轮工作保留原始调用人和 token 的限制，也保留所有后续输入带来的限制。每次新的外部调用前，OpenBot 都会检查当前权限。这一轮结束后，父 Chat 也会收到结果。
+Chat 中开始新一轮工作。消息命令在同一个数据库事务中创建新的委派和 Turn。使用同一个命令键重试会返回同一个 Turn。已结束的工作保留原来的结果。新一轮工作保留原始调用人和 token 的限制，也保留所有后续输入带来的限制。每次新的外部调用前，OpenBot 都会检查当前权限。这一轮结束后，父 Chat 也会收到结果。
 
 迟到的通知会加入已结束工作的历史，不会自行开始新一轮工作。
 
@@ -138,7 +138,8 @@ Chat 中开始新一轮工作。消息命令在同一个数据库事务中创建
 Bot 在 `openbot_delegate` 的 `limits` 中给出限制，例如
 `{ "timeMs": 1800000, "steps": 40 }`。它和你[读取](#查看工作)到的工作的 `limits`
 格式相同：`timeMs` 从 1 秒到 30 天，`steps` 和 `budgetMicros`
-从 1 开始。来自[触发器](/zh-cn/developers/triggers)的工作，以及在有限制之前就存在的工作，没有自己的限制。它们使用[组织](/zh-cn/organization#设置)的时间限制
+从 1 开始。来自[触发器](/zh-cn/developers/triggers)的工作没有自己的限制。Bot 没有给出
+`limits` 的工作也没有。两者都使用[组织](/zh-cn/organization#设置)的时间限制
 `delegationTimeLimitMs`，没有其他限制。没有价格的模型花费为 0，所以它永远不会用完预算。见[用量](/zh-cn/usage#价格)。
 
 OpenBot 在每个模型步之前检查步数和预算。时间到的那一刻它检查时间，即使当时没有步在运行。然后：
@@ -209,8 +210,7 @@ OpenBot 在每个模型步之前检查步数和预算。时间到的那一刻它
 
 `limits` 保存限制：`timeMs`，以及工作有的话还有 `steps` 和
 `budgetMicros`。预算的单位是 micro-USD：1 美元是 1,000,000 micro-USD。`usage`
-是工作从开始起用掉的量。它的 `costMicros`
-是 OpenBot 上一次检查时的花费。在有限制之前就存在的工作没有这两个字段。
+是工作从开始起用掉的量。它的 `costMicros` 是 OpenBot 上一次检查时的花费。
 
 暂停的工作有 `pause`：
 

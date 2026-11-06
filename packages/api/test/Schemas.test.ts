@@ -1,5 +1,6 @@
-import { SecretInput, SecretOutput } from "../src/Secret.ts"
-import { TurnInfo, UpdateTodosRequest } from "../src/ChatsApi.ts"
+import { SecretInput, SecretOutput } from "@openbot-build/domain/Secret"
+import { ChatTodoChange } from "@openbot-build/domain/Chats"
+import { TurnInfo } from "../src/ChatsApi.ts"
 import { Chat, Item, Turn } from "@openbot-build/core"
 import { Prompt } from "effect/ai"
 import { assert, describe, it } from "@effect/vitest"
@@ -56,7 +57,7 @@ it.effect(
 
 it.effect("todo input rejects repeated ids and two items in progress", () =>
 	Effect.gen(function* () {
-		const decode = Schema.decodeUnknownEffect(UpdateTodosRequest)
+		const decode = Schema.decodeUnknownEffect(ChatTodoChange)
 		const item = { id: "one", content: "Read the file", status: "in_progress" }
 		yield* Effect.flip(decode({ revision: 0, items: [item, item] }))
 		yield* Effect.flip(

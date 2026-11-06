@@ -1,10 +1,12 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { IndexStore } from "@openbot-build/protocol"
 import { assert, layer } from "@effect/vitest"
 import { AppIndexApi as Api } from "@openbot-build/api"
-import { Document, Index } from "@openbot-build/protocol"
+import { Document } from "@openbot-build/protocol"
 import { Array as Arr, Context, Effect, Layer, Redacted, Schema } from "effect"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Host } from "@openbot-build/openbot"
-import { AppIndex, PostgresTest } from "@openbot-build/server-testing"
+import { AppIndex } from "@openbot-build/server-testing"
 import { FetchHttpClient, HttpClient, HttpServer } from "effect/http"
 import * as Client from "@openbot-build/client"
 
@@ -16,7 +18,7 @@ const platform = Layer.mergeAll(
 )
 
 const entry = (path: string, name = "example.test/documents") =>
-	Index.Entry.decode({
+	IndexStore.Entry.decode({
 		cardUrl: `https://example.test/${path}`,
 		card: {
 			$schema: Document.cardSchemaUrl,
@@ -48,7 +50,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 		"the stored public Index searches, merges sources and pages results without leaking connection data",
 		() =>
 			Effect.gen(function* () {
-				const database = yield* PostgresTest.start
+				const database = yield* TestDatabase.start
 				const second = yield* entry("second")
 				const index = yield* AppIndex.storedFixture(database.url, second)
 				assert.deepStrictEqual(
@@ -111,6 +113,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 							"1111111111111111111111111111111111111111111111111111111111111111",
 					),
 					auth: {
+						mode: "oidc" as const,
 						publicOrigin: "https://openbot.test",
 						issuer: "https://id.example.com",
 						clientId: "index-test",

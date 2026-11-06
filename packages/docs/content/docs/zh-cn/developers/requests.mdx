@@ -205,14 +205,3 @@ App 是人连接的外部服务。参见
 
 App 的资源、资源模板和提示词都是读取，所以不需要决定。App 自己的说明永远不能决定哪些工具是安全的。只有组织可以在[设置](/zh-cn/organization#设置)中用
 `appReadRules` 把工具标记为读取。
-
-## 旧版本中的请求
-
-每个请求视图都包含 `executionId` 和
-`executionStatus`。数据升级后，旧的待处理请求可能仍为
-`status: "pending"`，但其执行已是
-`executionStatus: "interrupted"`。你仍可按当前访问规则检查其保存的操作。
-
-旧记录没有原始 token 的凭据，因此不能授予权限，也不能运行旧操作。回答它会返回
-`409` 和
-`RequestConflict`。请发送新的 Chat 输入，以当前调用人的权限重新请求该操作。

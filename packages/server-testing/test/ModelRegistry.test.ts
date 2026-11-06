@@ -1,26 +1,24 @@
-import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
+import { ModelRegistry as ModelRegistryModel } from "@openbot-build/models-contract/ModelRegistry"
+import { ModelProvidersUnavailable } from "@openbot-build/domain/Models"
+import { ProviderOAuth } from "@openbot-build/models-contract/ProviderOAuth"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { assert, describe, it } from "@effect/vitest"
-import { ModelProvidersApi } from "@openbot-build/api"
 import { Config, Live, Model, Provider } from "@openbot-build/core"
 import { Cause, Effect, Layer, Logger, Redacted, Schema, Stream } from "effect"
 import { HttpClient } from "effect/http"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
-import { TokenThrottle } from "@openbot-build/server-billing/billing/TokenThrottle"
-import * as LiveBackends from "@openbot-build/models-contract/models/LiveBackends"
+import { Billing } from "@openbot-build/server-billing/Billing"
+import { TokenThrottle } from "@openbot-build/server-billing/TokenThrottle"
+import * as LiveBackends from "@openbot-build/models-contract/LiveBackends"
 import {
 	ModelProviders,
 	organizationOwner,
 	type Stored,
-} from "@openbot-build/models-contract/models/ModelProviders"
+} from "@openbot-build/models-contract/ModelProviders"
 import * as ModelRegistry from "@openbot-build/plugin-models/ModelRegistry"
-import {
-	Models,
-	type StoredModel,
-} from "@openbot-build/models-contract/models/Models"
-import { organizationDefaults } from "@openbot-build/server-kernel/settings/Documents"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import { codec, snapshot } from "@openbot-build/server-kernel/errors/Snapshot"
+import { Models, type StoredModel } from "@openbot-build/models-contract/Models"
+import { organizationDefaults } from "@openbot-build/server-kernel/Documents"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import { codec, snapshot } from "@openbot-build/server-kernel/Snapshot"
 
 const organizationId = "org_a"
 
@@ -75,7 +73,7 @@ const registryWith = (input: {
 	readonly providers?: Effect.Effect<ReadonlyArray<Stored>>
 	readonly models?: ReadonlyArray<StoredModel>
 }) =>
-	Layer.effect(ModelRegistry.ModelRegistry, ModelRegistry.make()).pipe(
+	Layer.effect(ModelRegistryModel, ModelRegistry.make()).pipe(
 		Layer.provide([
 			Layer.mock(ProviderOAuth, {}),
 			ErrorRecordsFixture.layer,
@@ -106,7 +104,7 @@ const registryWith = (input: {
 		]),
 	)
 
-const resolveLive = Effect.flatMap(ModelRegistry.ModelRegistry, (registry) =>
+const resolveLive = Effect.flatMap(ModelRegistryModel, (registry) =>
 	registry.resolveLive(organizationId, selection),
 )
 
@@ -196,10 +194,7 @@ describe("The model registry", () => {
 				Effect.provide(
 					Layer.merge(
 						registryWith({
-							openKey: () =>
-								Effect.fail(
-									ModelProvidersApi.ModelProvidersUnavailable.make({}),
-								),
+							openKey: () => Effect.fail(ModelProvidersUnavailable.make({})),
 							backend: () => Effect.die("The backend must not run."),
 						}),
 						logger,
@@ -235,7 +230,7 @@ describe("The model registry", () => {
 				name: "Jev",
 			}
 			return Effect.gen(function* () {
-				const registry = yield* ModelRegistry.ModelRegistry
+				const registry = yield* ModelRegistryModel
 				const decide = registry.decision(
 					organizationId,
 					Config.Selection.make({
@@ -263,9 +258,7 @@ describe("The model registry", () => {
 							Effect.suspend(() => {
 								opened++
 								return opened === 1
-									? Effect.fail(
-											ModelProvidersApi.ModelProvidersUnavailable.make({}),
-										)
+									? Effect.fail(ModelProvidersUnavailable.make({}))
 									: Effect.succeed(Redacted.make("key"))
 							}),
 						backend: () => Effect.die("The backend must not run."),

@@ -1,11 +1,13 @@
 import {
+	type Caller,
+	type ExecutionIdentity,
+	executionCallers,
+} from "@openbot-build/domain/Identity"
+import type { BotId } from "@openbot-build/domain/BotId"
+import {
 	Authorization,
 	Computers as Domain,
 	Execution,
-	executionCallers,
-	type Caller,
-	type ExecutionIdentity,
-	type BotId,
 } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Effect, Option } from "effect"

@@ -1,18 +1,10 @@
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
+import { Availability } from "@openbot-build/domain/AppConnections"
 import { Document } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import * as Index from "./AppIndexApi.ts"
-import { Availability, ConnectionId } from "./ConnectionsApi.ts"
 
 // tsdown drops star exports from the built API namespace. List the names here.
-export {
-	AppOperationId,
-	Outcome,
-	Source,
-	Result,
-	InvocationStatus,
-	Invocation,
-	ExecutionView,
-} from "@openbot-build/domain/AppCalls"
 import { Result } from "@openbot-build/domain/AppCalls"
 
 export const AccessConnection = Schema.Struct({

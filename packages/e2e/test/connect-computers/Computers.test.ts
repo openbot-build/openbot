@@ -1,13 +1,24 @@
+import {
+	FromConnector,
+	ToConnector,
+	ComputerProvider,
+	SessionOutput,
+	FileContent,
+	OpenPort,
+	Screenshot,
+	Computer,
+	ComputerUsage,
+	ComputerAccess,
+	connectorProtocolVersion,
+	Pairing,
+	PairingStatus,
+	ComputerPairing,
+} from "@openbot-build/domain/Computers"
 import { changed, finished } from "./Commands.ts"
 import { Execution } from "@openbot-build/domain"
-import { NodeWS } from "@effect/platform-node"
+import { NodeWS, NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
-import {
-	AuthApi,
-	ChatView,
-	ComputersApi,
-	RequestsApi,
-} from "@openbot-build/api"
+import { AuthApi, RequestsApi, type ChatsApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Effect,
@@ -23,7 +34,12 @@ import {
 import { SecureRandom } from "effect/crypto"
 import { LanguageModel, Prompt, Response } from "effect/ai"
 import { Base64 } from "effect/encoding"
-import { HttpClient, HttpClientRequest, type HttpMethod } from "effect/http"
+import {
+	HttpClient,
+	HttpClientRequest,
+	type HttpMethod,
+	FetchHttpClient,
+} from "effect/http"
 import { Socket } from "effect/socket"
 import {
 	BrowserHost,
@@ -51,12 +67,8 @@ const usage = {
 
 /** Gives a value as JSON text. */
 const jsonText = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
-const encodeMessage = Schema.encodeEffect(
-	Schema.fromJsonString(ComputersApi.FromConnector),
-)
-const decodeMessage = Schema.decodeEffect(
-	Schema.fromJsonString(ComputersApi.ToConnector),
-)
+const encodeMessage = Schema.encodeEffect(Schema.fromJsonString(FromConnector))
+const decodeMessage = Schema.decodeEffect(Schema.fromJsonString(ToConnector))
 
 const isUser = (message: Prompt.Message): message is Prompt.UserMessage =>
 	message.role === "user"
@@ -188,7 +200,10 @@ const client = (host: BrowserHost.Host) => {
 }
 
 it.layer(
-	Layer.merge(BrowserHost.layerPlatform, NodeWS.layerWebSocketConstructor),
+	Layer.merge(
+		Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+		NodeWS.layerWebSocketConstructor,
+	),
 	{ excludeTestServices: true },
 )((it) => {
 	it.effect(
@@ -206,7 +221,7 @@ it.layer(
 				const bob = yield* host.login("computers-bob")
 
 				const provider = yield* json(
-					ComputersApi.ComputerProvider,
+					ComputerProvider,
 					send(alice.session, "/v1/computer-providers", "POST", {
 						name: "Sandboxes",
 						credentials: { kind: "e2b", apiKey: "e2b_test_key_123456" },
@@ -255,7 +270,7 @@ it.layer(
 				assert.strictEqual((yield* send(bob.session, path)).status, 404)
 
 				const ran = yield* json(
-					ComputersApi.SessionOutput,
+					SessionOutput,
 					send(alice.session, path + "/sessions", "POST", { command: "ls" }),
 				)
 				assert.deepStrictEqual(ran, {
@@ -267,7 +282,7 @@ it.layer(
 					truncated: false,
 				})
 				const terminal = yield* json(
-					ComputersApi.SessionOutput,
+					SessionOutput,
 					send(alice.session, path + "/sessions", "POST", {
 						command: "ls",
 						tty: true,
@@ -277,7 +292,7 @@ it.layer(
 
 				// A command that waits for input keeps a session until its input ends.
 				const opened = yield* json(
-					ComputersApi.SessionOutput,
+					SessionOutput,
 					send(alice.session, path + "/sessions", "POST", {
 						command: "cat",
 						yieldTimeMs: 250,
@@ -329,7 +344,7 @@ it.layer(
 					}),
 				)
 				const echoed = yield* json(
-					ComputersApi.SessionOutput,
+					SessionOutput,
 					send(alice.session, sessionPath + "/input", "POST", {
 						chars: "hello\\n",
 						yieldTimeMs: 250,
@@ -345,7 +360,7 @@ it.layer(
 					404,
 				)
 				const closed = yield* json(
-					ComputersApi.SessionOutput,
+					SessionOutput,
 					send(alice.session, sessionPath + "/input", "POST", {
 						chars: "bye\\x04",
 					}),
@@ -378,17 +393,17 @@ it.layer(
 				})
 				assert.strictEqual(badWrite.status, 400, yield* badWrite.text)
 				const read = yield* json(
-					ComputersApi.FileContent,
+					FileContent,
 					send(alice.session, path + "/files?path=%2Ftmp%2Fa.txt"),
 				)
 				assert.strictEqual(read.content, "hello")
 				const port = yield* json(
-					ComputersApi.OpenPort,
+					OpenPort,
 					send(alice.session, path + "/ports/3000", "PUT"),
 				)
 				assert.strictEqual(port.url, "https://3000-sbx-0.example.com")
 				const shot = yield* json(
-					ComputersApi.Screenshot,
+					Screenshot,
 					send(alice.session, path + "/desktop/actions", "POST", {
 						actions: [{ _tag: "Click", x: 1, y: 2 }],
 					}),
@@ -403,11 +418,11 @@ it.layer(
 				)
 				assert.strictEqual(paused.state, "paused")
 				yield* json(
-					ComputersApi.SessionOutput,
+					SessionOutput,
 					send(alice.session, path + "/sessions", "POST", { command: "pwd" }),
 				)
 				assert.strictEqual(
-					(yield* json(ComputersApi.Computer, send(alice.session, path))).state,
+					(yield* json(Computer, send(alice.session, path))).state,
 					"running",
 				)
 				assert.deepStrictEqual(
@@ -417,7 +432,7 @@ it.layer(
 					["create sbx-0", "pause sbx-0", "resume sbx-0"],
 				)
 				const usageList = yield* json(
-					Schema.Array(ComputersApi.ComputerUsage),
+					Schema.Array(ComputerUsage),
 					send(alice.session, path + "/usage"),
 				)
 				assert.strictEqual(usageList.length, 2)
@@ -426,14 +441,14 @@ it.layer(
 				// Alice gives her Bot the right to use the Computer, and takes it back.
 				const bot = yield* host.defaultBot(alice.session)
 				const granted = yield* json(
-					ComputersApi.ComputerAccess,
+					ComputerAccess,
 					send(alice.session, path + "/bots/" + bot, "PUT"),
 				)
 				assert.strictEqual(granted.bot, bot)
 				assert.deepStrictEqual(
 					Arr.map(
 						yield* json(
-							Schema.Array(ComputersApi.Computer),
+							Schema.Array(Computer),
 							send(alice.session, "/v1/computers?bot=" + bot),
 						),
 						(entry) => entry.id,
@@ -450,7 +465,7 @@ it.layer(
 				)
 				assert.deepStrictEqual(
 					yield* json(
-						Schema.Array(ComputersApi.ComputerAccess),
+						Schema.Array(ComputerAccess),
 						send(alice.session, path + "/bots"),
 					),
 					[],
@@ -489,7 +504,7 @@ it.layer(
 				const { send, json } = client(host)
 				const alice = yield* host.login("unreachable-alice")
 				const provider = yield* json(
-					ComputersApi.ComputerProvider,
+					ComputerProvider,
 					send(alice.session, "/v1/computer-providers", "POST", {
 						name: "Sandboxes",
 						credentials: { kind: "e2b", apiKey: "e2b_test_key_123456" },
@@ -514,7 +529,7 @@ it.layer(
 					"failed",
 				)
 				assert.strictEqual(
-					(yield* json(ComputersApi.Computer, send(alice.session, path))).id,
+					(yield* json(Computer, send(alice.session, path))).id,
 					computer.id,
 				)
 				assert.ok(!Arr.contains(yield* fake.log, "destroy sbx-0"))
@@ -543,7 +558,7 @@ it.layer(
 				const { send, json } = client(host)
 				const alice = yield* host.login("pair-alice")
 				const machine = {
-					version: ComputersApi.connectorProtocolVersion,
+					version: connectorProtocolVersion,
 					os: "linux",
 					arch: "x64",
 					desktop: false,
@@ -551,10 +566,10 @@ it.layer(
 					machineId: "machine-0123456789abcdef",
 				}
 				const pair = json(
-					ComputersApi.Pairing,
+					Pairing,
 					send(undefined, "/v1/hooks/computers/pairings", "POST", machine),
 				)
-				const poll = (pairing: ComputersApi.Pairing, secret = pairing.secret) =>
+				const poll = (pairing: Pairing, secret = pairing.secret) =>
 					send(
 						undefined,
 						"/v1/hooks/computers/pairings/" + pairing.id + "/poll",
@@ -565,12 +580,9 @@ it.layer(
 
 				const pairing = yield* pair
 				assert.match(pairing.code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/)
-				assert.deepStrictEqual(
-					yield* json(ComputersApi.PairingStatus, poll(pairing)),
-					{
-						_tag: "Pending",
-					},
-				)
+				assert.deepStrictEqual(yield* json(PairingStatus, poll(pairing)), {
+					_tag: "Pending",
+				})
 				assert.strictEqual(
 					(yield* poll(pairing, Redacted.make("ocp_wrong"))).status,
 					404,
@@ -578,12 +590,12 @@ it.layer(
 				// People may type the code in small letters and without the dash.
 				const typed = pipe(pairing.code, Str.replace("-", ""), Str.toLowerCase)
 				const shown = yield* json(
-					ComputersApi.ComputerPairing,
+					ComputerPairing,
 					send(alice.session, "/v1/computer-pairings/" + typed),
 				)
 				assert.strictEqual(shown.hostname, "alice-laptop")
 				const computer = yield* json(
-					ComputersApi.Computer,
+					Computer,
 					send(
 						alice.session,
 						"/v1/computer-pairings/" + typed + "/approve",
@@ -593,7 +605,7 @@ it.layer(
 				)
 				assert.strictEqual(computer.name, "alice-laptop")
 				assert.strictEqual(computer.state, "offline")
-				const approved = yield* json(ComputersApi.PairingStatus, poll(pairing))
+				const approved = yield* json(PairingStatus, poll(pairing))
 				assert.strictEqual(approved._tag, "Approved")
 				if (approved._tag !== "Approved") return
 				assert.strictEqual(approved.computer, computer.id)
@@ -641,7 +653,7 @@ it.layer(
 					const socket = yield* connect(Redacted.value(approved.token))
 					const frames = yield* Socket.readerString(socket)
 					const writer = yield* socket.writer
-					const reply = (message: ComputersApi.FromConnector) =>
+					const reply = (message: FromConnector) =>
 						Effect.flatMap(encodeMessage(message), writer.write)
 					/** The laptop answers each command with its output, and then ends it. */
 					const answerStart = Effect.fn("Computers.answerStart")(function* (
@@ -674,7 +686,7 @@ it.layer(
 							yield* reply({
 								_tag: "Hello",
 								hello: {
-									version: ComputersApi.connectorProtocolVersion,
+									version: connectorProtocolVersion,
 									os: "linux",
 									arch: "x64",
 									desktop: false,
@@ -683,7 +695,7 @@ it.layer(
 							yield* until(
 								"the machine is connected",
 								Effect.map(
-									json(ComputersApi.Computer, send(alice.session, path)),
+									json(Computer, send(alice.session, path)),
 									(current) =>
 										Option.liftPredicate(
 											current,
@@ -692,7 +704,7 @@ it.layer(
 								),
 							)
 							const ran = yield* json(
-								ComputersApi.SessionOutput,
+								SessionOutput,
 								send(alice.session, path + "/sessions", "POST", {
 									command: "uname",
 								}),
@@ -706,13 +718,11 @@ it.layer(
 				// The socket closed with its scope.
 				yield* until(
 					"the machine is offline",
-					Effect.map(
-						json(ComputersApi.Computer, send(alice.session, path)),
-						(current) =>
-							Option.liftPredicate(
-								current,
-								(computer) => computer.state === "offline",
-							),
+					Effect.map(json(Computer, send(alice.session, path)), (current) =>
+						Option.liftPredicate(
+							current,
+							(computer) => computer.state === "offline",
+						),
 					),
 				)
 
@@ -731,9 +741,7 @@ it.layer(
 				const accepted = Arr.filter(answers, (answer) => answer.status === 201)
 				assert.strictEqual(accepted.length, 1)
 				assert.ok(Arr.some(answers, (answer) => answer.status === 404))
-				const same = yield* Caller.json(ComputersApi.Computer)(
-					Arr.getUnsafe(accepted, 0),
-				)
+				const same = yield* Caller.json(Computer)(Arr.getUnsafe(accepted, 0))
 				assert.strictEqual(same.id, computer.id)
 				// A deny after the approval does nothing, and the machine still gets its token.
 				assert.strictEqual(
@@ -744,7 +752,7 @@ it.layer(
 					)).status,
 					404,
 				)
-				const repaired = yield* json(ComputersApi.PairingStatus, poll(again))
+				const repaired = yield* json(PairingStatus, poll(again))
 				assert.strictEqual(repaired._tag, "Approved")
 
 				// A denied pairing ends at once.
@@ -775,7 +783,7 @@ it.layer(
 				const { send, json } = client(host)
 				const alice = yield* host.login("tools-alice")
 				const provider = yield* json(
-					ComputersApi.ComputerProvider,
+					ComputerProvider,
 					send(alice.session, "/v1/computer-providers", "POST", {
 						name: "Sandboxes",
 						credentials: { kind: "e2b", apiKey: "e2b_test_key_123456" },
@@ -793,7 +801,7 @@ it.layer(
 				const bot = yield* host.defaultBot(alice.session)
 				const asAlice: Send = (path, method, payload) =>
 					send(alice.session, path, method, payload)
-				const lastText = (next: ChatView) => jsonText(next.response)
+				const lastText = (next: ChatsApi.ChatView) => jsonText(next.response)
 				const pendingRequests = json(
 					Schema.Array(RequestsApi.CapabilityRequest),
 					send(alice.session, "/v1/requests?status=pending"),
@@ -903,10 +911,7 @@ it.layer(
 				const box = yield* until(
 					"the new Computer",
 					Effect.map(
-						json(
-							Schema.Array(ComputersApi.Computer),
-							send(alice.session, "/v1/computers"),
-						),
+						json(Schema.Array(Computer), send(alice.session, "/v1/computers")),
 						(list) => Arr.findFirst(list, (entry) => entry.name === "Bot box"),
 					),
 				)
@@ -930,7 +935,7 @@ it.layer(
 				const alice = yield* host.login("private-alice")
 				const bob = yield* host.login("private-bob")
 				const provider = yield* json(
-					ComputersApi.ComputerProvider,
+					ComputerProvider,
 					send(alice.session, "/v1/computer-providers", "POST", {
 						name: "Sandboxes",
 						credentials: { kind: "e2b", apiKey: "e2b_test_key_123456" },
@@ -963,13 +968,13 @@ it.layer(
 				)
 				assert.deepStrictEqual(
 					yield* json(
-						Schema.Array(ComputersApi.ComputerAccess),
+						Schema.Array(ComputerAccess),
 						send(alice.session, "/v1/computers/" + computer.id + "/bots"),
 					),
 					[],
 				)
 				const visible = yield* json(
-					Schema.Array(ComputersApi.Computer),
+					Schema.Array(Computer),
 					send(bob.session, "/v1/computers?bot=" + bot),
 				)
 				assert.deepStrictEqual(visible, [])

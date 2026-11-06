@@ -1,10 +1,9 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { Result } from "@openbot-build/protocol/Discovery"
+import { Failed } from "@openbot-build/domain/AppDiscovery"
 import { assert, layer } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
-import {
-	ChatSummary,
-	AppDiscoveryFailed,
-	AppDiscoveryResult,
-} from "@openbot-build/api"
+import { ChatsApi } from "@openbot-build/api"
 import {
 	Deferred,
 	Effect,
@@ -29,7 +28,6 @@ import {
 	DefaultBot,
 	DevelopmentLogin,
 	Messages,
-	PostgresTest,
 } from "@openbot-build/server-testing"
 const { message } = Messages
 const { signIn } = DevelopmentLogin
@@ -74,7 +72,7 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 					migrate: BuiltPrograms.path("migrate"),
 					development: BuiltPrograms.path("development"),
 				})
-				const database = yield* PostgresTest.start
+				const database = yield* TestDatabase.start
 				const env = {
 					OPENBOT_DATABASE_URL: database.url,
 					OPENBOT_CLUSTER_SECRET:
@@ -95,7 +93,7 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 					entry: "DevelopmentMain" | "Main",
 					readyMessage?: string,
 				) {
-					const port = yield* PostgresTest.freePort
+					const port = yield* TestDatabase.freePort
 					const output = yield* Ref.make("")
 					const errors = yield* Ref.make("")
 					const failure = (reason: string) =>
@@ -201,9 +199,7 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 						})
 						assert.strictEqual(discovered.status, 200)
 						const candidate =
-							yield* HttpClientResponse.schemaBodyJson(AppDiscoveryResult)(
-								discovered,
-							)
+							yield* HttpClientResponse.schemaBodyJson(Result)(discovered)
 						assert.ok(candidate._tag === "Single")
 						assert.strictEqual(
 							candidate.candidate.card.name,
@@ -214,9 +210,8 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 						})
 						assert.strictEqual(unknown.status, 422)
 						assert.strictEqual(
-							(yield* HttpClientResponse.schemaBodyJson(AppDiscoveryFailed)(
-								unknown,
-							)).reason,
+							(yield* HttpClientResponse.schemaBodyJson(Failed)(unknown))
+								.reason,
 							"NoDeclaration",
 						)
 						const bot = yield* DefaultBot.ensure(call)
@@ -233,7 +228,9 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 						// The development platform gives the new direct Chat a simulated model.
 						const [chat] = yield* Effect.flatMap(
 							call(`/v1/chats?bot=${bot}`),
-							HttpClientResponse.schemaBodyJson(Schema.Array(ChatSummary)),
+							HttpClientResponse.schemaBodyJson(
+								Schema.Array(ChatsApi.ChatSummary),
+							),
 						)
 						assert.ok(chat !== undefined)
 						const simulatedModel = chat.chat.settings.model
@@ -250,9 +247,8 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 						})
 						assert.strictEqual(blocked.status, 422)
 						assert.strictEqual(
-							(yield* HttpClientResponse.schemaBodyJson(AppDiscoveryFailed)(
-								blocked,
-							)).reason,
+							(yield* HttpClientResponse.schemaBodyJson(Failed)(blocked))
+								.reason,
 							"BlockedTarget",
 						)
 						// Production has no default model and no simulated models.

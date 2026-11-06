@@ -1,3 +1,4 @@
+import { Caller } from "@openbot-build/domain/Identity"
 import {
 	type MemberExecution,
 	Store,
@@ -6,10 +7,9 @@ import {
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import {
 	Authorization,
-	Caller,
 	Channels as Domain,
 	Execution,
 } from "@openbot-build/domain"
@@ -26,10 +26,7 @@ import {
 import { SqlClient } from "effect/sql"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import {
-	organizationKey,
-	segment,
-} from "@openbot-build/identity-contract/audit/Resources"
+import { organizationKey, segment } from "@openbot-build/domain/AuditResources"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import * as Db from "@openbot-build/server-database/Database"
 import {
@@ -39,13 +36,12 @@ import {
 	channelConversations,
 	executions,
 } from "@openbot-build/server-database/Schema"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
-import type { End } from "@openbot-build/server-execution/execution/Program"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import type { Authorize } from "@openbot-build/server-execution/Engine"
+import { Observation } from "@openbot-build/server-execution/Observation"
+import type { End } from "@openbot-build/server-execution/Program"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 
-export const workflowName = ChannelAdmission.removalWorkflow
 const Input = Schema.Struct({ channelId: Schema.String })
 const sameCaller = Schema.toEquivalence(Caller)
 export interface Service {
@@ -96,8 +92,7 @@ export interface Service {
 }
 
 export class ChannelRemoval extends Context.Service<ChannelRemoval, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-channels/ChannelRemoval",
+	"@openbot-build/plugin-channels/ChannelRemoval",
 ) {}
 
 const make = Effect.gen(function* () {
@@ -129,7 +124,7 @@ const make = Effect.gen(function* () {
 			const execution = yield* store.loadMember(key)
 			const input = yield* Schema.decodeUnknownEffect(Input)(execution.input)
 			if (
-				execution.workflow !== workflowName ||
+				execution.workflow !== ChannelAdmission.removalWorkflow ||
 				execution.record.resource.kind !== "ChannelRemoval" ||
 				execution.record.resource.id !== input.channelId
 			)
@@ -234,7 +229,7 @@ const make = Effect.gen(function* () {
 						const row = yield* admit(caller.organizationId, channelId, false)
 						yield* check(caller, channelId, "write")
 						const key = yield* create({
-							workflow: workflowName,
+							workflow: ChannelAdmission.removalWorkflow,
 							resource: { kind: "ChannelRemoval", id: channelId },
 							identity: {
 								owner: {

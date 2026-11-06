@@ -13,21 +13,13 @@ import * as Execution from "./Execution.ts"
  * the backend can do.
  */
 
-export const AudioFormat = Live.AudioFormat
-export type AudioFormat = Live.AudioFormat
-export const Capabilities = Live.Capabilities
-export type Capabilities = Live.Capabilities
-
-/** The text form of an audio format, such as `pcm16@24000`. */
-export const AudioFormatText = Live.AudioFormatFromString
-
 /** The model of a live Chat comes from the Chat. The query only sets the sound. */
 export const LiveQuery = Schema.Struct({
 	voice: Schema.optionalKey(Schema.NonEmptyString),
 	/** The sound format that the client sends. Without it, OpenBot picks the first one. */
-	inputFormat: Schema.optionalKey(AudioFormatText),
+	inputFormat: Schema.optionalKey(Live.AudioFormatFromString),
 	/** The sound format that the client wants. Without it, OpenBot picks the first one. */
-	outputFormat: Schema.optionalKey(AudioFormatText),
+	outputFormat: Schema.optionalKey(Live.AudioFormatFromString),
 	/** `client` means push-to-talk: the client sends `input.audio.commit`. */
 	turnDetection: Schema.optionalKey(Schema.Literals(["server", "client"])),
 	/**
@@ -92,8 +84,8 @@ export const LiveServerMessage = Schema.Union([
 		type: Schema.Literal("session.ready"),
 		provider: Provider.Id,
 		model: Model.Id,
-		capabilities: Capabilities,
-		audio: Schema.Struct({ input: AudioFormat, output: AudioFormat }),
+		capabilities: Live.Capabilities,
+		audio: Schema.Struct({ input: Live.AudioFormat, output: Live.AudioFormat }),
 		turnDetection: Schema.Literals(["server", "client"]),
 		voice: Schema.optionalKey(Schema.String),
 	}),

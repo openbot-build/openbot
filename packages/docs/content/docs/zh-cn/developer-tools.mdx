@@ -11,7 +11,7 @@ description: 检查、测试和管理你发布的 App。
 上的 `publish`。参见[身份验证](/zh-cn/developers/authentication)。
 
 声明、证明、成员、报告和收录请求的 ID 必须是 UUID 文本。报告翻页游标 `before`
-和比较 ID `other` 也遵循此规则。旧 UUID v4 和新 UUID
+和比较 ID `other` 也遵循此规则。UUID v4 和 UUID
 v7 都可使用。API 会在访问存储前拒绝其他格式。邀请的 bearer
 token 和通知 ID 保留各自的格式。
 
@@ -288,5 +288,3 @@ App 和证明的定期检查使用共同执行器。下次检查时间和每次�
 列出你的设置。
 
 在 [API 参考](/api/operations/tags/developer-tools/)中查看完整的结构。
-
-数据迁移保留现有声明、证明、成员、邀请、App、报告和通知设置。App 与证明检查保留保存的下次检查时间。已放弃的证明不会启动新检查。旧索引请求保留原有 ID，并关联历史执行。已保存结果的请求保持完成；没有保存结果的请求标记为中断，因为原始调用人未被保存。平台仍可完成独立的公开检查。

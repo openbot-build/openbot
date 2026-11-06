@@ -1,6 +1,6 @@
 import { type Developers, Execution } from "@openbot-build/domain"
-import type { Paused } from "@openbot-build/server-execution/execution/Admission"
-import type { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
+import type { Paused } from "@openbot-build/server-execution/Admission"
+import type { Definition } from "@openbot-build/tools-contract/ToolDefinitions"
 import { ChatState, type ModelStep, ToolStep } from "@openbot-build/core"
 import {
 	Array as Arr,
@@ -17,22 +17,14 @@ import {
 	Idempotent,
 	Local,
 	SavedResult,
-} from "@openbot-build/tools-contract/plugins/ToolEntry"
-import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import {
-	Store,
-	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/tools-contract/ToolEntry"
+import { CallContext } from "@openbot-build/server-execution/CallContext"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import { Store, type Fence } from "@openbot-build/server-execution/Store"
 import {
 	outputCodec,
 	stepId,
 } from "@openbot-build/conversation-contract/chats/ToolSteps"
-export {
-	outputCodec,
-	stepId,
-} from "@openbot-build/conversation-contract/chats/ToolSteps"
-
 /** A tool stream must give a final result before it can be saved as complete. */
 export class Incomplete extends Schema.TaggedError<
 	Incomplete,
@@ -120,8 +112,7 @@ export interface Service {
 }
 
 export class ToolSteps extends Context.Service<ToolSteps, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-chats/ToolSteps",
+	"@openbot-build/plugin-chats/ToolSteps",
 ) {}
 
 const make = Effect.gen(function* () {

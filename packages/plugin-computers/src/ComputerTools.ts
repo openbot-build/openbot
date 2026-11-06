@@ -1,9 +1,8 @@
+import { BotId } from "@openbot-build/domain/BotId"
+import type { Tools } from "@openbot-build/tools-contract/ToolEntry"
+import { executionCallers } from "@openbot-build/domain/Identity"
 import { Computers as ComputerData } from "@openbot-build/domain"
-import {
-	Execution,
-	executionCallers,
-	Bots as BotsApi,
-} from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import { type Chat, Operation, type Bot, type Turn } from "@openbot-build/core"
 import {
 	Array as Arr,
@@ -23,25 +22,19 @@ import {
 	Gate,
 } from "@openbot-build/conversation-contract/capabilities/Gate"
 import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
-import type { Machine } from "./Computer.ts"
+import type { Machine } from "@openbot-build/apps-contract/computers/Computer"
 import { ComputerProviders } from "./ComputerProviders.ts"
 import { checkFile, Computers } from "./Computers.ts"
 import { Sessions } from "./Sessions.ts"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
-import {
-	hasImage,
-	imageKey,
-} from "@openbot-build/model-providers/providers/ToolImages"
-import type * as ToolEntry from "@openbot-build/tools-contract/plugins/ToolEntry"
-import { toolJson } from "@openbot-build/tools-contract/plugins/ToolJson"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
+import { hasImage, imageKey } from "@openbot-build/model-providers/ToolImages"
+import { toolJson } from "@openbot-build/tools-contract/ToolJson"
+import * as Report from "@openbot-build/server-kernel/Report"
 
 /**
  * The Computer tools. Their parameters are JSON Schema, like App tools.
  * Each tool makes its JSON Schema from the Schema that reads its input.
  */
-export type Tools = ToolEntry.Tools
-
 export const names = {
 	list: "openbot_computers_list",
 	acquire: "openbot_computers_acquire",
@@ -278,8 +271,7 @@ export class ComputerTools extends Context.Service<
 			work: typeof Work.Service,
 		) => Effect.Effect<Bot.ToolRegistration<Tools>>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-computers/ComputerTools") {}
+>()("@openbot-build/plugin-computers/ComputerTools") {}
 
 export const make = Effect.gen(function* () {
 	const report = yield* Report.make
@@ -324,7 +316,7 @@ export const make = Effect.gen(function* () {
 					Arr.appendAll(current.deciders, current.chain.bots),
 					Arr.dedupe,
 					Arr.filter((id) => id !== current.bot.id),
-					Arr.map((id) => BotsApi.BotId.make(id)),
+					Arr.map((id) => BotId.make(id)),
 				)
 			/** Asks the gate. A failed check never lets the action run. */
 			const ask = (

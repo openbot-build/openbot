@@ -139,7 +139,7 @@ as soon as it is ready.
 
 A person can start a new round in an ended task Chat. The message command
 creates one new delegation and one new Turn in the same database transaction. A
-retry with the same command key returns the same Turn. The old work keeps its
+retry with the same command key returns the same Turn. The ended work keeps its
 result. The new round keeps the original caller and token limits, plus the
 limits of all later input. OpenBot checks current rights before each new outside
 call. When this round ends, the parent Chat gets its result too.
@@ -164,10 +164,11 @@ A Bot gives the limits in `limits` of `openbot_delegate`, for example
 `{ "timeMs": 1800000, "steps": 40 }`. They have the same form as the `limits` of
 the work that you [read](#watch-the-work): `timeMs` from 1 second to 30 days,
 and `steps` and `budgetMicros` from 1. Work from a
-[trigger](/developers/triggers), and work from before limits, have no limits of
-their own. They get the time limit `delegationTimeLimitMs` of the
-[organization](/organization#settings), and no other limits. A model without a
-price costs 0, so it never uses up a budget. See [Usage](/usage#prices).
+[trigger](/developers/triggers) has no limits of its own. Work from a Bot that
+gives no `limits` has none either. Both get the time limit
+`delegationTimeLimitMs` of the [organization](/organization#settings), and no
+other limits. A model without a price costs 0, so it never uses up a budget. See
+[Usage](/usage#prices).
 
 OpenBot checks the steps and the budget before each model step. It checks the
 time at the end of the time, also while no step runs. Then:
@@ -247,7 +248,7 @@ no `toolCallId`.
 `limits` holds the limits: `timeMs`, and `steps` and `budgetMicros` when the
 work has them. A budget is in micro-USD: one US dollar is 1,000,000 micro-USD.
 `usage` is what the work used since it started. Its `costMicros` is the cost
-when OpenBot last checked it. Work from before limits has neither field.
+when OpenBot last checked it.
 
 Paused work has `pause`:
 

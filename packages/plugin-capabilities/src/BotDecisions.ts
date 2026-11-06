@@ -1,7 +1,8 @@
+import { Caller } from "@openbot-build/domain/Identity"
 import { and, eq } from "drizzle-orm"
 import { executions } from "@openbot-build/server-database/ExecutionSchema"
 import { Chat } from "@openbot-build/core"
-import { Bots as BotDomain, Caller, Execution } from "@openbot-build/domain"
+import { Bots as BotDomain, Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
@@ -24,7 +25,7 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import { hash } from "@openbot-build/conversation-contract/capabilities/Capability"
 import { CapabilityAccess } from "./CapabilityAccess.ts"
 import {
@@ -119,8 +120,7 @@ export interface Service {
 }
 
 export class BotDecisions extends Context.Service<BotDecisions, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-capabilities/BotDecisions",
+	"@openbot-build/plugin-capabilities/BotDecisions",
 ) {}
 
 export const make = Effect.gen(function* () {

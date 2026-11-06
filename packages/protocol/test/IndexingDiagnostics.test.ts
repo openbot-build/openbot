@@ -10,12 +10,12 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import * as Client from "../src/connections/Client.ts"
-import * as CatalogDiscovery from "../src/discovery/CatalogDiscovery.ts"
-import * as RobotsPolicy from "../src/discovery/RobotsPolicy.ts"
-import * as Indexing from "../src/indexing/Indexing.ts"
-import * as PublicIndexing from "../src/indexing/PublicIndexing.ts"
-import * as Network from "../src/network/Network.ts"
+import * as Client from "../src/Client.ts"
+import * as CatalogDiscovery from "../src/CatalogDiscovery.ts"
+import * as RobotsPolicy from "../src/RobotsPolicy.ts"
+import * as Indexing from "../src/Indexing.ts"
+import * as PublicIndexing from "../src/PublicIndexing.ts"
+import * as Network from "../src/Network.ts"
 
 const cardUrl = "https://publisher.example/card"
 const inspect = (read: Network.PublicNetwork["Service"]["readDocument"]) =>

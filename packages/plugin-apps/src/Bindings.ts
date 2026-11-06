@@ -1,4 +1,5 @@
-import { AppCalls, AppViews, ConnectionId } from "@openbot-build/domain"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
+import { AppCalls, AppViews } from "@openbot-build/domain"
 
 import { Client } from "@openbot-build/protocol"
 import {
@@ -22,10 +23,10 @@ import type { ConnectionSessions, Opened } from "./ConnectionSessions.ts"
 import type { ActionPolicy } from "./ActionPolicy.ts"
 import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
 import { organizationOf } from "@openbot-build/apps-contract/apps/StoredConnections"
-import type { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { Secrets } from "@openbot-build/server-kernel/Secrets"
 import * as Db from "@openbot-build/server-database/Database"
-import type * as Report from "@openbot-build/server-kernel/errors/Report"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import type * as Report from "@openbot-build/server-kernel/Report"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 
 /** The services needed to read descriptions. Calls use the App workflow. */
 export interface DiscoveryServices {

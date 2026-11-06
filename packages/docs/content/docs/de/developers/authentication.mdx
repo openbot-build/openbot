@@ -180,8 +180,10 @@ curl -b cookies.txt \
   https://api.example.com/v1/chats
 ```
 
-- Ohne den Header nutzt OpenBot deine einzige aktive Organisation.
-- Wenn du mehr als eine aktive Organisation hast und keinen Header sendest,
+- Ohne den Header nutzt OpenBot deine einzige aktive Organisation, die nicht
+  persönlich ist. Eine persönliche Organisation zählt nur, wenn du keine andere
+  aktive Organisation hast.
+- Wenn danach mehr als eine Organisation bleibt und du keinen Header sendest,
   antwortet OpenBot mit `400` und `OrganizationRequired`.
 
 Ein User-Token gehört zu einer Organisation. Es ignoriert den Header.
@@ -209,7 +211,7 @@ antwortet OpenBot mit `403` und `ForbiddenOrigin`.
 curl -b cookies.txt \
   -H "Origin: http://localhost" \
   -H "Content-Type: application/json" \
-  -d '{"input":"Hello"}' \
+  -d '{"commandKey":"hello-1","input":"Hello"}' \
   http://localhost/v1/bots/$BOT/messages
 ```
 
@@ -286,7 +288,7 @@ Tokens bleiben in der Liste, bis du sie widerrufst.
 
 ### Ein Token widerrufen
 
-Nutze die UUID `id` des Tokens aus der Liste. Alte v4- und neue v7-IDs
+Nutze die UUID `id` des Tokens aus der Liste. UUID-v4- und UUID-v7-IDs
 funktionieren. Die API weist IDs ohne UUID-Format vor dem Zugriff auf die
 Speicherung zurück.
 

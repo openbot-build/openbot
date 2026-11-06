@@ -2,7 +2,7 @@ import type { Computers as ComputersApi } from "@openbot-build/domain"
 import { Effect, Option, Predicate, pipe, Schema, String as Str } from "effect"
 import { Base64 } from "effect/encoding"
 import type { HttpClient, HttpClientRequest } from "effect/http"
-import { ComputerCallFailed } from "./Computer.ts"
+import { ComputerCallFailed } from "@openbot-build/apps-contract/computers/Computer"
 
 /** The answer of the provider, with the whole body. */
 export interface Reply {

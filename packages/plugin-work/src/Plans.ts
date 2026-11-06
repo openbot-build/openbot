@@ -1,7 +1,7 @@
 import { PlanApproval } from "@openbot-build/domain"
 import type { Bots as BotsApi } from "@openbot-build/domain"
 import { Effect } from "effect"
-import type { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import type { Settings } from "@openbot-build/server-kernel/Settings"
 import type * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 
 /**

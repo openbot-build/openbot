@@ -1,14 +1,12 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { Bot } from "@openbot-build/domain/Bots"
+import { ChannelLink, ChannelIdentity } from "@openbot-build/domain/Channels"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
 import { Execution } from "@openbot-build/domain"
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no API for HMAC signatures or AES ciphers.
 import { createCipheriv, createHmac } from "node:crypto"
 import { assert, layer } from "@effect/vitest"
-import {
-	BotsApi,
-	ChannelsApi,
-	ChatSummary,
-	RequestsApi,
-	UserTokensApi,
-} from "@openbot-build/api"
+import { ChannelsApi, RequestsApi, ChatsApi } from "@openbot-build/api"
 import { Item, Turn } from "@openbot-build/core"
 import { Network } from "@openbot-build/protocol/Network"
 import {
@@ -26,8 +24,8 @@ import {
 	String as Str,
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
-import { HttpClient, HttpClientRequest } from "effect/http"
-import { AppHost } from "@openbot-build/openbot"
+import { HttpClient, HttpClientRequest, FetchHttpClient } from "effect/http"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import {
 	BrowserHost,
 	Caller,
@@ -73,7 +71,7 @@ const post = (
 const sharedBot = (send: Send, owner: Redacted.Redacted<string>) =>
 	Effect.map(
 		Caller.read(
-			BotsApi.Bot,
+			Bot,
 			send(owner, "/v1/bots", "POST", {
 				name: "Team Bot",
 				role: "Helps the team in chat",
@@ -86,7 +84,12 @@ const sharedBot = (send: Send, owner: Redacted.Redacted<string>) =>
 	)
 
 // The hosts use real servers, so these tests run on the real clock.
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"a Slack Channel links people, keeps one Chat for each chat, works for the speaker, and decides requests with buttons",
 		() =>
@@ -179,7 +182,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				})
 				assert.notMatch(yield* created.text, /xoxb-test-token|signing-secret/)
 				const mine = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send(alice.session, "/v1/bots", "POST", {
 						name: "Private Bot",
 						role: "Mine",
@@ -289,7 +292,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						})
 					})
 				const channelChats = Caller.read(
-					Schema.Array(ChatSummary),
+					Schema.Array(ChatsApi.ChatSummary),
 					send(alice.session, "/v1/chats?kind=channel"),
 					200,
 				)
@@ -334,14 +337,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// The person opens the link in OpenBot and accepts it. A code works once.
 				const linkPath = "/v1/channel-links/" + encodeURIComponent(code.value)
 				const link = yield* Caller.read(
-					ChannelsApi.ChannelLink,
+					ChannelLink,
 					send(bob.session, linkPath),
 					200,
 				)
 				assert.strictEqual(link.externalUserId, "UBOB")
 				assert.strictEqual(link.channelName, "Team Slack")
 				const linked = yield* Caller.read(
-					ChannelsApi.ChannelIdentity,
+					ChannelIdentity,
 					send(bob.session, linkPath + "/accept", "POST"),
 					200,
 				)
@@ -352,7 +355,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(
 					(yield* Caller.read(
-						Schema.Array(ChannelsApi.ChannelIdentity),
+						Schema.Array(ChannelIdentity),
 						send(bob.session, "/v1/user/channel-identities"),
 						200,
 					)).length,
@@ -611,7 +614,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(
 					(yield* Caller.read(
-						Schema.Array(ChannelsApi.ChannelIdentity),
+						Schema.Array(ChannelIdentity),
 						send(
 							alice.session,
 							`/v1/organization/channels/${channel.id}/identities`,
@@ -663,7 +666,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					}).pipe(Effect.orDie)
 				const deliveries = yield* Ref.make<ReadonlyArray<Body>>([])
 				// The custom endpoint is a fake network that keeps each delivery.
-				const appNetwork = Layer.succeed(AppHost.AppNetwork, {
+				const appNetwork = Layer.succeed(AppNetwork, {
 					layer: (owner) =>
 						Layer.succeed(Network, {
 							identity: { scope: "user", owner },
@@ -910,7 +913,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					/telegram-token|lark-app-secret|ocs_/,
 				)
 				const token = yield* Caller.read(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					send(alice.session, "/v1/user/tokens", "POST", {
 						name: "Channel removal",
 					}),

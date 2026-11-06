@@ -1,5 +1,5 @@
 import { type Cause, Deferred, Effect, Queue, Stream } from "effect"
-import type { Exit } from "./Computer.ts"
+import type { Exit } from "@openbot-build/apps-contract/computers/Computer"
 
 /**
  * The output and the end of a command, filled by a provider as messages come.

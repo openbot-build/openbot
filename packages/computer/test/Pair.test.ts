@@ -1,7 +1,10 @@
+import {
+	StartPairingRequest,
+	connectorProtocolVersion,
+} from "@openbot-build/domain/Computers"
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- NodeHttpServer.make needs a function that makes a Node HTTP server.
 import { createServer } from "node:http"
 import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { ComputersApi } from "@openbot-build/api"
 import { assert, layer } from "@effect/vitest"
 import {
 	Array as Arr,
@@ -87,9 +90,7 @@ layer(folder, { excludeTestServices: true })((it) => {
 			Effect.gen(function* () {
 				const fs = yield* FileSystem.FileSystem
 				const path = yield* Path.Path
-				const starts = yield* Ref.make<
-					ReadonlyArray<ComputersApi.StartPairingRequest>
-				>([])
+				const starts = yield* Ref.make<ReadonlyArray<StartPairingRequest>>([])
 				// The authorization header of each poll.
 				const polls = yield* Ref.make<ReadonlyArray<Option.Option<string>>>([])
 				const openbot = yield* fakeOpenBot(
@@ -99,9 +100,8 @@ layer(folder, { excludeTestServices: true })((it) => {
 							request.method === "POST" &&
 							request.url === "/v1/hooks/computers/pairings"
 						) {
-							const start = yield* HttpServerRequest.schemaBodyJson(
-								ComputersApi.StartPairingRequest,
-							)
+							const start =
+								yield* HttpServerRequest.schemaBodyJson(StartPairingRequest)
 							yield* Ref.update(starts, Arr.append(start))
 							return yield* HttpServerResponse.json(
 								{
@@ -150,7 +150,7 @@ layer(folder, { excludeTestServices: true })((it) => {
 				assert.strictEqual(start.os, process.platform)
 				assert.strictEqual(start.arch, process.arch)
 				assert.strictEqual(start.hostname, Machine.name())
-				assert.strictEqual(start.version, ComputersApi.connectorProtocolVersion)
+				assert.strictEqual(start.version, connectorProtocolVersion)
 				assert.ok(start.machineId.length >= 16)
 				assert.strictEqual(first.config.url, openbot.url)
 				assert.strictEqual(first.config.machineId, start.machineId)

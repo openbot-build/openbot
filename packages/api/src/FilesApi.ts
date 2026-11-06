@@ -1,5 +1,16 @@
+import { FileId } from "@openbot-build/domain/Files"
+import { FileName } from "@openbot-build/domain/Files"
+import { MediaType } from "@openbot-build/domain/Files"
+import { FileObject } from "@openbot-build/domain/Files"
+import { CreateUploadRequest } from "@openbot-build/domain/Files"
+import { DirectUpload } from "@openbot-build/domain/Files"
+import { FilePage } from "@openbot-build/domain/Files"
+import { FileNotFound } from "@openbot-build/domain/Files"
+import { FileInvalid } from "@openbot-build/domain/Files"
+import { FileQuotaExceeded } from "@openbot-build/domain/Files"
+import { FilesDisabled } from "@openbot-build/domain/Files"
+import { FilesUnavailable } from "@openbot-build/domain/Files"
 import { errors as ExecutionErrors } from "./ExecutionsApi.ts"
-import { Files } from "@openbot-build/domain"
 import { Schema } from "effect"
 import {
 	HttpApi,
@@ -18,16 +29,8 @@ import {
 } from "./Authorization.ts"
 import { Limit } from "./Page.ts"
 
-export const FileId = Files.FileId
-export type FileId = typeof FileId.Type
-export const FileName = Files.FileName
 export type FileName = typeof FileName.Type
-export const MediaType = Files.MediaType
 export type MediaType = typeof MediaType.Type
-export const FileStatus = Files.FileStatus
-export type FileStatus = typeof FileStatus.Type
-export const FileObject = Files.FileObject
-export type FileObject = typeof FileObject.Type
 
 /**
  * An upload through the server. `file` is the file. The form may have other
@@ -37,36 +40,11 @@ export const UploadFileRequest = Schema.Struct({
 	file: Multipart.SingleFileSchema,
 }).pipe(HttpApiSchema.asMultipartStream())
 
-/** Asks for an address where the client puts the bytes itself. */
-export const CreateUploadRequest = Files.CreateUploadRequest
-export type CreateUploadRequest = Files.CreateUploadRequest
-
-/**
- * Send the bytes with `PUT` to `url`, with these headers. Then call
- * `POST /v1/files/:fileId/complete`.
- */
-export const DirectUpload = Files.DirectUpload
-export type DirectUpload = Files.DirectUpload
-
 export const ListFilesQuery = Schema.Struct({
 	limit: Schema.optionalKey(Limit(100)),
 	/** The `next` value of the page before. */
 	after: Schema.optionalKey(FileId),
 })
-export const FilePage = Files.FilePage
-export type FilePage = Files.FilePage
-
-export const FileNotFound = Files.FileNotFound
-export type FileNotFound = Files.FileNotFound
-export const FileInvalid = Files.FileInvalid
-export type FileInvalid = Files.FileInvalid
-export const FileQuotaExceeded = Files.FileQuotaExceeded
-export type FileQuotaExceeded = Files.FileQuotaExceeded
-export const FilesDisabled = Files.FilesDisabled
-export type FilesDisabled = Files.FilesDisabled
-export const FilesUnavailable = Files.FilesUnavailable
-export type FilesUnavailable = Files.FilesUnavailable
-
 export const FileErrors = [
 	FileNotFound.pipe(HttpApiSchema.status(404)),
 	FileInvalid.pipe(HttpApiSchema.status(400)),

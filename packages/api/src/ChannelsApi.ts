@@ -1,6 +1,20 @@
+import { BotId } from "@openbot-build/domain/BotId"
+import { Version } from "@openbot-build/domain/Version"
+import { ReturnTo } from "@openbot-build/domain/ReturnTo"
+import { SecretOutput } from "@openbot-build/domain/Secret"
+import { ChannelId } from "@openbot-build/domain/Channels"
+import { CredentialsInput as ChannelCredentials } from "@openbot-build/domain/Channels"
+import { ChannelIdentity } from "@openbot-build/domain/Channels"
+import { ChannelLink } from "@openbot-build/domain/Channels"
+import { ChannelNotFound } from "@openbot-build/domain/Channels"
+import { ChannelConflict } from "@openbot-build/domain/Channels"
+import { ChannelInvalid } from "@openbot-build/domain/Channels"
+import { ChannelLinkInvalid } from "@openbot-build/domain/Channels"
+import { ChannelIdentityNotFound } from "@openbot-build/domain/Channels"
+import { ChannelsUnavailable } from "@openbot-build/domain/Channels"
+import { ChannelHookDenied } from "@openbot-build/domain/Channels"
 import { Channels as Domain, Execution } from "@openbot-build/domain"
 import { errors as executionErrors } from "./ExecutionsApi.ts"
-import { SecretOutput } from "./Secret.ts"
 import { Schema } from "effect"
 import {
 	HttpApi,
@@ -9,8 +23,7 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import { BotId } from "./BotsApi.ts"
-import { BotAuth, ReturnTo } from "./AuthApi.ts"
+import { BotAuth } from "./AuthApi.ts"
 import {
 	Authorize,
 	AuthorizationErrors,
@@ -20,28 +33,8 @@ import {
 	channels,
 	own,
 } from "./Authorization.ts"
-import { Version } from "./Settings.ts"
 
-export const ChannelId = Domain.ChannelId
-export type ChannelId = Domain.ChannelId
-
-export const ChannelEndpoint = Domain.ChannelEndpoint
-export const LarkDomain = Domain.LarkDomain
-export type LarkDomain = Domain.LarkDomain
-export const ChannelCredentials = Domain.CredentialsInput
-export type ChannelCredentials = Domain.CredentialsInput
-
-/**
- * The platform of a Channel. `custom` is any other system that speaks the
- * Channel protocol of OpenBot over signed HTTP requests. It comes from
- * `ChannelCredentials`.
- */
-export const ChannelKind = Domain.ChannelKind
-export type ChannelKind = Domain.ChannelKind
-
-export const ChannelCredentialsView = Domain.ChannelCredentialsView
-export type ChannelCredentialsView = Domain.ChannelCredentialsView
-
+/** A Channel as the API shows it: the saved Channel and its webhook address. */
 export const Channel = Schema.Struct({
 	...Domain.Channel.fields,
 	webhookUrl: Schema.String,
@@ -82,47 +75,6 @@ export const ChannelSecret = Schema.Struct({
 	channel: Channel,
 })
 export type ChannelSecret = typeof ChannelSecret.Type
-
-export const ChannelIdentity = Domain.ChannelIdentity
-export type ChannelIdentity = Domain.ChannelIdentity
-
-export const ChannelLink = Domain.ChannelLink
-export type ChannelLink = Domain.ChannelLink
-
-export const CustomConversation = Domain.CustomConversation
-
-export const CustomSender = Domain.CustomSender
-
-export const CustomEvent = Domain.CustomEvent
-export type CustomEvent = Domain.CustomEvent
-
-export const CustomButton = Domain.CustomButton
-
-export const CustomDelivery = Domain.CustomDelivery
-export type CustomDelivery = Domain.CustomDelivery
-
-export const CustomDeliveryResult = Domain.CustomDeliveryResult
-
-export const ChannelNotFound = Domain.ChannelNotFound
-export type ChannelNotFound = Domain.ChannelNotFound
-
-export const ChannelConflict = Domain.ChannelConflict
-export type ChannelConflict = Domain.ChannelConflict
-
-export const ChannelInvalid = Domain.ChannelInvalid
-export type ChannelInvalid = Domain.ChannelInvalid
-
-export const ChannelLinkInvalid = Domain.ChannelLinkInvalid
-export type ChannelLinkInvalid = Domain.ChannelLinkInvalid
-
-export const ChannelIdentityNotFound = Domain.ChannelIdentityNotFound
-export type ChannelIdentityNotFound = Domain.ChannelIdentityNotFound
-
-export const ChannelsUnavailable = Domain.ChannelsUnavailable
-export type ChannelsUnavailable = Domain.ChannelsUnavailable
-
-export const ChannelHookDenied = Domain.ChannelHookDenied
-export type ChannelHookDenied = Domain.ChannelHookDenied
 
 export const ChannelErrors = [
 	...executionErrors,
@@ -176,7 +128,7 @@ export class ChannelsApi extends HttpApiGroup.make("channels")
 			},
 		).annotate(
 			OpenApi.Description,
-			"Changes a Channel. The caller becomes its actor and clears needsAuthorization.",
+			"Changes a Channel. The caller becomes its actor.",
 		),
 		HttpApiEndpoint.delete(
 			"deleteChannel",

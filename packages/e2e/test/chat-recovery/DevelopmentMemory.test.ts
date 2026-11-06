@@ -1,6 +1,8 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
-import { Effect, Schema } from "effect"
-import { ChatView } from "@openbot-build/api"
+import { Effect, Schema, Layer } from "effect"
+import { ChatsApi } from "@openbot-build/api"
 import { Item, Turn } from "@openbot-build/core"
 import {
 	BrowserHost,
@@ -9,7 +11,12 @@ import {
 	Messages,
 } from "@openbot-build/server-testing"
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"a development Chat survives a restart without replay or leaks between owners",
 		() =>
@@ -55,7 +62,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					)
 					const turns = yield* Caller.read(
 						Schema.Struct({
-							items: Schema.Array(ChatView.fields.turn.members[0]),
+							items: Schema.Array(ChatsApi.ChatView.fields.turn.members[0]),
 							next: Schema.NullOr(Turn.Id),
 						}),
 						send(`/v1/chats/${receipt.chat}/turns`, "GET"),

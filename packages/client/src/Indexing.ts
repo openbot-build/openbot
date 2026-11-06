@@ -1,4 +1,4 @@
-import type { DeveloperApi } from "@openbot-build/api"
+import type { IndexRequest } from "@openbot-build/domain/Developers"
 import type { Execution } from "@openbot-build/domain"
 import { Effect, type PlatformError } from "effect"
 import { SecureRandom } from "effect/crypto"
@@ -10,7 +10,7 @@ export const request = Effect.fn("Indexing.request")(function* (
 	cardUrl: string,
 	commandKey?: Execution.CommandKey,
 ): Effect.fn.Return<
-	Command<DeveloperApi.IndexRequest, ClientError>,
+	Command<IndexRequest, ClientError>,
 	PlatformError.PlatformError,
 	Client | SecureRandom.SecureRandom
 > {

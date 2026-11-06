@@ -1,4 +1,12 @@
-import * as ToolDefinitions from "@openbot-build/tools-contract/chats/ToolDefinitions"
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { InputCommands as InputCommandsModel } from "@openbot-build/conversation-contract/chats/InputCommands"
+import { stepId } from "@openbot-build/conversation-contract/chats/ToolSteps"
+import {
+	type ExecutionIdentity,
+	restrictExecution,
+} from "@openbot-build/domain/Identity"
+import * as Migrations from "@openbot-build/server-database/Migrations"
+import * as ToolDefinitions from "@openbot-build/tools-contract/ToolDefinitions"
 import { Delegations } from "@openbot-build/conversation-contract/bots/Delegations"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
@@ -12,11 +20,7 @@ import {
 	Turn,
 	TurnState,
 } from "@openbot-build/core"
-import {
-	Execution,
-	restrictExecution,
-	type ExecutionIdentity,
-} from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Deferred,
@@ -29,23 +33,20 @@ import {
 	String as Str,
 } from "effect"
 import { Prompt, Response } from "effect/ai"
-import { DatabasePostgres } from "@openbot-build/openbot"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as Store from "@openbot-build/server-execution/Store"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
-import { stepId } from "@openbot-build/plugin-chats/ToolSteps"
 import * as InputCommands from "@openbot-build/plugin-chats/InputCommands"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import * as BotFixture from "./BotFixture.ts"
-import * as PostgresTest from "./PostgresTest.ts"
 
-const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(PostgresTest.start, (db) =>
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),
@@ -78,7 +79,7 @@ const setup = Effect.fn(function* (namespace: string) {
 		business: { [ChatHost.chatHostId]: { bot: bot.id, kind, chain } },
 	})
 	const identity = ChatHost.identityOf(view.chat)
-	const commands = yield* InputCommands.InputCommands
+	const commands = yield* InputCommandsModel
 	const executions = yield* Store.Store
 	const send = (
 		key: string,
@@ -654,7 +655,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				yield* test.executions.uncertain(fence, call.id)
 				const read = yield* Deferred.make<void>()
 				const release = yield* Deferred.make<void>()
-				const commands = yield* InputCommands.InputCommands.pipe(
+				const commands = yield* InputCommandsModel.pipe(
 					Effect.provide(
 						Layer.fresh(
 							InputCommands.layer.pipe(

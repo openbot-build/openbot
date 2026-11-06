@@ -1,35 +1,32 @@
+import { BotId } from "@openbot-build/domain/BotId"
+import { DelegationId } from "@openbot-build/domain/DelegationId"
+import { TriggerId } from "@openbot-build/domain/TriggerId"
+import { Caller, keepsExecutionLimits } from "@openbot-build/domain/Identity"
 import { Chat } from "@openbot-build/core"
 import {
-	Bots as BotDomain,
 	Delegations as Domain,
-	Caller,
-	TriggerId,
 	Triggers,
 	Execution,
-	keepsExecutionLimits,
 } from "@openbot-build/domain"
 import { Effect, HashSet, Option, Schema } from "effect"
 import * as ToolOrigins from "../chats/ToolOrigins.ts"
-import {
-	Store,
-	storage,
-	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+import { Store, storage, type Key } from "@openbot-build/server-execution/Store"
 import { Delegations } from "./Delegations.ts"
 
 export const workflowName = "openbot.delegation"
 export const noticeWorkflowName = "openbot.delegation-notice"
 export const Input = Schema.Struct({
-	bot: BotDomain.BotId,
+	bot: BotId,
 	task: Schema.NonEmptyString,
 	reason: Schema.String,
-	limits: Schema.optionalKey(Domain.DelegationLimits),
-	previous: Schema.optionalKey(Domain.DelegationId),
+	limits: Domain.DelegationLimits,
+	previous: Schema.optionalKey(DelegationId),
 })
 export type Input = typeof Input.Type
 export const Request = Schema.Struct({
 	...Input.fields,
-	bot: Schema.optionalKey(BotDomain.BotId),
+	bot: Schema.optionalKey(BotId),
+	limits: Schema.optionalKey(Domain.DelegationLimits),
 })
 export const Source = Schema.Union([
 	Schema.TaggedStruct("Tool", { site: Execution.CallSite }),

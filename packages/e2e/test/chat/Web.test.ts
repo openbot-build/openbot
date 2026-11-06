@@ -1,3 +1,5 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { OrganizationSettings } from "@openbot-build/domain/Settings"
 import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
 import { Execution } from "@openbot-build/domain"
 import {
@@ -12,19 +14,13 @@ import {
 	Schema,
 	Stream,
 	String as Str,
+	Layer,
 } from "effect"
 import { assert, it } from "@effect/vitest"
-import {
-	ChatResponse,
-	ChatCommandReceipt,
-	ChatSummary,
-	ChatView,
-	RequestsApi,
-	Settings,
-} from "@openbot-build/api"
+import { RequestsApi, ChatsApi } from "@openbot-build/api"
 import { Item, Turn } from "@openbot-build/core"
 import { AiError, LanguageModel, type Prompt, Response } from "effect/ai"
-import { HttpClient } from "effect/http"
+import { HttpClient, FetchHttpClient } from "effect/http"
 const { bot, message, settled, view } = Messages
 type Send = Messages.Send
 
@@ -47,7 +43,12 @@ const textOf = (message: Prompt.UserMessage) =>
 	)
 
 // The host runs real servers, so these tests need real time.
-it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+it.layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"public Chats, Turns, approvals and detached SSE share one execution",
 		() =>
@@ -69,7 +70,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// Bots learn memory only with the Bot memory model of the organization.
 				const settings = yield* Effect.flatMap(
 					request(alice.session, "/v1/organization/settings"),
-					Caller.json(Settings.OrganizationSettings),
+					Caller.json(OrganizationSettings),
 				)
 				const configured = yield* request(
 					alice.session,
@@ -100,7 +101,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					Arr.map(
 						yield* Effect.flatMap(
 							request(alice.session, "/v1/chats?bot=" + aliceBot),
-							Caller.json(Schema.Array(ChatSummary)),
+							Caller.json(Schema.Array(ChatsApi.ChatSummary)),
 						),
 						(summary) => summary.chat.id,
 					),
@@ -285,7 +286,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(interrupted.status, 202)
 				const unchanged = yield* Caller.read(
-					ChatView,
+					ChatsApi.ChatView,
 					request(alice.session, path),
 				)
 				assert.strictEqual(unchanged.chat.revision, completed.chat.revision)
@@ -318,7 +319,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						expected: completed.chat.revision,
 						mode: "plan",
 					}),
-					Caller.json(ChatView),
+					Caller.json(ChatsApi.ChatView),
 				)
 				assert.strictEqual(planned.chat.settings.mode, "plan")
 				assert.ok(planned.chat.revision > completed.chat.revision)
@@ -356,7 +357,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					path + "/messages",
 					"POST",
 					{ input: "slow output", commandKey: "slow-output" },
-				).pipe(Effect.flatMap(Caller.json(ChatCommandReceipt, 202)))
+				).pipe(Effect.flatMap(Caller.json(ChatsApi.ChatCommandReceipt, 202)))
 				const streaming = yield* request(
 					alice.session,
 					`/v1/executions/${accepted.executionId}/observe?afterSequence=0`,
@@ -391,7 +392,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(yield* host.consolidations, beforeConsolidations)
 				const old = yield* Effect.flatMap(
 					request(alice.session, path + "/turns/" + completed.response!.id),
-					Caller.json(Schema.Struct({ response: ChatResponse })),
+					Caller.json(Schema.Struct({ response: ChatsApi.ChatResponse })),
 				)
 				assert.deepStrictEqual(old.response, completed.response)
 			}),

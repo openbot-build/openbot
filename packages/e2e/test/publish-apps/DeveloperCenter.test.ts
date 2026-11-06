@@ -1,14 +1,12 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import type { ManagementScope } from "@openbot-build/domain/Developers"
+import { IndexStore } from "@openbot-build/protocol"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { Execution } from "@openbot-build/domain"
 import { assert, it } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import * as Client from "@openbot-build/client"
-import {
-	AccountAuth,
-	AuthApi,
-	BotAuth,
-	DeveloperApi as Api,
-	SessionAuth,
-} from "@openbot-build/api"
+import { AuthApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Effect,
@@ -34,14 +32,11 @@ import {
 } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
 import * as Development from "@openbot-build/server-development/Development"
-import { DatabasePostgres as Database } from "@openbot-build/openbot"
-import { Index } from "@openbot-build/protocol"
 import {
 	Caller,
 	DevelopmentLogin,
 	DevelopmentTesting,
 	DeveloperTesting,
-	PostgresTest as Postgres,
 	TestHost,
 	Wait,
 } from "@openbot-build/server-testing"
@@ -57,11 +52,13 @@ const cardUrl = "https://app.development.test/card.json"
  * itself, so the middleware does not change the request.
  */
 const browserMiddleware = Layer.mergeAll(
-	HttpApiMiddleware.layerClient(BotAuth, ({ request, next }) => next(request)),
-	HttpApiMiddleware.layerClient(AccountAuth, ({ request, next }) =>
+	HttpApiMiddleware.layerClient(AuthApi.BotAuth, ({ request, next }) =>
 		next(request),
 	),
-	HttpApiMiddleware.layerClient(SessionAuth, ({ request, next }) =>
+	HttpApiMiddleware.layerClient(AuthApi.AccountAuth, ({ request, next }) =>
+		next(request),
+	),
+	HttpApiMiddleware.layerClient(AuthApi.SessionAuth, ({ request, next }) =>
 		next(request),
 	),
 )
@@ -83,7 +80,7 @@ it.layer(
 		() =>
 			Effect.gen(function* () {
 				const crypto = yield* SecureRandom.SecureRandom
-				const database = yield* Postgres.start
+				const database = yield* TestDatabase.start
 				const options = {
 					host: "127.0.0.1",
 					port: 0,
@@ -100,17 +97,19 @@ it.layer(
 						),
 					},
 				}
-				const migration = yield* Layer.build(Database.layer(options))
-				yield* Effect.provide(Database.migrate, migration)
+				const migration = yield* Layer.build(
+					PgClient.layer({ url: options.databaseUrl }),
+				)
+				yield* Effect.provide(Migrations.migrate, migration)
 				const sql = (statement: string) =>
 					Effect.provide(
 						Effect.flatMap(PgClient.PgClient, (sql) => sql.unsafe(statement)),
 						migration,
 					)
 				/** Starts the development server. It stops when the scope closes. */
-				const startServer = Effect.map(
-					Layer.build(Development.layer(options)),
-					(server) => Effect.provide(server),
+				const startServer = TestHost.startWith(
+					DeveloperTesting.services,
+					(probe) => Development.layer({ ...options, ...probe }),
 				)
 
 				const { owner, actor, protectedTest, notice, pendingAtRestart } =
@@ -174,7 +173,7 @@ it.layer(
 							) => onServer(DeveloperTesting.setPublication(value))
 							const publishProof = Effect.fn("DeveloperCenter.publishProof")(
 								function* (
-									scope: Api.ManagementScope,
+									scope: ManagementScope,
 									tokens: ReadonlyArray<string>,
 								) {
 									const response = yield* send(
@@ -692,7 +691,7 @@ it.layer(
 								"Complete",
 							)
 							yield* onServer(
-								Effect.flatMap(Index.IndexStore, (index) =>
+								Effect.flatMap(IndexStore.IndexStore, (index) =>
 									index.withdraw(cardUrl),
 								),
 							)
@@ -727,7 +726,7 @@ it.layer(
 							assert.ok(
 								Option.isSome(
 									yield* onServer(
-										Effect.flatMap(Index.IndexStore, (index) =>
+										Effect.flatMap(IndexStore.IndexStore, (index) =>
 											index.get(cardUrl),
 										),
 									),
@@ -1023,9 +1022,7 @@ it.layer(
 					appealUrl: "https://publisher.example/appeal",
 				}
 				// The platform owns App restrictions. Write them while OpenBot is stopped.
-				yield* DeveloperTesting.writeRestrictions([restriction]).pipe(
-					Effect.provide(TestHost.layerShared(options)),
-				)
+				yield* DeveloperTesting.writeRestrictions(options, [restriction])
 
 				yield* Effect.scoped(
 					Effect.gen(function* () {

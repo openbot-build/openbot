@@ -1,4 +1,7 @@
-import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
+import * as IndexCommandsFixture from "../src/IndexCommandsFixture.ts"
 import { assert, layer } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Authorization, Store } from "@openbot-build/protocol"
@@ -12,9 +15,7 @@ import {
 } from "effect"
 import { SqlClient } from "effect/sql"
 import * as ProtocolStores from "@openbot-build/plugin-apps/ProtocolStores"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import { DatabasePostgres as Database } from "@openbot-build/openbot"
-import * as Postgres from "./PostgresTest.ts"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 
 layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 	excludeTestServices: true,
@@ -23,13 +24,13 @@ layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 		"encrypted credentials and one-time PKCE flows survive a restart and check their full owner binding",
 		() =>
 			Effect.gen(function* () {
-				const database = yield* Postgres.start
+				const database = yield* TestDatabase.start
 				const layers = (key = "test:" + Str.repeat(32)("11")) =>
 					ProtocolStores.layer.pipe(
 						Layer.provide(IndexCommandsFixture.layer),
 						Layer.provide(Secrets.layer(Redacted.make(key))),
 						Layer.provideMerge(
-							Database.layer({ databaseUrl: Redacted.make(database.url) }),
+							PgClient.layer({ url: Redacted.make(database.url) }),
 						),
 						Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 					)
@@ -43,7 +44,7 @@ layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 				) => Effect.provide(effect, layers(key), { local: true })
 				const reference = yield* started(
 					Effect.gen(function* () {
-						yield* Database.migrate
+						yield* Migrations.migrate
 						const stores = (yield* ProtocolStores.ProtocolStores).bind("alice")
 						const binding = yield* Store.CredentialBinding.decode({
 							owner: "alice",

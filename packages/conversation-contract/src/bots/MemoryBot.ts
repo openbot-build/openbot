@@ -31,5 +31,4 @@ export class MemoryBot extends Context.Service<
 			BotsApi.BotStorageUnavailable
 		>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/bots/MemoryBot") {}
+>()("@openbot-build/conversation-contract/bots/MemoryBot") {}

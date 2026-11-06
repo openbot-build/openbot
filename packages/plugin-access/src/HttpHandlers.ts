@@ -1,15 +1,15 @@
+import { Account } from "@openbot-build/domain/Identity"
 import * as Model from "@openbot-build/domain/Access"
 import type {
 	AuthUnavailable,
 	CredentialRejected,
-} from "@openbot-build/server-kernel/auth/Model"
+} from "@openbot-build/server-kernel/AuthModel"
 import { Auth } from "@openbot-build/identity-contract/auth/Auth"
 import * as Middleware from "@openbot-build/identity-contract/auth/SessionHttp"
 import { HttpServerRequest } from "effect/http"
 import { Option } from "effect"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { OpenBotApi } from "@openbot-build/api"
-import { Account } from "@openbot-build/domain"
 import { Effect, Layer } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Access } from "@openbot-build/identity-contract/access/Access"

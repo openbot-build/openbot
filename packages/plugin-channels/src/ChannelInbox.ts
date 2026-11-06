@@ -4,11 +4,11 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 import { Execution } from "@openbot-build/domain"
 import { and, desc, eq } from "drizzle-orm"
-import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
+import { Clock, Context, Effect, Layer, Schema } from "effect"
 import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
@@ -66,8 +66,7 @@ export interface Service {
 }
 
 export class ChannelInbox extends Context.Service<ChannelInbox, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-channels/ChannelInbox",
+	"@openbot-build/plugin-channels/ChannelInbox",
 ) {}
 
 const make = Effect.gen(function* () {
@@ -113,13 +112,7 @@ const make = Effect.gen(function* () {
 							)
 							.limit(1)
 						if (prior.length !== 0) return
-						const authority = yield* channels.authority(
-							organizationId,
-							channelId,
-						)
-						if (Option.isNone(authority))
-							return yield* Execution.Forbidden.make({})
-						const caller = authority.value
+						const caller = yield* channels.authority(organizationId, channelId)
 						const namespace = ownerKey(caller)
 						const previous = yield* db
 							.select()
@@ -133,12 +126,8 @@ const make = Effect.gen(function* () {
 							.orderBy(desc(channelInbox.position))
 							.limit(1)
 						const last = previous[0]
-						if (last !== undefined && last.executionId === null)
-							return yield* Execution.StorageError.make({
-								cause: new Error("The Channel inbox needs data conversion."),
-							})
 						const predecessor =
-							last?.executionId == null
+							last === undefined
 								? null
 								: yield* store.locate(
 										Execution.Id.make(last.executionId),
@@ -179,16 +168,12 @@ const make = Effect.gen(function* () {
 									return { executionId: key.id, start: true }
 								}),
 						)
-						const now = yield* Clock.currentTimeMillis
 						yield* db.insert(channelInbox).values({
 							organizationId,
 							channelId,
 							eventId: event.eventId,
 							conversationKey: event.conversation.key,
-							event: receipt.executionId,
 							executionId: receipt.executionId,
-							receivedAt: now,
-							nextAt: now,
 						})
 					}),
 				),

@@ -1,5 +1,6 @@
-import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
-import { AppAuthorizationApi as Api, OpenBotApi } from "@openbot-build/api"
+import { AppAuthorizationUnavailable } from "@openbot-build/domain/AppAuthorizations"
+import * as HttpErrors from "@openbot-build/server-execution/HttpErrors"
+import { OpenBotApi } from "@openbot-build/api"
 
 import { Effect, Layer, Option, String as Str, pipe } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -8,8 +9,8 @@ import { Authorizations } from "./Authorizations.ts"
 import { ownersOf } from "@openbot-build/apps-contract/apps/StoredConnections"
 import { Auth } from "@openbot-build/identity-contract/auth/Auth"
 import * as HttpMiddleware from "@openbot-build/identity-contract/auth/SessionHttp"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 
 // The "&" goes first, so the later steps do not change the "&" that they add.
 const escapeHtml = (value: string) =>
@@ -59,13 +60,13 @@ export const layer = Layer.merge(
 					Effect.gen(function* () {
 						const request = yield* HttpServerRequest.HttpServerRequest
 						const publicOrigin = yield* Platform.publicOriginOr(settings, () =>
-							Api.AppAuthorizationUnavailable.make({}),
+							AppAuthorizationUnavailable.make({}),
 						)
 						const owner = yield* HttpMiddleware.optionalSession(auth).pipe(
 							Effect.map(Option.map(ownersOf)),
 							// The Auth service logs the cause of each failure.
 							Effect.catchTag("AuthUnavailable", () =>
-								Effect.fail(Api.AppAuthorizationUnavailable.make({})),
+								Effect.fail(AppAuthorizationUnavailable.make({})),
 							),
 						)
 						return yield* authorization.receive(request.url, owner).pipe(

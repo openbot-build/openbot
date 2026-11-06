@@ -1,3 +1,4 @@
+import { transactionFailures } from "@openbot-build/server-execution/Store"
 import { TestCleanup } from "./TestCleanup.ts"
 import { TestCommands, callbackBinding } from "./TestCommands.ts"
 import * as Models from "./DeveloperModels.ts"
@@ -22,13 +23,14 @@ import { and, eq } from "drizzle-orm"
 import { developerTests } from "@openbot-build/server-database/Schema"
 import * as Rows from "./DeveloperRows.ts"
 import type { TestRecord } from "./DeveloperRows.ts"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
+import type { InstanceSettings } from "@openbot-build/server-kernel/InstanceSettings"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 
 export class DeveloperTests extends Context.Service<
 	DeveloperTests,
@@ -65,8 +67,7 @@ export class DeveloperTests extends Context.Service<
 			Developers.Failure
 		>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/DeveloperTests") {}
+>()("@openbot-build/plugin-apps/DeveloperTests") {}
 /** A test authorization in these states can still go on. */
 const openAuthorization: ReadonlyArray<Developers.TestAuthorization["status"]> =
 	["Waiting", "Received"]
@@ -97,11 +98,12 @@ export const make: Effect.Effect<
 	| Discovery.Rules
 	| Secrets
 	| Settings
+	| InstanceSettings
 > = Effect.gen(function* () {
 	const settings = yield* Settings
 	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
-	const namespace = yield* IndexNamespace
+	const namespace = yield* instanceNamespace
 	/**
 	 * Run the change in one transaction while the row of the test is locked.
 	 * A test that does not exist yet has no row to lock.
@@ -300,7 +302,7 @@ export const make: Effect.Effect<
 		get,
 		configure,
 		list: (owner) =>
-			Rows.stored(
+			transactionFailures(
 				db
 					.select()
 					.from(developerTests)

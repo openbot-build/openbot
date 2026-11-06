@@ -171,8 +171,10 @@ curl -b cookies.txt \
   https://api.example.com/v1/chats
 ```
 
-- Without the header, OpenBot uses your only active organization.
-- If you have more than one active organization and send no header, OpenBot
+- Without the header, OpenBot uses your only active organization that is not
+  personal. A personal organization counts only when you have no other active
+  organization.
+- If that leaves more than one organization and you send no header, OpenBot
   returns `400` with `OrganizationRequired`.
 
 A user token belongs to one organization. It ignores the header.
@@ -200,7 +202,7 @@ exactly equal to `publicOrigin` in the
 curl -b cookies.txt \
   -H "Origin: http://localhost" \
   -H "Content-Type: application/json" \
-  -d '{"input":"Hello"}' \
+  -d '{"commandKey":"hello-1","input":"Hello"}' \
   http://localhost/v1/bots/$BOT/messages
 ```
 
@@ -277,8 +279,8 @@ list until you revoke them.
 
 ### Revoke a token
 
-Use the token's UUID `id` from the list. Old v4 and new v7 IDs both work. The
-API rejects an ID that is not UUID text before it reaches storage.
+Use the token's UUID `id` from the list. UUID v4 and v7 IDs both work. The API
+rejects an ID that is not UUID text before it reaches storage.
 
 ```sh
 curl -X DELETE -b cookies.txt \

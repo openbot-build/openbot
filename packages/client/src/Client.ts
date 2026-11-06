@@ -5,13 +5,7 @@ import {
 	type HttpApiGroup,
 	HttpApiMiddleware,
 } from "effect/http-api"
-import {
-	AccountAuth,
-	BotAuth,
-	AuthApi,
-	OpenBotApi,
-	SessionAuth,
-} from "@openbot-build/api"
+import { AuthApi, OpenBotApi } from "@openbot-build/api"
 import {
 	type HttpClientError,
 	FetchHttpClient,
@@ -41,9 +35,9 @@ export const make = (options: {
 	typeof Client.Service,
 	never,
 	| HttpClient.HttpClient
-	| HttpApiMiddleware.ForClient<BotAuth>
-	| HttpApiMiddleware.ForClient<AccountAuth>
-	| HttpApiMiddleware.ForClient<SessionAuth>
+	| HttpApiMiddleware.ForClient<AuthApi.BotAuth>
+	| HttpApiMiddleware.ForClient<AuthApi.AccountAuth>
+	| HttpApiMiddleware.ForClient<AuthApi.SessionAuth>
 > =>
 	HttpApiClient.make(OpenBotApi, options).pipe(
 		Effect.map((api) => Client.of({ api })),
@@ -78,7 +72,7 @@ export const layer = (options: {
 						}),
 					),
 				),
-				HttpApiMiddleware.layerClient(BotAuth, ({ request, next }) =>
+				HttpApiMiddleware.layerClient(AuthApi.BotAuth, ({ request, next }) =>
 					next(
 						Option.match(token, {
 							onNone: () =>
@@ -93,16 +87,21 @@ export const layer = (options: {
 						}),
 					).pipe(Effect.tap(reportUnauthorized)),
 				),
-				HttpApiMiddleware.layerClient(AccountAuth, ({ request, next }) =>
-					next(
-						Option.match(token, {
-							onNone: () => request,
-							onSome: (token) => HttpClientRequest.bearerToken(request, token),
-						}),
-					).pipe(Effect.tap(reportUnauthorized)),
+				HttpApiMiddleware.layerClient(
+					AuthApi.AccountAuth,
+					({ request, next }) =>
+						next(
+							Option.match(token, {
+								onNone: () => request,
+								onSome: (token) =>
+									HttpClientRequest.bearerToken(request, token),
+							}),
+						).pipe(Effect.tap(reportUnauthorized)),
 				),
-				HttpApiMiddleware.layerClient(SessionAuth, ({ request, next }) =>
-					next(request).pipe(Effect.tap(reportUnauthorized)),
+				HttpApiMiddleware.layerClient(
+					AuthApi.SessionAuth,
+					({ request, next }) =>
+						next(request).pipe(Effect.tap(reportUnauthorized)),
 				),
 			),
 		),

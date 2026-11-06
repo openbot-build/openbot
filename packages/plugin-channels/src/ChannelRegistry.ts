@@ -8,11 +8,11 @@ import {
 	Channels,
 	type Credentials,
 } from "@openbot-build/conversation-contract/channels/Channels"
-import * as CustomChannel from "./custom/CustomChannel.ts"
+import * as CustomChannel from "./CustomChannel.ts"
 import * as Http from "./Http.ts"
-import * as LarkChannel from "./lark/LarkChannel.ts"
-import * as SlackChannel from "./slack/SlackChannel.ts"
-import * as TelegramChannel from "./telegram/TelegramChannel.ts"
+import * as LarkChannel from "./LarkChannel.ts"
+import * as SlackChannel from "./SlackChannel.ts"
+import * as TelegramChannel from "./TelegramChannel.ts"
 
 /** The integration of each stored Channel, built from its secrets. */
 export class ChannelRegistry extends Context.Service<
@@ -39,8 +39,7 @@ export class ChannelRegistry extends Context.Service<
 			credentials: Credentials,
 		) => Effect.Effect<Channel, never, Scope.Scope>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-channels/ChannelRegistry") {}
+>()("@openbot-build/plugin-channels/ChannelRegistry") {}
 
 export const make = Effect.gen(function* () {
 	const channels = yield* Channels

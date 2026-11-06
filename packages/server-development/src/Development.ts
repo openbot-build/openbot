@@ -1,11 +1,18 @@
+import {
+	type FileStorageInput,
+	StorageEndpoint,
+	BucketName,
+	PublicOrigin,
+} from "@openbot-build/domain/Settings"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
-import { Settings as Api } from "@openbot-build/api"
 
 import { CatalogDiscovery, Discovery } from "@openbot-build/protocol"
 import {
 	Array as Arr,
 	Clock,
 	Config,
+	Context,
+	Deferred,
 	Effect,
 	HashSet,
 	Layer,
@@ -17,32 +24,25 @@ import {
 	pipe,
 } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/http"
-import type * as Configuration from "@openbot-build/server-kernel/configuration/Configuration"
-import type { Configuration as AuthConfiguration } from "@openbot-build/server-kernel/auth/Model"
+import type { Configuration as AuthConfiguration } from "@openbot-build/server-kernel/AuthModel"
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no HMAC API, so the development secret uses node:crypto.
 import { createHmac } from "node:crypto"
-import type { Host } from "@openbot-build/openbot"
-import {
-	Assembly,
-	type Composition,
-	Outside,
-	Shared,
-} from "@openbot-build/openbot/Parts"
-import * as Drivers from "@openbot-build/plugin-computers/Drivers"
-import * as VaultReaders from "@openbot-build/plugin-vaults/Readers"
+import { Host, type Launch } from "@openbot-build/openbot"
 import { IndexWork } from "@openbot-build/apps-contract/apps/IndexWork"
+import { Auth } from "@openbot-build/identity-contract/auth/Auth"
+import { BuiltinModels } from "@openbot-build/models-contract/BuiltinModels"
 import * as DevelopmentModel from "./DevelopmentModel.ts"
 import * as DevelopmentApps from "./DevelopmentApps.ts"
 import * as DevelopmentAuthorization from "./DevelopmentAuthorization.ts"
 import * as DevelopmentScenarios from "./DevelopmentScenarios.ts"
 import * as DevelopmentBusiness from "./DevelopmentBusiness.ts"
 import * as DevelopmentProofs from "./DevelopmentProofs.ts"
-import * as EnvironmentConfiguration from "@openbot-build/server-kernel/configuration/EnvironmentConfiguration"
+import * as EnvironmentConfiguration from "@openbot-build/server-kernel/EnvironmentConfiguration"
 import * as S3 from "@openbot-build/plugin-files/S3"
-import * as OutboundGuard from "@openbot-build/server-kernel/network/OutboundGuard"
-import * as OutboundPolicy from "@openbot-build/server-kernel/network/OutboundPolicy"
-import * as ErrorReporting from "@openbot-build/server-kernel/errors/Reporting"
-import * as Background from "@openbot-build/server-kernel/execution/Background"
+import * as OutboundGuard from "@openbot-build/server-kernel/OutboundGuard"
+import * as OutboundPolicy from "@openbot-build/server-kernel/OutboundPolicy"
+import * as ErrorReporting from "@openbot-build/server-kernel/Reporting"
+import * as Background from "@openbot-build/server-kernel/Background"
 
 const cardUrl = "https://app.development.test/card.json"
 const catalogUrl = "https://app.development.test/.well-known/ai-catalog.json"
@@ -106,10 +106,10 @@ const layerDiscovery = Layer.effect(
 )
 
 /**
- * The services from outside of OpenBot on a development platform. The
- * discovery, the network and the check of Apps, the public network of the App
- * Index and the DNS check of domains are simulated. The Computer drivers, the
- * Live backends and the readers of password managers are real.
+ * The services from outside of OpenBot on a development platform that take
+ * the place of the real ones. The discovery, the network and the check of
+ * Apps, the public network of the App Index and the DNS check of domains are
+ * simulated. The other services from outside are the real ones.
  */
 const layerOutside = Layer.mergeAll(
 	layerDiscovery,
@@ -117,9 +117,6 @@ const layerOutside = Layer.mergeAll(
 	DevelopmentApps.layerProbe,
 	DevelopmentApps.layerPublicNetwork,
 	DevelopmentProofs.layerDomainControl,
-	Drivers.layer,
-	Outside.layerLiveBackends,
-	VaultReaders.layer,
 )
 
 /**
@@ -136,88 +133,114 @@ export const developmentSecret = (secretKeys: Redacted.Redacted<string>) =>
 			.digest("hex"),
 	)
 
-/**
- * The service of the host that tells when every plugin is active. `layer`
- * gives it. TypeScript writes the type of `layer` into the built declarations
- * only when this module names `Composition` itself, so this type names it.
- */
-export type HostComposition = Composition.Composition
+/** The settings of the development server. */
+export interface Settings extends Omit<Launch.Settings, "outboundAllow"> {
+	readonly auth: AuthConfiguration
+	/** The local object storage for files, such as RustFS from devenv. */
+	readonly fileStorage?: FileStorageInput | undefined
+	/** The entries of the loader, such as the preset with the probes of a test. */
+	readonly entries?: Host.AppOptions["entries"]
+	/** More plugins that the entries can name, such as the probes of a test. */
+	readonly plugins?: Host.AppOptions["plugins"]
+}
 
 /**
- * Assemble simulated discovery and models with the normal configured identity and storage.
- * It needs the platform services, such as `NodeServices.layer`, `NodeCrypto.layer` and
- * `FetchHttpClient.layer`. The entry point sets the outbound guard, because it
- * changes the whole process.
+ * The development server: `Host.layer` with simulated discovery and models,
+ * and the normal configured identity and storage. It gives the services of
+ * the kernel and the state of the simulated App (`Scenarios`, `Business`,
+ * `Publication`, `Proofs`). It needs the platform services, such as
+ * `NodeServices.layer`, `NodeCrypto.layer` and `FetchHttpClient.layer`. The
+ * entry point sets the outbound guard, because it changes the whole process.
  */
-export const layer = (
-	settings: Omit<Configuration.Settings, "outboundAllow"> & {
-		readonly auth: AuthConfiguration
-		/** More routes, such as those of a test. */
-		readonly routes?: Host.AppOptions["routes"]
-		/** The local object storage for files, such as RustFS from devenv. */
-		readonly fileStorage?: Api.FileStorageInput | undefined
-	},
-) =>
+export const layer = (settings: Settings) =>
 	Layer.unwrap(
 		Effect.gen(function* () {
 			const { builtinModels } = yield* DevelopmentModel.make
-			const authorization = yield* DevelopmentAuthorization.Authorization
 			const proofs = yield* DevelopmentProofs.Proofs
-			// The development entry owns its platform, so each start writes its origin again.
-			return Assembly.layerServer({
-				...settings,
-				builtinModels,
-				routes: Layer.mergeAll(
-					settings.routes ?? Layer.empty,
-					DevelopmentAuthorization.layerRoutes,
-					DevelopmentProofs.layerRoutes,
-				).pipe(
-					Layer.provide(
-						Layer.merge(
-							Layer.succeed(
-								DevelopmentAuthorization.Authorization,
-								authorization,
-							),
-							Layer.succeed(DevelopmentProofs.Proofs, proofs),
-						),
+			// The simulated App reads the address of OpenBot from the platform
+			// settings, so the host builds it with its services from outside.
+			// Its routes use the same one.
+			const authorization =
+				yield* Deferred.make<
+					DevelopmentAuthorization.Authorization["Service"]
+				>()
+			const layerAuthorization = DevelopmentAuthorization.layer.pipe(
+				Layer.tap((context) =>
+					Deferred.succeed(
+						authorization,
+						Context.get(context, DevelopmentAuthorization.Authorization),
 					),
 				),
-				// Index the simulated App in the background, so the server listens at once.
-				startup: Layer.effectDiscard(
-					Effect.gen(function* () {
-						const work = yield* IndexWork
-						const background = yield* Background.make
-						yield* work
-							.request(cardUrl, [])
-							.pipe(
-								background.logFailure("The development App was not indexed"),
-								Effect.forkScoped,
-							)
+			)
+			return Host.layer({
+				...settings,
+				hostTools: DevelopmentModel.layerHostTools,
+				outside: Layer.mergeAll(
+					layerOutside,
+					Layer.succeed(BuiltinModels, builtinModels),
+				).pipe(Layer.provide(layerAuthorization)),
+				work: [
+					Host.routes({
+						name: "development-authorization",
+						inject: [],
+						layer: Layer.unwrap(
+							Effect.map(Deferred.await(authorization), (service) =>
+								DevelopmentAuthorization.layerRoutes.pipe(
+									Layer.provide(
+										Layer.succeed(
+											DevelopmentAuthorization.Authorization,
+											service,
+										),
+									),
+								),
+							),
+						),
 					}),
-				),
-				indexNamespace: "development",
+					Host.routes({
+						name: "development-proofs",
+						inject: [Auth],
+						layer: DevelopmentProofs.layerRoutes.pipe(
+							Layer.provide(Layer.succeed(DevelopmentProofs.Proofs, proofs)),
+						),
+					}),
+					// Index the simulated App in the background, so the server listens at once.
+					Host.startup({
+						name: "development-app",
+						inject: [IndexWork],
+						layer: Layer.effectDiscard(
+							Effect.gen(function* () {
+								const work = yield* IndexWork
+								const background = yield* Background.make
+								yield* work
+									.request(cardUrl, [])
+									.pipe(
+										background.logFailure(
+											"The development App was not indexed",
+										),
+										Effect.forkScoped,
+									)
+							}),
+						),
+					}),
+				],
 			})
 		}),
 	).pipe(
-		Layer.provide(Layer.merge(DevelopmentModel.layerHostTools, layerOutside)),
 		Layer.provideMerge(DevelopmentProofs.layer),
 		Layer.provideMerge(DevelopmentApps.layerPublication),
-		// The simulated App reads the address of OpenBot from the platform settings.
-		Layer.provideMerge(DevelopmentAuthorization.layer),
 		Layer.provideMerge(DevelopmentScenarios.layer),
 		Layer.provideMerge(DevelopmentBusiness.layer),
-		Layer.provideMerge(Shared.layer(settings)),
 	)
 
 /** The local object storage. Its secret key is always set. */
-type Storage = Api.FileStorageInput & {
+type Storage = FileStorageInput & {
 	readonly secretAccessKey: Redacted.Redacted<string>
 }
 
 /** The local RustFS that devenv starts. Without it, development has no file storage. */
 const fileStorage = Config.all({
-	endpoint: Config.schema(Api.StorageEndpoint, "OPENBOT_DEV_S3_ENDPOINT"),
-	bucket: Config.schema(Api.BucketName, "OPENBOT_DEV_S3_BUCKET"),
+	endpoint: Config.schema(StorageEndpoint, "OPENBOT_DEV_S3_ENDPOINT"),
+	bucket: Config.schema(BucketName, "OPENBOT_DEV_S3_BUCKET"),
 	accessKeyId: Config.String("OPENBOT_DEV_S3_ACCESS_KEY_ID"),
 	secretAccessKey: Config.Redacted("OPENBOT_DEV_S3_SECRET_ACCESS_KEY"),
 }).pipe(
@@ -267,57 +290,53 @@ const createBucket = (storage: Storage) =>
  * the `OPENBOT_DEV_S3_*` variables. It gives the server the Node services and
  * the fetch HTTP client.
  */
-export const launchWith = (routes?: Host.AppOptions["routes"]) =>
-	ErrorReporting.withStartup(
-		Effect.gen(function* () {
-			const settings = yield* EnvironmentConfiguration.load
-			// Only the development entry reads the origin from the environment.
-			// It has one instance, and it writes the platform settings itself.
-			const publicOrigin = yield* Config.schema(
-				Api.PublicOrigin,
-				"OPENBOT_DEV_PUBLIC_ORIGIN",
-			)
-			const storage = yield* fileStorage
-			return yield* Layer.launch(
-				Layer.effectDiscard(
-					Effect.logInfo(
-						`Development login: POST ${publicOrigin}/auth/development/sign-in`,
-					),
-				).pipe(
-					Layer.provideMerge(
-						layer({
-							...settings,
-							routes,
-							fileStorage: Option.getOrUndefined(storage),
-							auth: {
-								mode: "development",
-								publicOrigin,
-								secret: developmentSecret(settings.secretKeys),
-							},
+export const launch = ErrorReporting.withStartup(
+	Effect.gen(function* () {
+		const settings = yield* EnvironmentConfiguration.load
+		// Only the development entry reads the origin from the environment.
+		// It has one instance, and it writes the platform settings itself.
+		const publicOrigin = yield* Config.schema(
+			PublicOrigin,
+			"OPENBOT_DEV_PUBLIC_ORIGIN",
+		)
+		const storage = yield* fileStorage
+		return yield* Layer.launch(
+			Layer.effectDiscard(
+				Effect.logInfo(
+					`Development login: POST ${publicOrigin}/auth/development/sign-in`,
+				),
+			).pipe(
+				Layer.provideMerge(
+					layer({
+						...settings,
+						fileStorage: Option.getOrUndefined(storage),
+						auth: {
+							mode: "development",
+							publicOrigin,
+							secret: developmentSecret(settings.secretKeys),
+						},
+					}),
+				),
+				// The server starts at once. The bucket comes when RustFS is ready.
+				Layer.provideMerge(
+					Layer.effectDiscard(
+						Option.match(storage, {
+							onNone: () => Effect.void,
+							onSome: (target) => Effect.forkScoped(createBucket(target)),
 						}),
 					),
-					// The server starts at once. The bucket comes when RustFS is ready.
-					Layer.provideMerge(
-						Layer.effectDiscard(
-							Option.match(storage, {
-								onNone: () => Effect.void,
-								onSome: (target) => Effect.forkScoped(createBucket(target)),
-							}),
-						),
-					),
-					Layer.provide(
-						Layer.mergeAll(
-							NodeServices.layer,
-							NodeCrypto.layer,
-							FetchHttpClient.layer,
-						),
-					),
-					Layer.provide(
-						OutboundGuard.layer(allowStorage(settings.outboundAllow, storage)),
+				),
+				Layer.provide(
+					Layer.mergeAll(
+						NodeServices.layer,
+						NodeCrypto.layer,
+						FetchHttpClient.layer,
 					),
 				),
-			)
-		}),
-	)
-
-export const launch = launchWith()
+				Layer.provide(
+					OutboundGuard.layer(allowStorage(settings.outboundAllow, storage)),
+				),
+			),
+		)
+	}),
+)

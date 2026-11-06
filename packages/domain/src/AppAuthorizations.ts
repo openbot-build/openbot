@@ -27,7 +27,7 @@ export type Started = typeof Started.Type
 export const State = Schema.Struct({
 	flowId: Schema.NonEmptyString,
 	connectionId: ConnectionId,
-	executionId: Schema.NullOr(Execution.Id),
+	executionId: Execution.Id,
 	returnTo: ReturnTo,
 	expiresAt: Schema.Finite,
 	issuer: Schema.String,

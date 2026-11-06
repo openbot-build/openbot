@@ -1,15 +1,11 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { UsageEvent } from "@openbot-build/domain/Billing"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
 import { assert, layer } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import { SqlClient } from "effect/sql"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
-import {
-	BillingApi,
-	ChatCommandReceipt,
-	ChatResponse,
-	ChatView,
-	ExecutionsApi,
-	UserTokensApi,
-} from "@openbot-build/api"
+import { ExecutionsApi, ChatsApi } from "@openbot-build/api"
 import { Item } from "@openbot-build/core"
 import {
 	Array as Arr,
@@ -29,7 +25,6 @@ import {
 	Cloudflare,
 	DevelopmentLogin,
 	Messages,
-	PostgresTest,
 } from "@openbot-build/server-testing"
 const { origin, keepPrivate, environment, migrate, seedSession, start } =
 	Cloudflare
@@ -39,7 +34,7 @@ type Send = Messages.Send
 const Created = Schema.Struct({ id: Schema.String })
 const Turns = Schema.Struct({ items: Schema.Array(Created) })
 const Items = Schema.Struct({ items: Schema.Array(Item.Record) })
-const Usage = Schema.Struct({ items: Schema.Array(BillingApi.UsageEvent) })
+const Usage = Schema.Struct({ items: Schema.Array(UsageEvent) })
 
 /** Reads a response without putting a provider key or account address in an error. */
 const created = (call: Caller.Call, status: number) =>
@@ -52,7 +47,7 @@ const created = (call: Caller.Call, status: number) =>
 /** Waits on the real execution stream, then checks its saved text and final state. */
 const finish = Effect.fn("CloudflareE2E.finish")(function* (
 	send: Send,
-	receipt: ChatCommandReceipt,
+	receipt: ChatsApi.ChatCommandReceipt,
 ) {
 	const response = yield* send(
 		`/v1/executions/${receipt.executionId}/observe`,
@@ -63,7 +58,7 @@ const finish = Effect.fn("CloudflareE2E.finish")(function* (
 	assert.match(events, /event: execution/)
 	assert.match(events, /"_tag":"Text"/)
 	const view = yield* send(`/v1/chats/${receipt.chat}`, "GET").pipe(
-		Effect.flatMap(Caller.json(ChatView)),
+		Effect.flatMap(Caller.json(ChatsApi.ChatView)),
 	)
 	assert.strictEqual(view.response?.status, "completed")
 	assert.strictEqual(view.response?.error, null)
@@ -130,7 +125,7 @@ layer(
 				)
 				const fs = yield* FileSystem.FileSystem
 				const started = yield* Clock.currentTimeMillis
-				const database = yield* PostgresTest.start
+				const database = yield* TestDatabase.start
 				const env = environment(database.url)
 				yield* migrate(env)
 				const session = yield* seedSession(env)
@@ -169,7 +164,7 @@ layer(
 				)
 				const { token, secret } = yield* cookie("/v1/user/tokens", "POST", {
 					name: "Live test",
-				}).pipe(Effect.flatMap(Caller.json(UserTokensApi.CreatedToken, 201)))
+				}).pipe(Effect.flatMap(Caller.json(CreatedToken, 201)))
 				const keyed = Caller.withToken(address)
 				const key: Send = (path, method, payload) =>
 					keyed(secret, path, method, payload)
@@ -227,7 +222,7 @@ layer(
 					`/v1/bots/${bot.id}/messages`,
 					"POST",
 					firstInput,
-				).pipe(Effect.flatMap(Caller.json(ChatCommandReceipt, 202)))
+				).pipe(Effect.flatMap(Caller.json(ChatsApi.ChatCommandReceipt, 202)))
 				const firstResult = yield* finish(key, first)
 				assert.match(Str.toLowerCase(firstResult.text), /river/)
 				const beforeReplay = yield* cookie(
@@ -238,7 +233,7 @@ layer(
 					`/v1/bots/${bot.id}/messages`,
 					"POST",
 					firstInput,
-				).pipe(Effect.flatMap(Caller.json(ChatCommandReceipt, 202)))
+				).pipe(Effect.flatMap(Caller.json(ChatsApi.ChatCommandReceipt, 202)))
 				assert.strictEqual(replay.executionId, first.executionId)
 				assert.strictEqual(replay.turn, first.turn)
 				const afterReplay = yield* cookie(
@@ -257,7 +252,7 @@ layer(
 					input:
 						"What word did you write in your last answer? Reply with that word only.",
 					commandKey: "live:second",
-				}).pipe(Effect.flatMap(Caller.json(ChatCommandReceipt, 202)))
+				}).pipe(Effect.flatMap(Caller.json(ChatsApi.ChatCommandReceipt, 202)))
 				const secondResult = yield* finish(cookie, second)
 				assert.match(Str.toLowerCase(secondResult.text), /river/)
 				const turns = yield* cookie(
@@ -270,7 +265,7 @@ layer(
 					"GET",
 				).pipe(
 					Effect.flatMap(
-						Caller.json(Schema.Struct({ response: ChatResponse })),
+						Caller.json(Schema.Struct({ response: ChatsApi.ChatResponse })),
 					),
 				)
 				assert.strictEqual(saved.response.status, "completed")
@@ -331,7 +326,7 @@ layer(
 							"Call openbot_todos with items set to an empty list. Then reply with done. Make just this one tool call.",
 						commandKey: "live:tool",
 					},
-				).pipe(Effect.flatMap(Caller.json(ChatCommandReceipt, 202)))
+				).pipe(Effect.flatMap(Caller.json(ChatsApi.ChatCommandReceipt, 202)))
 				const toolResult = yield* finish(cookie, toolReceipt)
 				assert.ok(toolResult.toolSteps > 0)
 				const toolItems = yield* cookie(

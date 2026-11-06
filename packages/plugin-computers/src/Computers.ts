@@ -1,9 +1,9 @@
+import { BotId } from "@openbot-build/domain/BotId"
+import type { ExecutionIdentity, Caller } from "@openbot-build/domain/Identity"
 import { Lifecycle } from "./Lifecycle.ts"
 import * as Activity from "./Activity.ts"
-import { Directory } from "@openbot-build/server-execution/resources/Directory"
+import { Directory } from "@openbot-build/server-execution/Directory"
 import { Computers as ComputerData, Execution } from "@openbot-build/domain"
-import { Bots as BotsApi } from "@openbot-build/domain"
-import { type Caller, type ExecutionIdentity } from "@openbot-build/domain"
 import { and, desc, eq, inArray, isNull } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -19,8 +19,8 @@ import {
 import { Digest, SecureRandom } from "effect/crypto"
 import { SqlClient } from "effect/sql"
 import { Base64, Base64Url, Hex } from "effect/encoding"
-import * as Background from "@openbot-build/server-kernel/execution/Background"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Background from "@openbot-build/server-kernel/Background"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
@@ -35,16 +35,16 @@ import {
 	ComputerGone,
 	type ComputerError,
 	Machine,
-} from "./Computer.ts"
+} from "@openbot-build/apps-contract/computers/Computer"
 import { ComputerProviders } from "./ComputerProviders.ts"
-import * as ConnectorMachine from "./connector/ConnectorMachine.ts"
-import { Connectors } from "./connector/Connectors.ts"
-import { Drivers } from "./Drivers.ts"
+import * as ConnectorMachine from "./ConnectorMachine.ts"
+import { Connectors } from "./Connectors.ts"
+import { Drivers } from "@openbot-build/apps-contract/computers/Drivers"
 import * as Access from "./Access.ts"
 
 const decodeId = Schema.decodeUnknownEffect(ComputerData.ComputerId)
 const decodeSource = Schema.decodeUnknownEffect(ComputerData.ComputerSource)
-const decodeBot = Schema.decodeUnknownEffect(BotsApi.BotId)
+const decodeBot = Schema.decodeUnknownEffect(BotId)
 /** The state column holds one of the states of the API. */
 const decodeState = Schema.decodeUnknownEffect(ComputerData.ComputerState)
 
@@ -176,7 +176,7 @@ export class Computers extends Context.Service<
 		/** The Computers that the caller can read. With `bot`, only those that Bot may use. */
 		readonly list: (
 			identity: ExecutionIdentity,
-			bot?: BotsApi.BotId,
+			bot?: BotId,
 		) => Effect.Effect<ReadonlyArray<Computer>, Failure>
 		readonly get: (
 			caller: Caller,
@@ -190,7 +190,7 @@ export class Computers extends Context.Service<
 		readonly create: (
 			caller: Caller,
 			input: ComputerData.CreateComputerRequest,
-			bot?: BotsApi.BotId,
+			bot?: BotId,
 		) => Effect.Effect<Computer, Failure>
 		readonly update: (
 			caller: Caller,
@@ -270,24 +270,24 @@ export class Computers extends Context.Service<
 		readonly grant: (
 			caller: Caller,
 			id: string,
-			bot: BotsApi.BotId,
+			bot: BotId,
 		) => Effect.Effect<ComputerData.ComputerAccess, Failure>
 		readonly revoke: (
 			caller: Caller,
 			id: string,
-			bot: BotsApi.BotId,
+			bot: BotId,
 		) => Effect.Effect<void, Failure>
 		/** The Bot gives up its own right to use the Computer. The Computer stays. */
 		readonly release: (
 			organizationId: string,
-			bot: BotsApi.BotId,
+			bot: BotId,
 			id: string,
 		) => Effect.Effect<void, ComputerData.ComputersUnavailable>
 		/** Gives a Bot the right after its request was approved. It checks no permission. */
 		readonly grantApproved: (
 			organizationId: string,
 			id: string,
-			bot: BotsApi.BotId,
+			bot: BotId,
 			grantedBy: string,
 		) => Effect.Effect<
 			ComputerData.ComputerAccess,
@@ -296,7 +296,7 @@ export class Computers extends Context.Service<
 		/** True when the Bot has the right to use the Computer and is not archived. */
 		readonly holds: (
 			organizationId: string,
-			bot: BotsApi.BotId,
+			bot: BotId,
 			id: string,
 		) => Effect.Effect<boolean, ComputerData.ComputersUnavailable>
 		readonly usage: (
@@ -304,8 +304,7 @@ export class Computers extends Context.Service<
 			id: string,
 		) => Effect.Effect<ReadonlyArray<ComputerData.ComputerUsage>, Failure>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-computers/Computers") {}
+>()("@openbot-build/plugin-computers/Computers") {}
 
 export const make = Effect.gen(function* () {
 	const background = yield* Background.make
@@ -593,7 +592,7 @@ export const make = Effect.gen(function* () {
 	const grantRow = (
 		organizationId: string,
 		computerId: string,
-		bot: BotsApi.BotId,
+		bot: BotId,
 		grantedBy: string,
 	) =>
 		Effect.gen(function* () {

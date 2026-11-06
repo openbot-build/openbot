@@ -1,12 +1,10 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
-import {
-	ChatCommandReceipt,
-	ExecutionsApi,
-	RequestsApi,
-	UserTokensApi,
-} from "@openbot-build/api"
+import { ExecutionsApi, RequestsApi, ChatsApi } from "@openbot-build/api"
 import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
@@ -20,11 +18,9 @@ import {
 } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Caller from "./Caller.ts"
-import * as DevelopmentLogin from "./DevelopmentLogin.ts"
-import * as Messages from "./Messages.ts"
-import * as PostgresTest from "./PostgresTest.ts"
+import * as Caller from "../src/Caller.ts"
+import * as DevelopmentLogin from "../src/DevelopmentLogin.ts"
+import * as Messages from "../src/Messages.ts"
 
 const publicOrigin = "https://localhost:8443"
 const poll = <A, E, R>(
@@ -58,10 +54,10 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 		"full servers share HTTP commands and recover a Turn after node and database loss",
 		() =>
 			Effect.gen(function* () {
-				const database = yield* PostgresTest.start
+				const database = yield* TestDatabase.start
 				const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 				yield* Effect.gen(function* () {
-					yield* DatabasePostgres.migrate
+					yield* Migrations.migrate
 					const sql = yield* PgClient.PgClient
 					yield* sql`create table full_server_nodes (node integer primary key, address text not null)`
 					yield* sql`create table full_server_calls (
@@ -136,7 +132,7 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 						)
 					const token = yield* session
 						.send("/v1/user/tokens", "POST", { name: "Cluster test" })
-						.pipe(Effect.flatMap(Caller.json(UserTokensApi.CreatedToken, 201)))
+						.pipe(Effect.flatMap(Caller.json(CreatedToken, 201)))
 					const asToken =
 						(server: typeof first): Messages.Send =>
 						(path, method, payload) =>
@@ -162,13 +158,17 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 							`/v1/bots/${bot}/messages`,
 							"POST",
 							body,
-						).pipe(Effect.flatMap(Caller.json(ChatCommandReceipt, 202)))
+						).pipe(
+							Effect.flatMap(Caller.json(ChatsApi.ChatCommandReceipt, 202)),
+						)
 						assert.deepEqual(
 							yield* asCookie(reader)(
 								`/v1/bots/${bot}/messages`,
 								"POST",
 								body,
-							).pipe(Effect.flatMap(Caller.json(ChatCommandReceipt, 202))),
+							).pipe(
+								Effect.flatMap(Caller.json(ChatsApi.ChatCommandReceipt, 202)),
+							),
 							receipt,
 						)
 						const events = yield* observe(read, receipt.executionId)
@@ -390,8 +390,8 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 					yield* failAtCheckpoint([killed.other, replacement], "database", 2)
 				}).pipe(
 					Effect.provide(
-						DatabasePostgres.layer({
-							databaseUrl: Redacted.make(database.url),
+						PgClient.layer({
+							url: Redacted.make(database.url),
 						}),
 					),
 				)

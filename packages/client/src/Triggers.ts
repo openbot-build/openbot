@@ -1,8 +1,6 @@
-import {
-	type Execution,
-	type Triggers as Domain,
-	type DelegationId,
-} from "@openbot-build/domain"
+import type { TriggerId } from "@openbot-build/domain/TriggerId"
+import type { DelegationId } from "@openbot-build/domain/DelegationId"
+import { type Execution } from "@openbot-build/domain"
 import { Effect, type PlatformError, Redacted, type Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Client, type ClientError } from "./Client.ts"
@@ -10,7 +8,7 @@ import { prepare, type Command } from "./Command.ts"
 
 /** Keep one key and body when a webhook reply is lost. */
 export const fire = Effect.fn("Triggers.fire")(function* (
-	id: Domain.TriggerId,
+	id: TriggerId,
 	input: {
 		readonly secret: Redacted.Redacted<string>
 		readonly data: Schema.Json

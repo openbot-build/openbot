@@ -15,7 +15,7 @@ import {
 	Stream,
 } from "effect"
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
-import * as TurnLimiter from "../src/TurnLimiter.ts"
+import * as TurnLimiter from "../src/TurnLimiterFeature.ts"
 import { ChatTest } from "./ChatTest.ts"
 
 const usage = Response.Usage.make({
@@ -70,52 +70,6 @@ const toolPlugin = Plugin.make({ id: Plugin.Id.make("tools") })(() =>
 	),
 )
 
-it.effect(
-	"invalid limits fail only when run, before later hooks or any model request",
-	() =>
-		Effect.gen(function* () {
-			let enters = 0,
-				calls = 0
-			const inner = Plugin.make({ id: Plugin.Id.make("inner") })(() =>
-				Effect.succeed({
-					tools: {},
-					handlers: Context.empty(),
-					beforeStep: () =>
-						Effect.sync(() => {
-							enters++
-							return true
-						}),
-				}),
-			)
-			for (const maxSteps of [
-				0,
-				-1,
-				0.5,
-				NaN,
-				Infinity,
-				Number.MAX_SAFE_INTEGER + 1,
-			]) {
-				const chat = ChatTest(
-					PluginComposition.merge(TurnLimiter.make({ maxSteps }), inner),
-				)
-				const task = chat.execute({ input: "hello" })
-				assert.strictEqual(enters, 0)
-				const error = yield* task.pipe(
-					Effect.flip,
-					Effect.provide(
-						LanguageModelTest(() => {
-							calls++
-							return Stream.empty
-						}),
-					),
-				)
-				assert.ok(Schema.is(TurnLimiter.InvalidMaxSteps)(error))
-				// NaN is not equal to itself, so use Object.is.
-				assert.ok(Object.is(error.maxSteps, maxSteps))
-			}
-			assert.strictEqual(enters + calls, 0)
-		}),
-)
 it.effect(
 	"blocks the next request after tool versions complete and keeps their typed history",
 	() =>

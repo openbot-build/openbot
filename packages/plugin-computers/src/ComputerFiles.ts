@@ -1,8 +1,8 @@
 import { Effect, Layer } from "effect"
 import { Base64 } from "effect/encoding"
 import { Computers as Data } from "@openbot-build/domain"
-import { ComputerFiles } from "@openbot-build/tools-contract/computers/ComputerFiles"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { ComputerFiles } from "@openbot-build/apps-contract/computers/ComputerFiles"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { Computers } from "./Computers.ts"
 
 export const layer = Layer.effect(

@@ -1,3 +1,12 @@
+import {
+	OpenBot,
+	type Kind,
+	builtinRoles,
+	defaultTokenPolicy,
+	Connection,
+} from "@openbot-build/domain/Authorization"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
+import { CapabilityRequestId } from "@openbot-build/domain/CapabilityRequestId"
 import { assert, describe, it } from "@effect/vitest"
 import { Condition, Policy } from "@nmnmcc/ability"
 import type { Params } from "@nmnmcc/ability/HttpApi"
@@ -19,9 +28,6 @@ import {
 	Required,
 	type Requirement,
 } from "../src/Authorization.ts"
-import * as Authorization from "../src/Authorization.ts"
-import { CapabilityRequestId } from "../src/CapabilityRequestId.ts"
-import { ConnectionId } from "../src/ConnectionId.ts"
 import { OpenBotApi } from "../src/OpenBotApi.ts"
 
 interface Endpoint {
@@ -80,14 +86,9 @@ const paramsRead = (requirement: Requirement): ReadonlyArray<string> => {
 		},
 	)
 	const scope = requirement.within(params) as (
-		builder: Condition.Builder<Authorization.OpenBot, Authorization.Kind>,
+		builder: Condition.Builder<OpenBot, Kind>,
 	) => unknown
-	scope(
-		Condition.builder(
-			Authorization.OpenBot,
-			requirement.kind as Authorization.Kind,
-		),
-	)
+	scope(Condition.builder(OpenBot, requirement.kind as Kind))
 	return Arr.fromIterable(read)
 }
 
@@ -132,12 +133,9 @@ describe("Authorization with branded IDs", () => {
 		userId: "user_a",
 	} as const
 	const member = Option.getOrThrow(
-		Arr.findFirst(Authorization.builtinRoles, (role) => role.id === "member"),
+		Arr.findFirst(builtinRoles, (role) => role.id === "member"),
 	).policy
-	const policies = [
-		member,
-		Policy.all([member, Authorization.defaultTokenPolicy]),
-	]
+	const policies = [member, Policy.all([member, defaultTokenPolicy])]
 
 	it("own connection rules cover lists and IDs but keep other owners out", () => {
 		for (const policy of policies) {
@@ -187,8 +185,8 @@ describe("Authorization with branded IDs", () => {
 	})
 
 	it("a token rule still limits a connection by its ID", () => {
-		const token = Policy.define(Authorization.OpenBot)(function* (_) {
-			yield* _.allow("read", Authorization.Connection, {
+		const token = Policy.define(OpenBot)(function* (_) {
+			yield* _.allow("read", Connection, {
 				when: ($) => $.eq("id", ConnectionId.make("connection_a")),
 			})
 		})

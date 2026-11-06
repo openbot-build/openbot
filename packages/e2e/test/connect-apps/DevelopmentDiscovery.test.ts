@@ -1,13 +1,15 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { Failed } from "@openbot-build/domain/AppDiscovery"
+import { Result as ResultModel } from "@openbot-build/protocol/Discovery"
 import { assert, layer } from "@effect/vitest"
 
 import * as Client from "@openbot-build/client"
 
-import { AppDiscoveryFailed, AppDiscoveryResult } from "@openbot-build/api"
 import { Context, Effect, Layer, Result, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 
 import * as Development from "@openbot-build/server-development/Development"
-import { Caller, PostgresTest } from "@openbot-build/server-testing"
+import { Caller } from "@openbot-build/server-testing"
 import {
 	signIn,
 	settings,
@@ -24,7 +26,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 		"development HTTP discovery uses fixed local data with standard authentication",
 		() =>
 			Effect.gen(function* () {
-				const database = yield* PostgresTest.start
+				const database = yield* TestDatabase.start
 				const options = settings(database.url)
 				const publicOrigin = options.auth.publicOrigin
 				yield* migrate(options)
@@ -73,7 +75,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 				for (const [input, reason] of failures) {
 					const result = yield* Effect.result(discover(input))
 					assert.ok(Result.isFailure(result))
-					assert.ok(Schema.is(AppDiscoveryFailed)(result.failure))
+					assert.ok(Schema.is(Failed)(result.failure))
 					assert.strictEqual(result.failure.reason, reason)
 				}
 				const valid = yield* toJson({ input: "app.development.test" })
@@ -102,8 +104,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 				const session = yield* request({ cookie, origin: publicOrigin })
 				assert.strictEqual(session.status, 200)
 				assert.strictEqual(
-					(yield* Caller.json(Schema.toCodecJson(AppDiscoveryResult))(session))
-						._tag,
+					(yield* Caller.json(Schema.toCodecJson(ResultModel))(session))._tag,
 					"Single",
 				)
 				const malformed = yield* request({ cookie, origin: publicOrigin }, "{")

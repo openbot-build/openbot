@@ -1,20 +1,15 @@
-import { Chat, Turn } from "@openbot-build/core"
-import { type Caller, Execution, ToolExecution } from "@openbot-build/domain"
+import type { Caller } from "@openbot-build/domain/Identity"
+import { Chat } from "@openbot-build/core"
+import { Execution, ToolExecution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option, Order, Schema } from "effect"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Imported from "@openbot-build/server-execution/imported/Executions"
-import { ImportedRecords } from "@openbot-build/server-execution/imported/ImportedRecords"
-import * as Legacy from "@openbot-build/server-execution/imported/LegacyChats"
-import {
-	executions,
-	toolExecutions,
-} from "@openbot-build/server-database/ExecutionSchema"
+import { toolExecutions } from "@openbot-build/server-database/ExecutionSchema"
 import {
 	Store,
 	transactionFailures,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import * as ChatQueries from "./ChatQueries.ts"
 import { ToolCommands } from "./ToolCommands.ts"
 import * as ToolResults from "./ToolResults.ts"
@@ -26,81 +21,6 @@ export const make = Effect.gen(function* () {
 	const chats = yield* ChatQueries.make
 	const tools = yield* ToolCommands
 	const store = yield* Store
-	const imported = yield* ImportedRecords
-	const historyRows = (
-		namespace: string,
-		chat: Chat.Id,
-		id?: ToolExecution.Id,
-	) =>
-		db
-			.select({ id: executions.id })
-			.from(executions)
-			.where(
-				and(
-					eq(executions.namespace, namespace),
-					eq(executions.workflow, Imported.workflowName),
-					eq(executions.resourceKind, "ToolCall"),
-					eq(executions.contextKind, "Chat"),
-					eq(executions.contextId, chat),
-					id === undefined ? undefined : eq(executions.resourceId, id),
-				),
-			)
-			.orderBy(executions.createdAt, executions.id)
-	const history = Effect.fn("ToolQueries.history")(function* (
-		caller: Caller,
-		chat: Chat.Id,
-		executionId: string,
-	) {
-		const namespace = ownerKey(caller)
-		const key = { namespace, id: Execution.Id.make(executionId) }
-		const { saved, input } = yield* imported.read(key, caller)
-		const old = yield* Schema.decodeUnknownEffect(Legacy.Operation)(
-			input.history,
-		)
-		if (
-			saved.record.resource.kind !== "ToolCall" ||
-			saved.record.resource.id !== old.id ||
-			old.chat !== chat ||
-			saved.context?.kind !== "Chat" ||
-			saved.context.id !== chat
-		)
-			return yield* Execution.Conflict.make({ id: key.id })
-		const parents = yield* db
-			.select({ id: executions.id })
-			.from(executions)
-			.where(
-				and(
-					eq(executions.namespace, namespace),
-					eq(executions.resourceKind, "Turn"),
-					eq(executions.resourceId, old.turn),
-					eq(executions.contextKind, "Chat"),
-					eq(executions.contextId, chat),
-				),
-			)
-			.limit(2)
-		if (parents.length !== 1 || parents[0] === undefined)
-			return yield* Execution.Conflict.make({ id: key.id })
-		return {
-			_tag: "Imported" as const,
-			id: ToolExecution.Id.make(old.id),
-			executionId: key.id,
-			parentExecutionId: Execution.Id.make(parents[0].id),
-			chat,
-			turn: Turn.Id.make(old.turn),
-			callId: old.callId,
-			tool: old.tool,
-			kind: old.kind,
-			status: saved.record.status,
-			startedAt: old.startedAt,
-			endedAt:
-				old.endedAt ??
-				(Execution.isTerminal(saved.record.status)
-					? saved.record.updatedAt
-					: null),
-			failure: saved.record.failure,
-			output: old.status._tag === "Completed" ? old.status.result : null,
-		}
-	}, transactionFailures)
 	const list = Effect.fn("ToolQueries.list")(function* (
 		caller: Caller,
 		chat: Chat.Id,
@@ -111,18 +31,11 @@ export const make = Effect.gen(function* () {
 		yield* Effect.forEach(rows, (row) =>
 			tools.authorize({ namespace, id: row.executionId }, caller, "read"),
 		)
-		const old = yield* Effect.forEach(
-			yield* historyRows(namespace, chat),
-			(row) =>
-				history(caller, chat, row.id).pipe(
-					Effect.map(({ output: _output, ...record }) => record),
-				),
-		)
 		return Arr.sort(
-			[...rows, ...old],
+			rows,
 			Order.mapInput(
 				Order.Number,
-				(row: ToolExecution.Summary) => row.startedAt,
+				(row: ToolExecution.Record) => row.startedAt,
 			),
 		)
 	}, transactionFailures)
@@ -145,13 +58,7 @@ export const make = Effect.gen(function* () {
 					),
 				),
 		)
-		if (Option.isNone(found)) {
-			const old = yield* historyRows(namespace, chat, id)
-			if (old.length === 0) return yield* ToolExecution.NotFound.make({ id })
-			if (old.length !== 1 || old[0] === undefined)
-				return yield* Execution.Conflict.make({ id: Execution.Id.make(id) })
-			return yield* history(caller, chat, old[0].id)
-		}
+		if (Option.isNone(found)) return yield* ToolExecution.NotFound.make({ id })
 		const key = { namespace, id: Execution.Id.make(found.value.executionId) }
 		yield* tools.authorize(key, caller, "read")
 		const saved = yield* tools.load(key)

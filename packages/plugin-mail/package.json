@@ -11,7 +11,7 @@
 	],
 	"exports": {
 		".": "./dist/index.js",
-		"./Smtp": "./dist/Smtp.js"
+		"./Outside": "./dist/Outside.js"
 	},
 	"scripts": {
 		"build": "tsdown",

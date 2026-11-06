@@ -1,8 +1,9 @@
+import { BotId } from "@openbot-build/domain/BotId"
 import { RoleId } from "@openbot-build/domain/Roles"
 import {
-	BotId,
 	BotSharing as BotSharingModel,
 	type Accounts as AccountsModel,
+	Invitation,
 	Organizations as OrganizationsModel,
 	Platform as PlatformModel,
 } from "@openbot-build/domain"
@@ -45,11 +46,8 @@ import {
 	tokens,
 } from "@openbot-build/server-database/Schema"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import {
-	organizationKey,
-	userKey,
-} from "@openbot-build/identity-contract/audit/Resources"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { organizationKey, userKey } from "@openbot-build/domain/AuditResources"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import {
 	type Account,
 	domainOf,
@@ -79,7 +77,7 @@ const decodeOrganizationStatus = (status: string) =>
 		status,
 	).pipe(Effect.mapError(unavailable))
 const decodeInvitationStatus = (status: string) =>
-	Schema.decodeUnknownEffect(OrganizationsModel.InvitationStatus)(status).pipe(
+	Schema.decodeUnknownEffect(Invitation.InvitationStatus)(status).pipe(
 		Effect.mapError(unavailable),
 	)
 const decodeBotId = (id: string | null) =>
@@ -122,10 +120,7 @@ type InvitationRow = typeof invitations.$inferSelect
 const statusOf = (
 	row: InvitationRow,
 	now: number,
-): Effect.Effect<
-	OrganizationsModel.InvitationStatus,
-	OrganizationUnavailable
-> =>
+): Effect.Effect<Invitation.InvitationStatus, OrganizationUnavailable> =>
 	row.status === "pending" && row.expiresAt !== null && row.expiresAt <= now
 		? Effect.succeed("expired")
 		: decodeInvitationStatus(row.status)
@@ -135,7 +130,7 @@ const invitationView = (
 ): Effect.Effect<OrganizationsModel.Invitation, OrganizationUnavailable> =>
 	Effect.gen(function* () {
 		return {
-			id: OrganizationsModel.InvitationId.make(row.id),
+			id: Invitation.InvitationId.make(row.id),
 			organizationId: row.organizationId,
 			organizationName: row.organizationName,
 			// Only Bot links have no email, and this view never shows them.
@@ -159,7 +154,7 @@ const botInvitationView = (
 ): Effect.Effect<BotSharingModel.BotInvitation, OrganizationUnavailable> =>
 	Effect.gen(function* () {
 		return {
-			id: OrganizationsModel.InvitationId.make(row.id),
+			id: Invitation.InvitationId.make(row.id),
 			bot: yield* decodeBotId(row.botId),
 			email: row.email,
 			prefix: row.prefix,
@@ -829,7 +824,7 @@ export const make: Effect.Effect<
 								)
 								.limit(1)
 							if (member.length > 0)
-								return yield* OrganizationsModel.InvitationInvalid.make({
+								return yield* Invitation.InvitationInvalid.make({
 									message: "A member already has this email.",
 								})
 							const pending = yield* tx
@@ -846,7 +841,7 @@ export const make: Effect.Effect<
 								)
 								.limit(1)
 							if (pending.length > 0)
-								return yield* OrganizationsModel.InvitationInvalid.make({
+								return yield* Invitation.InvitationInvalid.make({
 									message: "This email already has a pending invitation.",
 								})
 							yield* tx.insert(invitations).values(row)
@@ -873,12 +868,12 @@ export const make: Effect.Effect<
 					),
 				)
 				if (row === undefined)
-					return yield* OrganizationsModel.InvitationNotFound.make({
-						invitationId: OrganizationsModel.InvitationId.make(invitationId),
+					return yield* Invitation.InvitationNotFound.make({
+						invitationId: Invitation.InvitationId.make(invitationId),
 					})
 				const current = yield* invitationView(row, now)
 				if (current.status !== "pending")
-					return yield* OrganizationsModel.InvitationInvalid.make({
+					return yield* Invitation.InvitationInvalid.make({
 						message: `The invitation is ${current.status}.`,
 					})
 				yield* db
@@ -909,8 +904,8 @@ export const make: Effect.Effect<
 			}),
 		answerInvitation: (userId, invitationId, answer) =>
 			Effect.gen(function* () {
-				const notFound = OrganizationsModel.InvitationNotFound.make({
-					invitationId: OrganizationsModel.InvitationId.make(invitationId),
+				const notFound = Invitation.InvitationNotFound.make({
+					invitationId: Invitation.InvitationId.make(invitationId),
 				})
 				const account = yield* accountOf(userId)
 				const [row] = yield* invitationRows(eq(invitations.id, invitationId))
@@ -922,11 +917,11 @@ export const make: Effect.Effect<
 				)
 					return yield* notFound
 				if (!account.value.emailVerified)
-					return yield* OrganizationsModel.InvitationInvalid.make({
+					return yield* Invitation.InvitationInvalid.make({
 						message: "Verify your email address first.",
 					})
 				if (row.target === "bot" && answer === "accepted")
-					return yield* OrganizationsModel.InvitationInvalid.make({
+					return yield* Invitation.InvitationInvalid.make({
 						message:
 							"This invitation is for a Bot. Accept it with POST /v1/bot-invitations/accept.",
 					})
@@ -943,7 +938,7 @@ export const make: Effect.Effect<
 							const status =
 								locked === undefined ? "revoked" : yield* statusOf(locked, now)
 							if (status !== "pending")
-								return yield* OrganizationsModel.InvitationInvalid.make({
+								return yield* Invitation.InvitationInvalid.make({
 									message: `The invitation is ${status}.`,
 								})
 							yield* tx
@@ -1035,7 +1030,7 @@ export const make: Effect.Effect<
 									)
 									.limit(1)
 								if (pending.length > 0)
-									return yield* OrganizationsModel.InvitationInvalid.make({
+									return yield* Invitation.InvitationInvalid.make({
 										message: "This email already has a pending invitation.",
 									})
 							}
@@ -1054,8 +1049,8 @@ export const make: Effect.Effect<
 				const now = yield* Clock.currentTimeMillis
 				const found = yield* botInvitationRow(organizationId, bot, invitationId)
 				if (Option.isNone(found))
-					return yield* OrganizationsModel.InvitationNotFound.make({
-						invitationId: OrganizationsModel.InvitationId.make(invitationId),
+					return yield* Invitation.InvitationNotFound.make({
+						invitationId: Invitation.InvitationId.make(invitationId),
 					})
 				const row = found.value
 				return {
@@ -1077,12 +1072,12 @@ export const make: Effect.Effect<
 				const now = yield* Clock.currentTimeMillis
 				const found = yield* botInvitationRow(organizationId, bot, invitationId)
 				if (Option.isNone(found))
-					return yield* OrganizationsModel.InvitationNotFound.make({
-						invitationId: OrganizationsModel.InvitationId.make(invitationId),
+					return yield* Invitation.InvitationNotFound.make({
+						invitationId: Invitation.InvitationId.make(invitationId),
 					})
 				const current = yield* botInvitationView(found.value, now)
 				if (current.status !== "pending")
-					return yield* OrganizationsModel.InvitationInvalid.make({
+					return yield* Invitation.InvitationInvalid.make({
 						message: `The invitation is ${current.status}.`,
 					})
 				yield* db
@@ -1100,12 +1095,10 @@ export const make: Effect.Effect<
 		takeBotInvitation: (userId, by) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const notFound = OrganizationsModel.InvitationNotFound.make({
+				const notFound = Invitation.InvitationNotFound.make({
 					...(by._tag === "Email"
 						? {
-								invitationId: OrganizationsModel.InvitationId.make(
-									by.invitationId,
-								),
+								invitationId: Invitation.InvitationId.make(by.invitationId),
 							}
 						: {}),
 				})
@@ -1132,7 +1125,7 @@ export const make: Effect.Effect<
 					if (row.email !== null) return yield* notFound
 					const status = yield* statusOf(row, now)
 					if (status !== "pending")
-						return yield* OrganizationsModel.InvitationInvalid.make({
+						return yield* Invitation.InvitationInvalid.make({
 							message: `The invitation is ${status}.`,
 						})
 					return taken
@@ -1142,7 +1135,7 @@ export const make: Effect.Effect<
 				if (Option.isNone(account) || account.value.email !== row.email)
 					return yield* notFound
 				if (!account.value.emailVerified)
-					return yield* OrganizationsModel.InvitationInvalid.make({
+					return yield* Invitation.InvitationInvalid.make({
 						message: "Verify your email address first.",
 					})
 				yield* db
@@ -1156,7 +1149,7 @@ export const make: Effect.Effect<
 							const status =
 								locked === undefined ? "revoked" : yield* statusOf(locked, now)
 							if (status !== "pending")
-								return yield* OrganizationsModel.InvitationInvalid.make({
+								return yield* Invitation.InvitationInvalid.make({
 									message: `The invitation is ${status}.`,
 								})
 							yield* tx

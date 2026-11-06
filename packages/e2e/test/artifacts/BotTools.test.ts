@@ -1,5 +1,8 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { ChatItem } from "@openbot-build/domain/Artifacts"
 import { assert, layer } from "@effect/vitest"
-import { ArtifactsApi, ChatItem, ExecutionsApi } from "@openbot-build/api"
+import { ArtifactsApi, ExecutionsApi } from "@openbot-build/api"
 import { Artifacts, Execution } from "@openbot-build/domain"
 import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
 import {
@@ -10,6 +13,7 @@ import {
 	Schema,
 	Stream,
 	String as Str,
+	Layer,
 } from "effect"
 import { LanguageModel, Prompt, Response } from "effect/ai"
 import * as Fixtures from "./Fixtures.ts"
@@ -214,7 +218,12 @@ const model = LanguageModel.make({
 		),
 })
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"the Bot captures sources, publishes two files, cites its answer, and changes the same files",
 		() =>

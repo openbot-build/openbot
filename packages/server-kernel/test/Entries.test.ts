@@ -18,7 +18,7 @@ const Manifest = Schema.fromJsonString(
 )
 
 // These entries have only types, so their built module has no export.
-const typeOnly = ["./configuration/Configuration"]
+const typeOnly = ["./Configuration"]
 
 // The built entries are what other packages use, so this test reads them by
 // the package name and not from the source.

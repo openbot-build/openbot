@@ -1,16 +1,39 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import {
+	RequestCommands,
+	workflowName,
+	type Input,
+	type Details,
+} from "@openbot-build/conversation-contract/capabilities/RequestCommands"
+import {
+	type Ask,
+	Requests as RequestsModel,
+} from "@openbot-build/conversation-contract/capabilities/Requests"
+import { ToolCommands as ToolCommandsModel } from "@openbot-build/conversation-contract/chats/ToolCommands"
+import { Grants as GrantsModel } from "@openbot-build/conversation-contract/capabilities/Grants"
+import { Rules as RulesModel } from "@openbot-build/conversation-contract/capabilities/Rules"
+import {
+	names,
+	ReviewTools as ReviewToolsModel,
+} from "@openbot-build/conversation-contract/capabilities/ReviewTools"
+import { BotRecords as BotRecordsModel } from "@openbot-build/conversation-contract/bots/BotRecords"
+import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
+import { BotId } from "@openbot-build/domain/BotId"
+import type { Caller } from "@openbot-build/domain/Identity"
+import { ChatModelInvalid } from "@openbot-build/domain/Chats"
+import { TokenId } from "@openbot-build/domain/TokenId"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import * as Resolve from "@openbot-build/conversation-contract/capabilities/Resolve"
 import * as DelegationsModule from "@openbot-build/plugin-bots/Delegations"
-import * as ImportedWorkflow from "@openbot-build/plugin-imported/ImportedWorkflow"
 import * as GrantUse from "@openbot-build/plugin-capabilities/GrantUse"
-import { ChatModelInvalid } from "@openbot-build/domain"
 import * as DevelopmentModel from "@openbot-build/server-development/DevelopmentModel"
 import * as ToolCommands from "@openbot-build/plugin-chats/ToolCommands"
-import { SavedResult } from "@openbot-build/tools-contract/plugins/ToolEntry"
-import * as Calls from "@openbot-build/server-execution/execution/Calls"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
+import { SavedResult } from "@openbot-build/tools-contract/ToolEntry"
+import * as Calls from "@openbot-build/server-execution/Calls"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
 import * as ReviewTools from "@openbot-build/plugin-capabilities/ReviewTools"
-import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import { CallContext } from "@openbot-build/server-execution/CallContext"
+import { Billing } from "@openbot-build/server-billing/Billing"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
@@ -26,13 +49,8 @@ import {
 	TurnState,
 } from "@openbot-build/core"
 import {
-	AppCalls,
 	CodeRuns as CodeDomain,
-	ConnectionId,
 	Authorization,
-	BotId,
-	TokenId,
-	type Caller,
 	Execution,
 } from "@openbot-build/domain"
 import {
@@ -63,23 +81,16 @@ import * as Rules from "@openbot-build/plugin-capabilities/Rules"
 import * as Decisions from "@openbot-build/plugin-capabilities/RequestCommands"
 import * as BotDecisions from "@openbot-build/plugin-capabilities/BotDecisions"
 import * as CapabilityAccess from "@openbot-build/plugin-capabilities/CapabilityAccess"
+import * as CapabilityAccessFixture from "./CapabilityAccessFixture.ts"
 import { Judge } from "@openbot-build/plugin-capabilities/Judge"
 import * as Notices from "@openbot-build/plugin-capabilities/RequestNotices"
-import * as AppApprovals from "@openbot-build/plugin-apps/AppApprovals"
-import * as StoredInvocations from "@openbot-build/apps-contract/apps/StoredInvocations"
-import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
-import {
-	appConnections,
-	appInvocations,
-} from "@openbot-build/server-database/Schema"
-import { Store as ProtocolStore } from "@openbot-build/protocol"
 import * as Reviews from "@openbot-build/plugin-capabilities/RequestReviews"
 import * as RequestWorkflow from "@openbot-build/plugin-capabilities/RequestWorkflow"
 import * as Inputs from "@openbot-build/plugin-chats/InputCommands"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
-import * as Runner from "@openbot-build/server-execution/execution/Runner"
-import * as RunScope from "@openbot-build/server-execution/execution/RunScope"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Runner from "@openbot-build/server-execution/Runner"
+import * as RunScope from "@openbot-build/server-execution/RunScope"
+import * as Records from "@openbot-build/server-kernel/Records"
 
 import { Prompt, Response, Toolkit } from "effect/ai"
 import { TurnContext } from "@openbot-build/conversation-contract/chats/TurnContext"
@@ -88,28 +99,26 @@ import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredC
 import * as Db from "@openbot-build/server-database/Database"
 import * as BotFixture from "./BotFixture.ts"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Commands from "@openbot-build/server-execution/execution/Commands"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
-import * as EngineHost from "@openbot-build/server-execution/execution/EngineHost"
+import * as Commands from "@openbot-build/server-execution/Commands"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
+import * as EngineHost from "@openbot-build/server-execution/EngineHost"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import { WorkflowEngine } from "effect/workflow"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Fixture from "./OrganizationFixture.ts"
-import * as PostgresTest from "./PostgresTest.ts"
+import * as Observation from "@openbot-build/server-execution/Observation"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as Fixture from "../src/OrganizationFixture.ts"
 
 class Access extends Context.Service<
 	Access,
 	Ref.Ref<{ readonly source: boolean; readonly resolve: boolean }>
 >()("@openbot-build/server-testing/test/RequestCommands.test/Access") {}
-const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(PostgresTest.start, (db) =>
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),
@@ -144,9 +153,9 @@ const source = Layer.unwrap(
 )
 const registry = Layer.effectDiscard(
 	Effect.gen(function* () {
-		const decisions = yield* Decisions.RequestCommands
+		const decisions = yield* RequestCommands
 		yield* WorkflowsFixture.register(
-			Engine.define(Decisions.workflowName),
+			Engine.define(workflowName),
 			decisions.authorize,
 			decisions.decide,
 		)
@@ -228,12 +237,12 @@ const services = Commands.layer.pipe(
 const actor = { kind: "member", organizationId: "org", userId: "user" } as const
 const setup = Effect.fn(function* (
 	namespace: string,
-	ask: Requests.Ask = { person: true },
+	ask: Ask = { person: true },
 	options: {
 		readonly reviewer?: BotId
 		readonly caller?: Caller
 		readonly owner?: string
-		readonly input?: Partial<Decisions.Input>
+		readonly input?: Partial<Input>
 	} = {},
 ) {
 	const caller: Caller = options.caller ?? actor
@@ -311,7 +320,7 @@ const setup = Effect.fn(function* (
 			),
 	})
 	const parent = yield* store.takeOver({ namespace, id: source.executionId })
-	const commands = yield* Decisions.RequestCommands
+	const commands = yield* RequestCommands
 	const submission = {
 		continuation: "chat" as const,
 		capability: { action: "tools.call" as const, target: "write" },
@@ -340,13 +349,12 @@ const setup = Effect.fn(function* (
 layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 	const noticeLayer = Notices.layer.pipe(
 		Layer.provide(Inputs.layer),
-		Layer.provide(AppApprovals.layer),
 		Layer.provide(Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11")))),
 	)
 	const finishForReply = Effect.fn(function* (
 		test: Effect.Success<ReturnType<typeof setup>>,
 	) {
-		const commands = yield* Decisions.RequestCommands
+		const commands = yield* RequestCommands
 		yield* commands.decide(test.key, actor, test.input)
 		const receipt = yield* commands.finish(test.fence, { status: "completed" })
 		return yield* (yield* Store.Store).takeOver({
@@ -361,7 +369,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				{ person: true },
 				{ input: { continuation: "workflow" } },
 			)
-			const commands = yield* Decisions.RequestCommands
+			const commands = yield* RequestCommands
 			yield* commands.decide(test.key, actor, test.input)
 			const receipt = yield* commands.finish(test.fence, {
 				status: "completed",
@@ -504,7 +512,6 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			const fence = yield* finishForReply(test)
 			const services = Notices.layer.pipe(
 				Layer.provide(Inputs.layer),
-				Layer.provide(AppApprovals.layer),
 				Layer.provide(
 					Layer.mock(TurnAccess, {
 						admit: () => Effect.void,
@@ -533,140 +540,12 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			assert.equal((yield* (yield* Store.Store).get(fence)).status, "completed")
 		}),
 	)
-	for (const changed of [false, true]) {
-		it.effect(
-			`an App reply ${changed ? "rejects a changed connection" : "commits its approval with its input"}`,
-			() =>
-				Effect.gen(function* () {
-					const namespace = `request-app-${changed}`
-					const secrets = yield* Secrets.Secrets
-					const db = yield* Db.make
-					const app: AppCalls.Invocation = {
-						id: AppCalls.AppOperationId.make(`app-${namespace}`),
-						chat: Chat.Id.make(`chat-${namespace}`),
-						turn: Turn.Id.make(`turn-${namespace}`),
-						callId: "call",
-						toolName: "write",
-						arguments: { text: "A note." },
-						readOnly: false,
-						round: 0,
-						status: "PendingApproval",
-						result: null,
-						source: {
-							connectionId: ConnectionId.make("connection"),
-							connectionName: "Notes",
-							cardUrl: "https://example.test/card",
-							appName: "Notes",
-							remoteIndex: 0,
-							revision: 1,
-							kind: "tool",
-							name: "write",
-						},
-					}
-					const connection = {
-						connection: ProtocolStore.UserConnection.make({
-							owner: namespace,
-							connectionId: "connection",
-							cardUrl: app.source.cardUrl,
-							endpoint: "https://example.test/mcp",
-							remoteIndex: 0,
-							configuration: Redacted.make({}),
-							headers: Redacted.make({}),
-							state: "Enabled",
-							authorization: { _tag: "Unprotected" },
-						}),
-						name: "Notes",
-						revision: changed ? 2 : 1,
-						verification: null,
-					}
-					yield* db.insert(appConnections).values({
-						owner: namespace,
-						id: "connection",
-						name: "Notes",
-						revision: connection.revision,
-						body: yield* secrets.seal(
-							yield* Schema.encodeEffect(
-								Schema.fromJsonString(
-									Schema.toCodecJson(StoredConnections.StoredConnection),
-								),
-							)(connection),
-							yield* Schema.encodeEffect(
-								Schema.fromJsonString(Schema.Array(Schema.String)),
-							)(["connection", namespace, "connection"]),
-						),
-					})
-					yield* db.insert(appInvocations).values({
-						owner: namespace,
-						id: app.id,
-						chat: app.chat,
-						status: app.status,
-						body: yield* StoredInvocations.seal(secrets, namespace, app),
-					})
-					const test = yield* setup(
-						namespace,
-						{ person: true },
-						{ input: { app } },
-					)
-					const fence = yield* finishForReply(test)
-					const notices = yield* Notices.RequestNotices
-					const sql = yield* PgClient.PgClient
-					if (!changed) {
-						yield* sql`create function reject_app_reply_end() returns trigger language plpgsql as $$ begin if NEW.resource_kind = 'RequestNotice' and NEW.status = 'completed' then raise exception 'Fixture App reply failure'; end if; return NEW; end $$`
-						yield* sql`create trigger reject_app_reply_end before update on openbot_executions for each row execute function reject_app_reply_end()`
-						yield* Effect.addFinalizer(() =>
-							sql`drop trigger if exists reject_app_reply_end on openbot_executions`.pipe(
-								Effect.andThen(
-									sql`drop function if exists reject_app_reply_end()`,
-								),
-								Effect.orDie,
-							),
-						)
-						assert.ok(
-							Schema.is(Execution.StorageError)(
-								yield* notices.deliver(fence).pipe(Effect.flip),
-							),
-						)
-						assert.equal(
-							(yield* StoredInvocations.get(db, secrets, namespace, app.id))
-								.status,
-							"PendingApproval",
-						)
-						assert.equal(
-							(yield* test.chats.read(app.chat)).chat.inbox.length,
-							0,
-						)
-						yield* sql`drop trigger reject_app_reply_end on openbot_executions`
-					}
-					yield* notices.deliver(fence)
-					yield* notices.deliver(fence)
-					const view = yield* test.chats.read(app.chat)
-					assert.equal(view.chat.inbox.length, 1)
-					assert.equal(
-						view.chat.inbox[0]?.approved?.name,
-						changed ? undefined : "write",
-					)
-					assert.equal(
-						(yield* StoredInvocations.get(db, secrets, namespace, app.id))
-							.status,
-						changed ? "PendingApproval" : "Approved",
-					)
-				}).pipe(
-					Effect.provide(
-						Layer.mergeAll(
-							noticeLayer,
-							Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
-						),
-					),
-				),
-		)
-	}
-
 	it.effect("a detached tool can ask for a decision after its Turn ends", () =>
 		Effect.gen(function* () {
 			const test = yield* setup("detached-tool-request")
 			const store = yield* Store.Store
-			const commands = yield* Decisions.RequestCommands
-			const tools = yield* ToolCommands.ToolCommands
+			const commands = yield* RequestCommands
+			const tools = yield* ToolCommandsModel
 			const view = yield* test.chats.read(test.stored.request.chat)
 			const turn = view.chat.turn!
 			const call = Prompt.makePart("tool-call", {
@@ -811,8 +690,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			Effect.gen(function* () {
 				const reviewer = BotId.make(`decider-${answer}`)
 				const test = yield* setup(`request-bot-${answer}`, {}, { reviewer })
-				const grants = yield* Grants.Grants
-				const rules = yield* Rules.Rules
+				const grants = yield* GrantsModel
+				const rules = yield* RulesModel
 				const store = yield* Store.Store
 				const judgments = yield* Ref.make(0)
 				const grant =
@@ -866,7 +745,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								),
 						}
 					}),
-				).pipe(Layer.provide(CapabilityAccess.layer))
+				).pipe(Layer.provide(CapabilityAccessFixture.layer))
 				const services = Layer.mergeAll(
 					BotDecisions.layer.pipe(Layer.provideMerge(policy)),
 					Reviews.layer.pipe(Layer.provide(Inputs.layer)),
@@ -936,9 +815,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					).pipe(Effect.provideContext(registered.handlers))
 					const resultParts = yield* toolkit
 						.handle(
-							answer === "deny"
-								? ReviewTools.names.ask
-								: ReviewTools.names.approve,
+							answer === "deny" ? names.ask : names.approve,
 							answer === "deny"
 								? { question: "Which note?" }
 								: { scope: "once" },
@@ -954,10 +831,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					assert.notProperty(resultParts[0]?.result, "failure")
 					const next = yield* store.takeOver(key)
 					const rebuilt = yield* ReviewTools.register(next)
-					const name =
-						answer === "deny"
-							? ReviewTools.names.ask
-							: ReviewTools.names.approve
+					const name = answer === "deny" ? names.ask : names.approve
 					const read = Context.get(rebuilt.tools[name].annotations, SavedResult)
 					if (read === undefined)
 						return yield* Effect.die("The command has no saved result reader.")
@@ -998,9 +872,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								? "denied"
 								: "passed",
 					)
-					const request = (yield* (yield* Decisions.RequestCommands).load(
-						test.key,
-					)).stored.request
+					const request = (yield* (yield* RequestCommands).load(test.key))
+						.stored.request
 					assert.equal(request.revision, 1)
 					if (result.outcome === "passed") {
 						assert.equal(request.approver._tag, "Person")
@@ -1044,7 +917,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				const reviewer = BotId.make("proposal-reviewer")
 				const test = yield* setup("request-rule-proposal", {}, { reviewer })
 				const store = yield* Store.Store
-				const rules = yield* Rules.Rules
+				const rules = yield* RulesModel
 				const services = Layer.mergeAll(
 					ReviewTools.layer.pipe(
 						Layer.provide(Calls.layer),
@@ -1053,7 +926,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						),
 						Layer.provide(Layer.mock(Billing, {})),
 					),
-					BotDecisions.layer.pipe(Layer.provide(CapabilityAccess.layer)),
+					BotDecisions.layer.pipe(Layer.provide(CapabilityAccessFixture.layer)),
 					Reviews.layer.pipe(Layer.provide(Inputs.layer)),
 				).pipe(
 					Layer.provide(
@@ -1118,23 +991,19 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						.pipe(Effect.flip)
 					assert.isTrue(Schema.is(Execution.KeyConflict)(clash))
 					const next = yield* store.takeOver(key)
-					const registered = yield* (yield* ReviewTools.ReviewTools).register(
-						next,
-					)
+					const registered = yield* (yield* ReviewToolsModel).register(next)
 					const toolkit = yield* Toolkit.make(
 						...Rec.values(registered.tools),
 					).pipe(Effect.provideContext(registered.handlers))
 					const invoke = (owner: Store.Fence) =>
-						toolkit
-							.handle(ReviewTools.names.proposeRule, input, "provider-call")
-							.pipe(
-								Effect.flatMap(Stream.runCollect),
-								Effect.map((parts) => parts[0]?.result),
-								Effect.provideService(CallContext, {
-									fence: owner,
-									id: Execution.CallId.make("rule-proposal"),
-								}),
-							)
+						toolkit.handle(names.proposeRule, input, "provider-call").pipe(
+							Effect.flatMap(Stream.runCollect),
+							Effect.map((parts) => parts[0]?.result),
+							Effect.provideService(CallContext, {
+								fence: owner,
+								id: Execution.CallId.make("rule-proposal"),
+							}),
+						)
 					assert.deepEqual(yield* invoke(next), { proposed: first.ruleId })
 					assert.property(yield* invoke(fence), "failure")
 					assert.deepEqual(
@@ -1311,8 +1180,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			Effect.gen(function* () {
 				const test = yield* setup(`durable-gate-${mode}`)
 				const store = yield* Store.Store
-				const grants = yield* Grants.Grants
-				const records = yield* Requests.Requests
+				const grants = yield* GrantsModel
+				const records = yield* RequestsModel
 				const turns = yield* TurnContext
 				const view = yield* test.chats.read(test.stored.request.chat)
 				const turn = view.chat.turn!
@@ -1486,7 +1355,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					mode === "check answer failure"
 				) {
 					const unavailable = yield* Ref.make(mode === "answer write failure")
-					const commands = yield* Decisions.RequestCommands
+					const commands = yield* RequestCommands
 					if (mode === "check answer failure")
 						yield* grants.create(actor.organizationId, {
 							bot: test.bot,
@@ -1497,7 +1366,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						})
 					const reachedApproval = yield* Ref.make(false)
 					const gate = yield* build(test.parent).pipe(
-						Effect.provideService(Decisions.RequestCommands, {
+						Effect.provideService(RequestCommands, {
 							...commands,
 							admit: (fence, key, input) =>
 								commands
@@ -1562,9 +1431,9 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				const release = yield* Deferred.make<void>()
 				const checks = yield* Ref.make(0)
 				const race = mode === "ask wins" || mode === "allow wins"
-				const commands = yield* Decisions.RequestCommands
+				const commands = yield* RequestCommands
 				const gate = yield* build(test.parent).pipe(
-					Effect.provideService(Decisions.RequestCommands, {
+					Effect.provideService(RequestCommands, {
 						...commands,
 						submitted: (fence, key, input) =>
 							Effect.gen(function* () {
@@ -1730,7 +1599,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			() =>
 				Effect.gen(function* () {
 					const test = yield* setup(`request-lock-${action}`)
-					const commands = yield* Decisions.RequestCommands
+					const commands = yield* RequestCommands
 					const sql = yield* PgClient.PgClient
 					const db = yield* Db.make
 					const access = yield* Access
@@ -1786,7 +1655,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						0,
 					)
 					assert.lengthOf(
-						yield* (yield* Requests.Requests).forChat(
+						yield* (yield* RequestsModel).forChat(
 							actor.organizationId,
 							test.stored.request.chat,
 						),
@@ -1799,7 +1668,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 	it.effect("revoking a parent waits for a child Grant use", () =>
 		Effect.gen(function* () {
 			const test = yield* setup("grant-use-revoke-race")
-			const grants = yield* Grants.Grants
+			const grants = yield* GrantsModel
 			const root = yield* grants.create(actor.organizationId, {
 				bot: test.bot,
 				capability: test.submission.capability,
@@ -1816,8 +1685,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			const resume = yield* Deferred.make<void>()
 			const revokeReady = yield* Deferred.make<void>()
 			const held = yield* Ref.make(false)
-			const records = yield* BotRecords.BotRecords
-			const observed = BotRecords.BotRecords.of({
+			const records = yield* BotRecordsModel
+			const observed = BotRecordsModel.of({
 				...records,
 				collection: (kind, schema, status) => {
 					const collection = records.collection(kind, schema, status)
@@ -1847,7 +1716,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					}),
 			})
 			const concurrent = yield* Grants.make.pipe(
-				Effect.provideService(BotRecords.BotRecords, observed),
+				Effect.provideService(BotRecordsModel, observed),
 			)
 			const use = yield* concurrent
 				.use(actor.organizationId, child)
@@ -1938,17 +1807,17 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						Execution.mainCall(call.id),
 						test.submission.capability,
 					)
-				const commands = yield* Decisions.RequestCommands
+				const commands = yield* RequestCommands
 				const saved = (yield* commands.load(test.key)).stored
 				const grantId = saved.approvalGrant!
 				assert.isDefined(grantId)
-				const grants = yield* Grants.Grants
+				const grants = yield* GrantsModel
 				if (mode === "deny race") {
 					const read = yield* Deferred.make<void>()
 					const resume = yield* Deferred.make<void>()
 					const count = yield* Ref.make(0)
 					const raced = yield* GrantUse.make.pipe(
-						Effect.provideService(Grants.Grants, {
+						Effect.provideService(GrantsModel, {
 							...grants,
 							match: (input) =>
 								grants.match(input).pipe(
@@ -2068,7 +1937,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			Effect.gen(function* () {
 				const test = yield* setup(`grant-use-${mode}`)
 				const store = yield* Store.Store
-				const grants = yield* Grants.Grants
+				const grants = yield* GrantsModel
 				const use = yield* GrantUse.make
 				const view = yield* test.chats.read(test.stored.request.chat)
 				const turn = view.chat.turn!
@@ -2229,7 +2098,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							),
 						)
 					} else {
-						const toolCommands = yield* ToolCommands.ToolCommands
+						const toolCommands = yield* ToolCommandsModel
 						const child = yield* toolCommands.submit(
 							next,
 							{ chat: view.chat.id, turn: turn.id, item, step: 0 },
@@ -2351,7 +2220,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				const reviewer = BotId.make("decider-rollback")
 				const test = yield* setup("request-bot-rollback", {}, { reviewer })
 				const store = yield* Store.Store
-				const grants = yield* Grants.Grants
+				const grants = yield* GrantsModel
 				yield* grants.create(actor.organizationId, {
 					bot: reviewer,
 					capability: test.submission.capability,
@@ -2360,7 +2229,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					grantedBy: { _tag: "Person", userId: actor.userId },
 				})
 				const services = Layer.mergeAll(
-					BotDecisions.layer.pipe(Layer.provide(CapabilityAccess.layer)),
+					BotDecisions.layer.pipe(Layer.provide(CapabilityAccessFixture.layer)),
 					Reviews.layer.pipe(Layer.provide(Inputs.layer)),
 				).pipe(
 					Layer.provide(
@@ -2399,8 +2268,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						),
 					)
 					assert.equal(
-						(yield* (yield* Decisions.RequestCommands).load(test.key)).stored
-							.request.status,
+						(yield* (yield* RequestCommands).load(test.key)).stored.request
+							.status,
 						"pending",
 					)
 					assert.equal(
@@ -2492,7 +2361,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							.length,
 						1,
 					)
-					const commands = yield* Decisions.RequestCommands
+					const commands = yield* RequestCommands
 					yield* commands.pass(test.fence, 0)
 					yield* commands.pass(test.fence, 0)
 					assert.equal(
@@ -2525,7 +2394,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					{ reviewer },
 				)
 				const store = yield* Store.Store
-				const commands = yield* Decisions.RequestCommands
+				const commands = yield* RequestCommands
 				const reads = yield* Ref.make(0)
 				const reviewLayer = Layer.effect(
 					Reviews.RequestReviews,
@@ -2604,7 +2473,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					}).pipe(Effect.timeout("5 seconds"))
 					const childFence = yield* store.takeOver(child)
 					if (end === "cancel") {
-						const input = yield* Inputs.InputCommands
+						const input = yield* InputCommands
 						const saved = yield* store.loadMember(child)
 						const next = yield* input.notify(
 							child.namespace,
@@ -2756,7 +2625,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							assert.equal((yield* store.get(test.key)).status, "waiting")
 						}).pipe(Effect.timeout("5 seconds"))
 						if (end === "decision") {
-							yield* (yield* Decisions.RequestCommands).decide(
+							yield* (yield* RequestCommands).decide(
 								test.key,
 								actor,
 								test.input,
@@ -2779,8 +2648,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						end === "cancel" ? "cancelled" : "completed",
 					)
 					assert.equal(
-						(yield* (yield* Decisions.RequestCommands).load(test.key)).stored
-							.request.status,
+						(yield* (yield* RequestCommands).load(test.key)).stored.request
+							.status,
 						end === "cancel"
 							? "cancelled"
 							: end === "decision"
@@ -2799,8 +2668,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			Effect.gen(function* () {
 				const test = yield* setup("request-generic")
 				const commands = yield* Commands.Commands
-				const grants = yield* Grants.Grants
-				const requests = yield* Requests.Requests
+				const grants = yield* GrantsModel
+				const requests = yield* RequestsModel
 				const sql = yield* PgClient.PgClient
 				const results = yield* Effect.forEach(
 					Arr.range(1, 10),
@@ -2837,9 +2706,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					{ person: true },
 					{ owner: "channel-account" },
 				)
-				const resolution = yield* Resolve.make.pipe(
-					Effect.provide(ImportedWorkflow.layerRecords),
-				)
+				const resolution = yield* Resolve.make
 				const id = test.stored.request.id
 				assert.strictEqual(
 					(yield* resolution.view(actor, id)).executionId,
@@ -2894,9 +2761,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					})
 				})
 				yield* Effect.gen(function* () {
-					const resolution = yield* Resolve.make.pipe(
-						Effect.provide(ImportedWorkflow.layerRecords),
-					)
+					const resolution = yield* Resolve.make
 					const list = yield* resolution.list(actor, "pending")
 					assert.deepStrictEqual(
 						Arr.map(list, (request) => request.id),
@@ -2923,12 +2788,10 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		() =>
 			Effect.gen(function* () {
 				const test = yield* setup("request-rollback")
-				const resolution = yield* Resolve.make.pipe(
-					Effect.provide(ImportedWorkflow.layerRecords),
-				)
+				const resolution = yield* Resolve.make
 				const decide = (
 					input: typeof test.input & {
-						readonly details: typeof Decisions.Details.Type
+						readonly details: typeof Details.Type
 					},
 				) =>
 					resolution.resolveAsPerson(actor, test.stored.request.id, {
@@ -2938,9 +2801,9 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						...input.details,
 					})
 				const store = yield* Store.Store
-				const requests = yield* Requests.Requests
-				const grants = yield* Grants.Grants
-				const rules = yield* Rules.Rules
+				const requests = yield* RequestsModel
+				const grants = yield* GrantsModel
+				const rules = yield* RulesModel
 				const sql = yield* PgClient.PgClient
 				const input = {
 					...test.input,
@@ -3004,7 +2867,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		() =>
 			Effect.gen(function* () {
 				const test = yield* setup("request-create")
-				const commands = yield* Decisions.RequestCommands
+				const commands = yield* RequestCommands
 				const receipts = yield* Effect.forEach(
 					Arr.range(1, 20),
 					() =>
@@ -3050,7 +2913,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		() =>
 			Effect.gen(function* () {
 				const test = yield* setup("request-end")
-				const commands = yield* Decisions.RequestCommands
+				const commands = yield* RequestCommands
 				const store = yield* Store.Store
 				const sql = yield* PgClient.PgClient
 				yield* commands.decide(test.key, actor, test.input)
@@ -3105,7 +2968,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						person: true,
 						...(ending === "expired" ? { timeoutMs: 0 } : {}),
 					})
-					const commands = yield* Decisions.RequestCommands
+					const commands = yield* RequestCommands
 					const store = yield* Store.Store
 					if (ending === "stale") {
 						yield* store.takeOver(test.key)
@@ -3187,7 +3050,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						)(error),
 					)
 					assert.equal(
-						(yield* (yield* Grants.Grants).list(actor.organizationId, test.bot))
+						(yield* (yield* GrantsModel).list(actor.organizationId, test.bot))
 							.length,
 						0,
 					)

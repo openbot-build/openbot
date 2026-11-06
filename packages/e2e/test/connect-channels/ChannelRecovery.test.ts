@@ -1,5 +1,8 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { Bot } from "@openbot-build/domain/Bots"
 import { assert, layer } from "@effect/vitest"
-import { BotsApi, ChannelsApi } from "@openbot-build/api"
+import { ChannelsApi } from "@openbot-build/api"
 import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
@@ -8,6 +11,7 @@ import {
 	Ref,
 	Schema,
 	String as Str,
+	Layer,
 } from "effect"
 import {
 	BrowserHost,
@@ -18,7 +22,12 @@ import {
 
 const { until } = Wait
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"an unknown Channel send stays paused after restart and retries only after a saved decision",
 		() =>
@@ -57,7 +66,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					publicOrigin,
 				})
 				const bot = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send(alice.session, "/v1/bots", "POST", {
 						name: "Team",
 						role: "Helps people",

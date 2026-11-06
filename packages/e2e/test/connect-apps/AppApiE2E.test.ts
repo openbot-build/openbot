@@ -1,3 +1,18 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
+import { ExecutionView } from "@openbot-build/domain/AppCalls"
+import {
+	Binding,
+	Interaction,
+	ActionTicket,
+} from "@openbot-build/domain/AppViews"
+import {
+	Challenge,
+	Proof,
+	Invitation,
+	Grant,
+	Member,
+} from "@openbot-build/domain/Developers"
 import {
 	AppFixture as Fixture,
 	BrowserHost,
@@ -6,13 +21,7 @@ import {
 	Wait,
 } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
-import {
-	AppExecution,
-	AppViewsApi,
-	ConnectionsApi,
-	DeveloperApi,
-	UserTokensApi,
-} from "@openbot-build/api"
+import { AppViewsApi, ConnectionsApi, DeveloperApi } from "@openbot-build/api"
 import {
 	Deferred,
 	Ref,
@@ -32,12 +41,13 @@ import {
 	HttpServerRequest,
 	HttpServerResponse,
 	type HttpMethod,
+	FetchHttpClient,
 } from "effect/http"
 import * as Network from "@openbot-build/protocol/NodeHttpServer"
 import { CatalogDiscovery, Document } from "@openbot-build/protocol"
 import { Execution } from "@openbot-build/domain"
 import { Fixture as ProtocolFixture } from "@openbot-build/protocol/testing"
-import { AppHost } from "@openbot-build/openbot"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 
 const publicOrigin = "https://app-api.example.com"
 type Send = (
@@ -92,7 +102,7 @@ const callers = Effect.fn("AppApiE2E.callers")(function* (
 			),
 		)
 	const key = yield* Caller.read(
-		UserTokensApi.CreatedToken,
+		CreatedToken,
 		cookie("/v1/user/tokens", "POST", { name: "App API test" }),
 		201,
 	)
@@ -242,11 +252,16 @@ const proofPublisher = Effect.fn("AppApiE2E.proofPublisher")(function* (
 				network("public-publisher", [fixture.ipOrigin, app.origin]),
 			),
 		),
-		appNetwork: Layer.succeed(AppHost.AppNetwork, { layer: network }),
+		appNetwork: Layer.succeed(AppNetwork, { layer: network }),
 	}
 })
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"tokens and cookies read App results and views, keep context, send each message once and check the owner",
 		() =>
@@ -259,7 +274,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					appReadRules: [{ cardUrl, tool: "read_document" }],
 					discovery: publisher.discovery,
 					appProbe: publisher.probe,
-					appNetwork: Layer.succeed(AppHost.AppNetwork, {
+					appNetwork: Layer.succeed(AppNetwork, {
 						layer: (owner, origins) =>
 							Network.layerUserNetwork({
 								owner,
@@ -304,7 +319,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					)
 					yield* Messages.settled(send, receipt.chat)
 					const operations = yield* Caller.read(
-						Schema.Array(AppExecution.ExecutionView),
+						Schema.Array(ExecutionView),
 						send(`/v1/chats/${receipt.chat}/app-operations`),
 					)
 					assert.strictEqual(operations.length, 1)
@@ -320,10 +335,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					})
 					const operationPath = `/v1/app-operations/${operation.id}`
 					assert.deepStrictEqual(
-						yield* Caller.read(
-							AppExecution.ExecutionView,
-							other(operationPath),
-						),
+						yield* Caller.read(ExecutionView, other(operationPath)),
 						operation,
 					)
 					const items = yield* Caller.read(
@@ -356,8 +368,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						"text/html;profile=mcp-app",
 					)
 					assert.deepStrictEqual(
-						(yield* Caller.read(AppViewsApi.Binding, other(viewPath)))
-							.interaction,
+						(yield* Caller.read(Binding, other(viewPath))).interaction,
 						{ revision: 0, context: null },
 					)
 					for (const denied of [bob.cookie, bob.token]) {
@@ -419,7 +430,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					}
 					assert.deepStrictEqual(
 						yield* Caller.read(
-							AppViewsApi.Interaction,
+							Interaction,
 							send(viewPath + "/context", "PUT", { revision: 0, context }),
 						),
 						{ revision: 1, context },
@@ -430,7 +441,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					)
 					assert.deepStrictEqual(
 						yield* Caller.read(
-							AppViewsApi.Interaction,
+							Interaction,
 							other(operationPath + `/interaction?chatId=${receipt.chat}`),
 						),
 						{ revision: 1, context },
@@ -442,14 +453,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						},
 					}
 					const ticket = yield* Caller.read(
-						AppViewsApi.ActionTicket,
+						ActionTicket,
 						send(viewPath + "/messages", "POST", message),
 						202,
 					)
 					yield* Messages.settled(send, receipt.chat)
 					assert.deepStrictEqual(
 						yield* Caller.read(
-							AppViewsApi.ActionTicket,
+							ActionTicket,
 							send(viewPath + "/messages", "POST", message),
 							202,
 						),
@@ -485,8 +496,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 					yield* host.restart
 					assert.deepStrictEqual(
-						(yield* Caller.read(AppViewsApi.Binding, send(viewPath)))
-							.interaction,
+						(yield* Caller.read(Binding, send(viewPath))).interaction,
 						{ revision: 1, context },
 					)
 					yield* status(send(viewPath, "DELETE"), 200)
@@ -540,7 +550,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					["token", alice.token, alice.cookie],
 				] as const) {
 					const claim = yield* Caller.read(
-						DeveloperApi.Challenge,
+						Challenge,
 						send("/v1/developer/claims", "POST", {
 							_tag: "AppCard",
 							cardUrl: publisher.cardUrl,
@@ -573,7 +583,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					)
 					assert.strictEqual(verified.status, "completed")
 					assert.strictEqual(
-						(yield* Caller.read(DeveloperApi.Proof, other(proofPath))).status,
+						(yield* Caller.read(Proof, other(proofPath))).status,
 						"Confirmed",
 					)
 					const report = yield* Caller.read(
@@ -602,11 +612,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						yield* status(denied(proofPath), 404)
 					}
 					const invitation = yield* Caller.read(
-						DeveloperApi.Invitation,
+						Invitation,
 						send(proofPath + "/invitations", "POST", { role: "viewer" }),
 					)
 					const grant = yield* Caller.read(
-						DeveloperApi.Grant,
+						Grant,
 						bob.token(
 							`/v1/developer/invitations/${invitation.id}/accept`,
 							"POST",
@@ -627,14 +637,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						403,
 					)
 					const members = yield* Caller.read(
-						Schema.Struct({ members: Schema.Array(DeveloperApi.Member) }),
+						Schema.Struct({ members: Schema.Array(Member) }),
 						other(proofPath + "/members"),
 					)
 					assert.strictEqual(members.members.length, 1)
 					const member = yield* Effect.fromOption(Arr.head(members.members))
 					assert.strictEqual(
 						(yield* Caller.read(
-							DeveloperApi.Member,
+							Member,
 							send(`/v1/developer/members/${member.id}`, "PUT", {
 								role: "maintainer",
 							}),
@@ -761,27 +771,25 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					)
 					assert.deepStrictEqual(
 						(yield* Caller.read(
-							Schema.Struct({ members: Schema.Array(DeveloperApi.Member) }),
+							Schema.Struct({ members: Schema.Array(Member) }),
 							send(proofPath + "/members"),
 						)).members,
 						[],
 					)
 					const unused = yield* Caller.read(
-						DeveloperApi.Invitation,
+						Invitation,
 						other(proofPath + "/invitations", "POST", { role: "viewer" }),
 					)
 					assert.strictEqual(
 						(yield* Caller.read(
-							DeveloperApi.Invitation,
+							Invitation,
 							send(`/v1/developer/invitations/${unused.id}/revoke`, "POST"),
 						)).status,
 						"Revoked",
 					)
 					assert.strictEqual(
-						(yield* Caller.read(
-							DeveloperApi.Proof,
-							send(proofPath + "/relinquish", "POST"),
-						)).status,
+						(yield* Caller.read(Proof, send(proofPath + "/relinquish", "POST")))
+							.status,
 						"Relinquished",
 					)
 				}

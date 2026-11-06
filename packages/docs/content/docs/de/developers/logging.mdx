@@ -17,7 +17,7 @@ geschlossen ist.
 
 ```ts
 import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
-import { EnvironmentConfiguration, Host } from "@openbot-build/openbot"
+import { Host, Launch } from "@openbot-build/openbot"
 import { Effect, Layer, Logger, References } from "effect"
 import { FetchHttpClient } from "effect/http"
 
@@ -35,7 +35,7 @@ const alerts = Logger.layer(
 
 NodeRuntime.runMain(
 	Effect.gen(function* () {
-		const settings = yield* EnvironmentConfiguration.load
+		const settings = yield* Launch.settings
 		return yield* Layer.launch(
 			Host.layer(settings).pipe(
 				Layer.provide(
@@ -47,7 +47,7 @@ NodeRuntime.runMain(
 				),
 			),
 		)
-	}).pipe(Effect.provide(alerts)),
+	}).pipe(Effect.provide(Layer.merge(alerts, NodeServices.layer))),
 )
 ```
 

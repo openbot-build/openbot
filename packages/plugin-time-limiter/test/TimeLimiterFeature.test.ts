@@ -3,7 +3,6 @@ import { Execution } from "@openbot-build/domain"
 import { Cause, Duration, Effect, Exit, Schema } from "effect"
 import { Prompt } from "effect/ai"
 import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
-import * as TimeLimiter from "../src/TimeLimiter.ts"
 import * as TimeLimiterFeature from "../src/TimeLimiterFeature.ts"
 
 const fence = {
@@ -13,17 +12,16 @@ const fence = {
 }
 const decode = Schema.decodeUnknownExit(TimeLimiterFeature.Config)
 
-it("the config takes milliseconds or a text as maxDuration", () => {
-	for (const good of [{ maxDuration: 300 }, { maxDuration: "5 minutes" }])
+it("the config takes milliseconds as maxDuration", () => {
+	for (const good of [{ maxDuration: 300 }, { maxDuration: 300000 }])
 		assert.isTrue(Exit.isSuccess(decode(good)), JSON.stringify(good))
 	for (const bad of [
 		{ maxDuration: 0 },
 		{ maxDuration: -1 },
 		{ maxDuration: Number.NaN },
-		{ maxDuration: "NaN" },
-		{ maxDuration: "0 seconds" },
-		{ maxDuration: "Infinity" },
-		{ maxDuration: "soon" },
+		{ maxDuration: Number.POSITIVE_INFINITY },
+		{ maxDuration: "5 minutes" },
+		{ maxDuration: "300" },
 		{},
 	])
 		assert.isTrue(Exit.isFailure(decode(bad)), JSON.stringify(bad))
@@ -32,7 +30,7 @@ it("the config takes milliseconds or a text as maxDuration", () => {
 it.effect("the feature keeps the limit of the config in milliseconds", () =>
 	Effect.gen(function* () {
 		const config = yield* Schema.decodeEffect(TimeLimiterFeature.Config)({
-			maxDuration: "5 minutes",
+			maxDuration: 300000,
 		})
 		const contribution = TimeLimiterFeature.contribution(config)
 		assert.strictEqual(contribution.id, "@openbot-build/plugin-time-limiter")
@@ -57,11 +55,17 @@ it.effect("a Turn keeps the limit of its pin when the config changes", () =>
 				id: TimeLimiterFeature.id,
 				version: 1,
 				settings: { maxDuration: 300000 },
+				missing: BotFeatures.skip,
 			},
 		])
 		// The pin of a Turn that started when the limit was 300 milliseconds.
 		const [held] = yield* features.hold([
-			{ id: TimeLimiterFeature.id, version: 1, settings: { maxDuration: 300 } },
+			{
+				id: TimeLimiterFeature.id,
+				version: 1,
+				settings: { maxDuration: 300 },
+				missing: BotFeatures.skip,
+			},
 		])
 		const feature = yield* contribution.prepare(fence, held!.pin.settings)
 		const registration = yield* feature.register()
@@ -70,8 +74,9 @@ it.effect("a Turn keeps the limit of its pin when the config changes", () =>
 		const stopped = limit.error(Prompt.empty)
 		assert.ok(Schema.is(BotFeatures.FeatureStopped)(stopped))
 		assert.strictEqual(stopped.feature, TimeLimiterFeature.id)
+		assert.strictEqual(stopped.category, "limited")
 		const cause = stopped.cause
-		assert.ok(Schema.is(TimeLimiter.TimeLimitExceeded)(cause))
+		assert.ok(Schema.is(TimeLimiterFeature.TimeLimitExceeded)(cause))
 		assert.isTrue(Duration.equals(cause.maxDuration, Duration.millis(300)))
 	}).pipe(Effect.scoped),
 )

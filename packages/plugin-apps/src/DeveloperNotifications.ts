@@ -1,3 +1,4 @@
+import { transactionFailures } from "@openbot-build/server-execution/Store"
 import { Developers } from "@openbot-build/domain"
 
 import { PgClient } from "@effect/sql-pg"
@@ -17,7 +18,8 @@ import {
 } from "@openbot-build/server-database/Schema"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
+import type { InstanceSettings } from "@openbot-build/server-kernel/InstanceSettings"
 import * as Db from "@openbot-build/server-database/Database"
 
 const pageSize = 50
@@ -43,16 +45,15 @@ export class DeveloperNotifications extends Context.Service<
 			value: Developers.Subscription,
 		) => Effect.Effect<Developers.Subscription, Developers.Failure>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/DeveloperNotifications") {}
+>()("@openbot-build/plugin-apps/DeveloperNotifications") {}
 export const make: Effect.Effect<
 	typeof DeveloperNotifications.Service,
 	never,
-	PgClient.PgClient | DeveloperAccess
+	PgClient.PgClient | DeveloperAccess | InstanceSettings
 > = Effect.gen(function* () {
 	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
-	const namespace = yield* IndexNamespace
+	const namespace = yield* instanceNamespace
 	const access = yield* DeveloperAccess
 	const visible = (owner: string, notice: Developers.Notice) =>
 		notice.cardUrl === null
@@ -69,7 +70,7 @@ export const make: Effect.Effect<
 		owner: string,
 		after: { readonly createdAt: number; readonly id: string } | undefined,
 	) =>
-		Rows.stored(
+		transactionFailures(
 			db
 				.select()
 				.from(developerNotices)
@@ -97,7 +98,7 @@ export const make: Effect.Effect<
 				let position:
 					{ readonly createdAt: number; readonly id: string } | undefined
 				if (before !== undefined) {
-					const cursor = (yield* Rows.stored(
+					const cursor = (yield* transactionFailures(
 						db
 							.select({
 								createdAt: developerNotices.createdAt,
@@ -130,7 +131,7 @@ export const make: Effect.Effect<
 		read: (owner, id) =>
 			inTransaction(
 				Effect.gen(function* () {
-					const row = (yield* Rows.stored(
+					const row = (yield* transactionFailures(
 						db
 							.select()
 							.from(developerNotices)
@@ -144,7 +145,7 @@ export const make: Effect.Effect<
 						return yield* Developers.DeveloperNotFound.make({})
 					if (notice.readAt !== null) return notice
 					const readAt = yield* Clock.currentTimeMillis
-					yield* Rows.stored(
+					yield* transactionFailures(
 						db
 							.update(developerNotices)
 							.set({ readAt })
@@ -156,7 +157,7 @@ export const make: Effect.Effect<
 		subscriptions: (owner) =>
 			Effect.gen(function* () {
 				const overview = yield* access.overview(owner)
-				const saved = yield* Rows.stored(
+				const saved = yield* transactionFailures(
 					db
 						.select()
 						.from(developerSubscriptions)
@@ -178,7 +179,7 @@ export const make: Effect.Effect<
 		subscribe: (owner, value) =>
 			Effect.gen(function* () {
 				yield* access.authorize(owner, value.cardUrl)
-				yield* Rows.stored(
+				yield* transactionFailures(
 					db
 						.insert(developerSubscriptions)
 						.values({ namespace, owner, ...value })

@@ -1,4 +1,5 @@
-import { Execution, ExecutionIdentity } from "@openbot-build/domain"
+import { ExecutionIdentity } from "@openbot-build/domain/Identity"
+import { Execution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option, Schema } from "effect"
 import * as Db from "@openbot-build/server-database/Database"
@@ -11,7 +12,7 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import * as ToolRecords from "./ToolRecords.ts"
 
 const sameIdentity = Schema.toEquivalence(ExecutionIdentity)

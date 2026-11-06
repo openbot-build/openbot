@@ -18,6 +18,10 @@
  * Teardown of one fork goes in this order: graft takes back its keys, waits
  * until no consumer holds them, then closes its scope. The scope closes the
  * child first, then the services of the fork.
+ *
+ * A feature can take config from its entry. The first fork decodes it with
+ * the Schema of the feature, and every stage and the start get it as a
+ * service. A new config restarts the whole feature.
  */
 import { Graft, Plugin as GraftPlugin } from "@graftland/graft"
 import {
@@ -28,6 +32,7 @@ import {
 	Layer,
 	Predicate,
 	Schedule,
+	type Schema,
 } from "effect"
 
 /** The keys that a stage or the start waits for. graft's optional keys are not allowed. */
@@ -138,6 +143,16 @@ export interface Builder<Avail, Out> {
 	readonly done: () => Feature<Out>
 }
 
+/**
+ * The config of a feature: the Schema that decodes the config of its entry,
+ * and the key that gives the decoded value to its stages and its start. An
+ * entry with no config gives `undefined` to the Schema.
+ */
+export interface Config<I, A> {
+	readonly schema: Schema.Decoder<A>
+	readonly key: Context.Key<I, A>
+}
+
 /** One fork of the chain, with its types erased. */
 interface Step {
 	readonly name: string
@@ -146,7 +161,7 @@ interface Step {
 	readonly publishes: ReadonlyArray<Context.Key<any, any>>
 }
 
-const KeysId = Symbol.for("openbot/Feature/keys")
+const KeysId = Symbol.for("@openbot-build/server-plugin/Feature/KeysId")
 
 /** Every key that the stages and the start of a feature wait for, and every key that it publishes. */
 export interface Keys {
@@ -158,10 +173,13 @@ export interface Keys {
  * Gives the plugin of the first step, with the keys of every step on it, so
  * that `keys` can read them. graft reads only the first step.
  */
-const withKeys = (steps: Arr.NonEmptyReadonlyArray<Step>): GraftPlugin.Plugin =>
+const withKeys = (
+	steps: Arr.NonEmptyReadonlyArray<Step>,
+	config: Config<unknown, unknown> | undefined,
+): GraftPlugin.Plugin =>
 	// A new object with one more field. It compares by reference, like the plugins of graft.
 	Equal.byReference({
-		...chain(steps, Context.empty()),
+		...chain(steps, Context.empty(), config),
 		[KeysId]: {
 			inject: Arr.flatMap(steps, (step) => step.inject),
 			publishes: Arr.flatMap(steps, (step) => step.publishes),
@@ -199,58 +217,79 @@ export const published = <F extends Feature<any>>(
 const chain = (
 	steps: Arr.NonEmptyReadonlyArray<Step>,
 	before: Context.Context<never>,
+	config?: Config<unknown, unknown> | undefined,
 ): GraftPlugin.Plugin => {
 	const [step, ...rest] = steps
-	return GraftPlugin.make({
-		name: step.name,
-		inject: step.inject,
-		retry,
-		apply: () =>
-			Effect.gen(function* () {
-				const scope = yield* Effect.scope
-				// Only the listed keys: the activation also holds graft's own
-				// services and log notes, which would cover those of the child.
-				const injected = Context.pick(...step.inject)(
-					yield* Effect.context<never>(),
-				)
-				const given = Context.merge(before, injected)
-				const built = yield* Layer.buildWithMemoMap(
+	const apply = (given: Context.Context<never>) =>
+		Effect.gen(function* () {
+			const scope = yield* Effect.scope
+			// Only the listed keys: the activation also holds graft's own
+			// services and log notes, which would cover those of the child.
+			const all = Context.merge(
+				given,
+				Context.pick(...step.inject)(yield* Effect.context<never>()),
+			)
+			const built = yield* Layer.buildWithMemoMap(
+				// @effect-diagnostics-next-line anyUnknownInErrorContext:off -- a step keeps its layer with the types erased; the builder checked them
+				Layer.provide(step.layer, Layer.succeedContext(all)),
+				yield* Layer.makeMemoMap,
+				scope,
+			)
+			yield* Effect.tx(
+				Effect.forEach(
+					step.publishes,
+					(key) => Graft.provide(key, Context.get(built, key)),
+					{ discard: true },
+				),
+			)
+			if (Arr.isReadonlyArrayNonEmpty(rest))
+				yield* Graft.plugin(chain(rest, Context.mergeAll(all, built)))
+		})
+	return config === undefined
+		? GraftPlugin.make({
+				name: step.name,
+				inject: step.inject,
+				retry,
+				// @effect-diagnostics-next-line anyUnknownInErrorContext:off -- a step keeps its layer with the types erased; the builder checked them
+				apply: () => apply(before),
+			})
+		: // graft restarts the fork, and so every step, when the config changes.
+			GraftPlugin.make({
+				name: step.name,
+				inject: step.inject,
+				retry,
+				config: config.schema,
+				apply: (value) =>
 					// @effect-diagnostics-next-line anyUnknownInErrorContext:off -- a step keeps its layer with the types erased; the builder checked them
-					Layer.provide(step.layer, Layer.succeedContext(given)),
-					yield* Layer.makeMemoMap,
-					scope,
-				)
-				yield* Effect.tx(
-					Effect.forEach(
-						step.publishes,
-						(key) => Graft.provide(key, Context.get(built, key)),
-						{ discard: true },
+					apply(
+						Context.add(before, config.key, value) as Context.Context<never>,
 					),
-				)
-				if (Arr.isReadonlyArrayNonEmpty(rest))
-					yield* Graft.plugin(chain(rest, Context.mergeAll(given, built)))
-			}),
-	})
+			})
 }
 
 const builder = (
 	name: string,
 	steps: ReadonlyArray<Step>,
+	config: Config<unknown, unknown> | undefined,
 ): Builder<unknown, unknown> => ({
 	// Each `as never` erases a type that the types of `Builder` already checked.
 	stage: (stage) =>
-		builder(name, [
-			...steps,
-			{
-				name: Arr.isReadonlyArrayEmpty(steps)
-					? name
-					: `${name}#${stage.name ?? steps.length}`,
-				inject: stage.inject,
-				// @effect-diagnostics-next-line anyUnknownInErrorContext:off -- a step keeps its layer with the types erased
-				layer: stage.services as Layer.Layer<unknown, unknown, unknown>,
-				publishes: stage.publishes,
-			},
-		]) as never,
+		builder(
+			name,
+			[
+				...steps,
+				{
+					name: Arr.isReadonlyArrayEmpty(steps)
+						? name
+						: `${name}#${stage.name ?? steps.length}`,
+					inject: stage.inject,
+					// @effect-diagnostics-next-line anyUnknownInErrorContext:off -- a step keeps its layer with the types erased
+					layer: stage.services as Layer.Layer<unknown, unknown, unknown>,
+					publishes: stage.publishes,
+				},
+			],
+			config,
+		) as never,
 	start: (start) =>
 		withKeys(
 			Arr.append(steps, {
@@ -260,6 +299,7 @@ const builder = (
 				layer: start.layer as Layer.Layer<unknown, unknown, unknown>,
 				publishes: [],
 			}),
+			config,
 		) as never,
 	done: () =>
 		withKeys(
@@ -272,16 +312,28 @@ const builder = (
 						layer: Layer.empty as never,
 						publishes: [],
 					}),
+			config,
 		) as never,
 })
 
 /**
  * Starts a feature. The first stage, or the start when there is no stage,
- * is the fork with this name.
+ * is the fork with this name. With `config`, the first fork decodes the
+ * config of its entry, and every stage and the start can read it with
+ * `config.key`.
  */
-export const make = (name: string): Builder<never, never> =>
+export const make: {
+	(name: string): Builder<never, never>
+	<I, A>(
+		name: string,
+		options: { readonly config: Config<I, A> },
+	): Builder<I, never>
+} = (
+	name: string,
+	options?: { readonly config: Config<unknown, unknown> },
+): never =>
 	// The types of each later call check the stages, so the empty start can take any type.
-	builder(name, []) as unknown as Builder<never, never>
+	builder(name, [], options?.config) as never
 
 /**
  * Builds the layers of a start one after another, in the order of the list,

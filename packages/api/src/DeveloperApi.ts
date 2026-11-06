@@ -1,22 +1,28 @@
+import { Check } from "@openbot-build/domain/AppIndex"
+import { DeveloperInputInvalid } from "@openbot-build/domain/Developers"
+import { DeveloperNotFound } from "@openbot-build/domain/Developers"
+import { DeveloperForbidden } from "@openbot-build/domain/Developers"
+import { DeveloperConflict } from "@openbot-build/domain/Developers"
+import { DeveloperUnavailable } from "@openbot-build/domain/Developers"
+import { DeveloperRestricted } from "@openbot-build/domain/Developers"
+import { ManagementScope } from "@openbot-build/domain/Developers"
+import { Challenge } from "@openbot-build/domain/Developers"
+import { Proof } from "@openbot-build/domain/Developers"
+import { MemberRole } from "@openbot-build/domain/Developers"
+import { Grant } from "@openbot-build/domain/Developers"
+import { Invitation } from "@openbot-build/domain/Developers"
+import { Member } from "@openbot-build/domain/Developers"
+import { PersonalReport } from "@openbot-build/domain/Developers"
+import { ReportDiff } from "@openbot-build/domain/Developers"
+import { IndexRequest } from "@openbot-build/domain/Developers"
+import { Subscription } from "@openbot-build/domain/Developers"
+import { Notice } from "@openbot-build/domain/Developers"
 import { errors as ExecutionErrors } from "./ExecutionsApi.ts"
-import { AppIndex, Execution, Developers } from "@openbot-build/domain"
+import { Execution, Developers } from "@openbot-build/domain"
 import { Schema } from "effect"
 import { Discovery, Indexing } from "@openbot-build/protocol"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
-import { Check } from "./AppIndexApi.ts"
 
-export const DeveloperInputInvalid = Developers.DeveloperInputInvalid
-export type DeveloperInputInvalid = Developers.DeveloperInputInvalid
-export const DeveloperNotFound = Developers.DeveloperNotFound
-export type DeveloperNotFound = Developers.DeveloperNotFound
-export const DeveloperForbidden = Developers.DeveloperForbidden
-export type DeveloperForbidden = Developers.DeveloperForbidden
-export const DeveloperConflict = Developers.DeveloperConflict
-export type DeveloperConflict = Developers.DeveloperConflict
-export const DeveloperUnavailable = Developers.DeveloperUnavailable
-export type DeveloperUnavailable = Developers.DeveloperUnavailable
-export const DeveloperRestricted = Developers.DeveloperRestricted
-export type DeveloperRestricted = Developers.DeveloperRestricted
 export const Errors = [
 	...ExecutionErrors,
 	DeveloperRestricted.pipe(HttpApiSchema.status(403)),
@@ -26,10 +32,6 @@ export const Errors = [
 	DeveloperConflict.pipe(HttpApiSchema.status(409)),
 	DeveloperUnavailable.pipe(HttpApiSchema.status(503)),
 ]
-export type Failure = Developers.Failure
-
-export const Issue = Developers.Issue
-export type Issue = Developers.Issue
 export const StoredIndex = Schema.TaggedUnion({
 	Known: { check: Schema.NullOr(Check) },
 	Unknown: {},
@@ -45,54 +47,21 @@ export const InspectionReport = Schema.Struct({
 	stages: Schema.Array(Indexing.InspectionStage),
 })
 export type InspectionReport = typeof InspectionReport.Type
-export const ManagementScope = Developers.ManagementScope
-export type ManagementScope = Developers.ManagementScope
-export const Challenge = Developers.Challenge
-export type Challenge = Developers.Challenge
-export const Proof = Developers.Proof
-export type Proof = Developers.Proof
-export const MemberRole = Developers.MemberRole
-export type MemberRole = Developers.MemberRole
-export const Grant = Developers.Grant
-export type Grant = Developers.Grant
 export const ManagedApp = Schema.Struct({
 	...Developers.ManagedAppState.fields,
 	candidate: Discovery.Candidate,
 })
 export type ManagedApp = typeof ManagedApp.Type
-export const Invitation = Developers.Invitation
-export type Invitation = Developers.Invitation
-export const Member = Developers.Member
-export type Member = Developers.Member
 export const SavedReport = Schema.Struct({
 	...Developers.SavedReportState.fields,
 	report: InspectionReport,
 })
 export type SavedReport = typeof SavedReport.Type
-export const PersonalReport = Developers.PersonalReport
-export type PersonalReport = Developers.PersonalReport
-export const ReportDiff = Developers.ReportDiff
-export type ReportDiff = Developers.ReportDiff
-export const TestStage = Developers.TestStage
-export type TestStage = Developers.TestStage
-export const TestAuthorization = Developers.TestAuthorization
-export type TestAuthorization = Developers.TestAuthorization
-/** How far the cleanup of a connection test has come. */
-export const CleanupProgress = Developers.CleanupProgress
-export type CleanupProgress = Developers.CleanupProgress
 export const ConnectionTest = Schema.Struct({
 	...Developers.TestState.fields,
 	candidate: Discovery.Candidate,
 })
 export type ConnectionTest = typeof ConnectionTest.Type
-export const IndexJobStatus = AppIndex.JobStatus
-export type IndexJobStatus = AppIndex.JobStatus
-export const IndexRequest = Developers.IndexRequest
-export type IndexRequest = Developers.IndexRequest
-export const Subscription = Developers.Subscription
-export type Subscription = Developers.Subscription
-export const Notice = Developers.Notice
-export type Notice = Developers.Notice
 const Uuid = Schema.String.check(Schema.isUUID())
 const UuidId = { id: Uuid }
 const Id = { id: Schema.String }

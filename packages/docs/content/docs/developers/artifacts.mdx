@@ -154,9 +154,9 @@ publishing versions, and adding references need write access. App and Computer
 access are checked too. Both API keys and same-origin session cookies use these
 rules. See [Authentication](/developers/authentication).
 
-Generated files do not bypass Chat access through the older File routes.
-Ordinary uploads stay private. Storage use is charged to the execution owner,
-including all historical versions and source copies.
+Generated files do not bypass Chat access through the File routes. Ordinary
+uploads stay private. Storage use is charged to the execution owner, including
+all historical versions and source copies.
 
 The Chat keeps these files from unused-file cleanup. An active publication also
 keeps its pending file. Deleting the Chat releases these references. An owner
@@ -167,7 +167,7 @@ After content is deleted, old metadata remains with
 `availability: "unavailable"`. A content read returns `404`. A retry does not
 recreate deleted content.
 
-## Checks and upgrade
+## Checks
 
 Check downloaded bytes, source records, and fixed versions. Assistant text alone
 does not prove success. An interrupted publication keeps its command and saved
@@ -176,8 +176,3 @@ fail rather than publish a different result under the same command.
 
 Before release, also run this flow with a real model and configured research
 capabilities. This check is incomplete when those credentials are missing.
-
-Upgrade the server, API package, and client SDK together for these response and
-event types. Older clients that only accept empty annotations or a closed set of
-events must be updated. Existing saved messages are not given invented sources
-or artifacts during the upgrade.

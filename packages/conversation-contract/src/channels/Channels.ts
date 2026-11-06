@@ -1,9 +1,11 @@
+import type { BotId } from "@openbot-build/domain/BotId"
+import type { Channel } from "@openbot-build/domain/Channels"
+import type { Caller } from "@openbot-build/domain/Identity"
 import {
 	Authorization,
-	Caller,
 	Channels as ChannelsApi,
+	Execution,
 } from "@openbot-build/domain"
-import { Bots as BotsApi } from "@openbot-build/domain"
 import { Context, Effect, Option, Schema } from "effect"
 import { ConversationKind } from "./Channel.ts"
 
@@ -39,9 +41,6 @@ export const Credentials = Schema.Union([
 
 export type Credentials = typeof Credentials.Type
 
-/** A stored Channel. The API view adds the webhook address of the public origin. */
-export type StoredChannel = ChannelsApi.Channel
-
 export interface Conversation {
 	readonly organizationId: string
 	readonly channelId: string
@@ -65,43 +64,55 @@ export class Channels extends Context.Service<
 		readonly list: (
 			caller: Caller,
 		) => Effect.Effect<
-			ReadonlyArray<StoredChannel>,
+			ReadonlyArray<Channel>,
 			Failure | Authorization.PolicyUnavailable
 		>
 		readonly get: (
 			organizationId: string,
 			id: string,
-		) => Effect.Effect<Option.Option<StoredChannel>, Failure>
+		) => Effect.Effect<Option.Option<Channel>, Failure>
 		/** Finds a Channel by its ID alone, for its webhook. */
 		readonly find: (id: string) => Effect.Effect<
 			Option.Option<{
 				readonly organizationId: string
-				readonly channel: StoredChannel
+				readonly channel: Channel
 			}>,
 			Failure
 		>
+		/**
+		 * Saves a new Channel at the time `at`. Its configuration work exists
+		 * already.
+		 */
 		readonly create: (input: {
+			readonly id: string
+			readonly executionId: Execution.Id
+			readonly at: number
 			readonly caller: Caller
 			readonly name: string
-			readonly bot: BotsApi.BotId
+			readonly bot: BotId
 			readonly credentials: Credentials
 			readonly linkPath: string | null
 			readonly enabled: boolean
-		}) => Effect.Effect<StoredChannel, Failure>
-		/** Changes a Channel. The caller of the change becomes its actor. */
+		}) => Effect.Effect<Channel, Failure>
+		/**
+		 * Changes a Channel at the time `at`. The caller of the change becomes
+		 * its actor, and the new configuration work becomes its execution.
+		 */
 		readonly update: (
 			caller: Caller,
 			id: string,
 			expected: number,
 			change: {
+				readonly executionId: Execution.Id
+				readonly at: number
 				readonly name?: string
-				readonly bot?: BotsApi.BotId
+				readonly bot?: BotId
 				readonly credentials?: Credentials
 				readonly linkPath?: string | null
 				readonly enabled?: boolean
 			},
 		) => Effect.Effect<
-			StoredChannel,
+			Channel,
 			Failure | ChannelsApi.ChannelNotFound | ChannelsApi.ChannelConflict
 		>
 		readonly credentials: (
@@ -114,10 +125,7 @@ export class Channels extends Context.Service<
 		readonly authority: (
 			organizationId: string,
 			id: string,
-		) => Effect.Effect<
-			Option.Option<Caller>,
-			Failure | ChannelsApi.ChannelNotFound
-		>
+		) => Effect.Effect<Caller, Failure | ChannelsApi.ChannelNotFound>
 		readonly identities: (
 			organizationId: string,
 			channelId: string,
@@ -179,7 +187,6 @@ export class Channels extends Context.Service<
 			conversation: Conversation,
 		) => Effect.Effect<void, Failure>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/channels/Channels") {}
+>()("@openbot-build/conversation-contract/channels/Channels") {}
 
 export { type Failure }

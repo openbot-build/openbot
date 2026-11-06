@@ -4,13 +4,13 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import {
 	type Channels,
 	type Developers,
 	Execution,
 } from "@openbot-build/domain"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 import { Chat } from "@openbot-build/core"
 import { Effect, Context, Layer, Schema } from "effect"
@@ -65,8 +65,7 @@ export interface Service {
 }
 
 export class ChannelWatch extends Context.Service<ChannelWatch, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-channels/ChannelWatch",
+	"@openbot-build/plugin-channels/ChannelWatch",
 ) {}
 
 const make = Effect.gen(function* () {

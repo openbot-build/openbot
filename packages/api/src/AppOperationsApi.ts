@@ -1,6 +1,6 @@
+import { AppOperationId, ExecutionView } from "@openbot-build/domain/AppCalls"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
-import { ExecutionView, AppOperationId } from "./AppExecution.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
 import { chatParams } from "./ChatsApi.ts"
 import { Required, own } from "./Authorization.ts"

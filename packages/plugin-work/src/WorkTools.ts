@@ -1,4 +1,5 @@
-import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { Todo, todoProblem } from "@openbot-build/domain/Todos"
+import { Records } from "@openbot-build/server-kernel/Records"
 import {
 	Bot,
 	type Chat,
@@ -7,7 +8,6 @@ import {
 	type Plugin,
 	type Turn,
 } from "@openbot-build/core"
-import { Todo } from "@openbot-build/domain"
 
 import {
 	Array as Arr,
@@ -22,25 +22,23 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import * as Background from "@openbot-build/server-kernel/execution/Background"
+import * as Background from "@openbot-build/server-kernel/Background"
 import {
 	Answer,
 	Gate,
 } from "@openbot-build/conversation-contract/capabilities/Gate"
 import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import { OpenWork } from "@openbot-build/conversation-contract/chats/OpenWork"
 import * as Plans from "./Plans.ts"
-import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
+import * as Todos from "@openbot-build/conversation-contract/work/Todos"
 import { ReminderCommands } from "./ReminderCommands.ts"
-import type { Fence } from "@openbot-build/server-execution/execution/Store"
-import * as ToolEntry from "@openbot-build/tools-contract/plugins/ToolEntry"
-import { toolJson } from "@openbot-build/tools-contract/plugins/ToolJson"
+import type { Fence } from "@openbot-build/server-execution/Store"
+import * as ToolEntry from "@openbot-build/tools-contract/ToolEntry"
+import { toolJson } from "@openbot-build/tools-contract/ToolJson"
 
-/** The work control tools. Their parameters are JSON Schema, like App tools. */
-export type Tools = ToolEntry.Tools
-
+/** The names of the work control tools. */
 export const names = {
 	todos: "openbot_todos",
 	remind: "openbot_remind",
@@ -118,8 +116,7 @@ export class WorkTools extends Context.Service<
 			input: ForOwnerInput,
 		) => Effect.Effect<Bot.ToolRegistration, never, Bot.Context | Work>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-work/WorkTools") {}
+>()("@openbot-build/plugin-work/WorkTools") {}
 
 /** Input for the next Turn. It never steers the running Turn. */
 const nextTurn = (
@@ -203,7 +200,7 @@ export const durable = (fence: Fence) =>
 								Effect.gen(function* () {
 									const request =
 										yield* Schema.decodeUnknownEffect(TodosInput)(raw)
-									const reason = Todos.problem(request.items)
+									const reason = todoProblem(request.items)
 									if (reason !== undefined) return json({ error: reason })
 									const current = yield* work
 									yield* Todos.replace({
@@ -275,7 +272,7 @@ export const durable = (fence: Fence) =>
 								Effect.gen(function* () {
 									const request =
 										yield* Schema.decodeUnknownEffect(PlanInput)(raw)
-									const reason = Todos.problem(request.items)
+									const reason = todoProblem(request.items)
 									if (reason !== undefined) return json({ error: reason })
 									const current = yield* work
 									const view = yield* input.read(current.chat)
@@ -326,7 +323,7 @@ export const durable = (fence: Fence) =>
 									// A wrong list does not ask. The handler tells the Bot why.
 									if (
 										Option.isNone(decoded) ||
-										Todos.problem(decoded.value.items) !== undefined
+										todoProblem(decoded.value.items) !== undefined
 									)
 										return false
 									const request = decoded.value

@@ -1,23 +1,25 @@
+import type { AuditAction } from "@openbot-build/domain/Organizations"
+import { InvitationInvalid } from "@openbot-build/domain/Invitation"
+import { type Caller, Identity, Account } from "@openbot-build/domain/Identity"
 import { Redacted } from "effect"
-import { OrganizationApi, OpenBotApi } from "@openbot-build/api"
+import { OpenBotApi } from "@openbot-build/api"
 import { Bots as BotsApi } from "@openbot-build/domain"
-import { Account, type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, Clock, DateTime, Effect, Option, Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import { botKey } from "@openbot-build/identity-contract/audit/Resources"
+import { botKey } from "@openbot-build/domain/AuditResources"
 import { Grants } from "@openbot-build/conversation-contract/capabilities/Grants"
 import { Rules } from "@openbot-build/conversation-contract/capabilities/Rules"
 import { BotMemories, homeOf } from "./BotMemories.ts"
 import { MemoryBot } from "@openbot-build/conversation-contract/bots/MemoryBot"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as InvitationLinks from "./InvitationLinks.ts"
 import { shareable } from "./Sharing.ts"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import { Mail } from "@openbot-build/identity-contract/mail/Mail"
 
 export const layer = HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
@@ -51,7 +53,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
 		) => bots.access(caller, id, permission)
 		const record = (
 			caller: Caller,
-			action: OrganizationApi.AuditAction,
+			action: AuditAction,
 			bot: BotsApi.Bot,
 			details: Schema.JsonObject,
 		) =>
@@ -488,14 +490,14 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
 							invitation.expiresAt === null ||
 							invitation.status !== "pending"
 						)
-							return yield* OrganizationApi.InvitationInvalid.make({
+							return yield* InvitationInvalid.make({
 								message: "Only a pending email invitation can be sent.",
 							})
 						const expiresAt = DateTime.toEpochMillis(
 							DateTime.makeUnsafe(invitation.expiresAt),
 						)
 						if (expiresAt <= (yield* Clock.currentTimeMillis))
-							return yield* OrganizationApi.InvitationInvalid.make({
+							return yield* InvitationInvalid.make({
 								message: "This invitation has ended.",
 							})
 						const owner = yield* organization
@@ -577,7 +579,7 @@ export const layerInvitations = HttpApiBuilder.group(
 										} as const)
 									: undefined
 						if (by === undefined)
-							return yield* OrganizationApi.InvitationInvalid.make({
+							return yield* InvitationInvalid.make({
 								message: "Send `invitation` or `secret`.",
 							})
 						// The organization where the person uses the Bot. They name it, a user
@@ -597,7 +599,7 @@ export const layerInvitations = HttpApiBuilder.group(
 								? memberships[0]?.organizationId
 								: undefined)
 						if (chosen === undefined)
-							return yield* OrganizationApi.InvitationInvalid.make({
+							return yield* InvitationInvalid.make({
 								message:
 									"Name the organization where you use the Bot in `organization`.",
 							})
@@ -610,7 +612,7 @@ export const layerInvitations = HttpApiBuilder.group(
 								),
 							)
 						if (Option.isNone(active))
-							return yield* OrganizationApi.InvitationInvalid.make({
+							return yield* InvitationInvalid.make({
 								message:
 									"You must be an active member of the organization where you use the Bot.",
 							})
@@ -625,7 +627,7 @@ export const layerInvitations = HttpApiBuilder.group(
 							)
 						const source = yield* bots.find(taken.organizationId, taken.bot)
 						if (Option.isNone(source) || !shareable(source.value))
-							return yield* OrganizationApi.InvitationInvalid.make({
+							return yield* InvitationInvalid.make({
 								message: "This Bot is not shared any more.",
 							})
 						const caller: Caller = {

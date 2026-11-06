@@ -1,14 +1,13 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, Option, Order, Record as Rec } from "effect"
-import * as Preset from "../src/app/Preset.ts"
-import * as PresetPlugins from "../src/app/PresetPlugins.ts"
+import * as Preset from "../src/Preset.ts"
 import * as Feature from "@openbot-build/server-plugin/Feature"
 
 /** The plugin that publishes each key, by the key. */
 const publishers: Readonly<Record<string, string>> = Rec.fromEntries(
-	Arr.flatMap(Preset.ids, (id) =>
+	Arr.flatMap(Rec.keys(Preset.plugins), (id) =>
 		Arr.map(
-			Feature.keys(PresetPlugins.byId[id]).publishes,
+			Feature.keys(Preset.plugins[id].plugin).publishes,
 			(key) => [key.key, id] as const,
 		),
 	),
@@ -16,12 +15,12 @@ const publishers: Readonly<Record<string, string>> = Rec.fromEntries(
 
 /** The other plugins that each plugin waits for, in name order. */
 const needs: Readonly<Record<string, ReadonlyArray<string>>> = Rec.fromEntries(
-	Arr.map(Preset.ids, (id) => [
+	Arr.map(Rec.keys(Preset.plugins), (id) => [
 		id,
 		Arr.sort(
 			Arr.dedupe(
 				Arr.filter(
-					Arr.flatMap(Feature.keys(PresetPlugins.byId[id]).inject, (key) =>
+					Arr.flatMap(Feature.keys(Preset.plugins[id].plugin).inject, (key) =>
 						Option.toArray(Rec.get(publishers, key.key)),
 					),
 					(other) => other !== id,
@@ -96,7 +95,6 @@ const documented: Readonly<Record<string, ReadonlyArray<string>>> = {
 		"authorization",
 		"computers",
 		"files",
-		"imported",
 		"organization",
 	],
 	bots: [
@@ -105,24 +103,13 @@ const documented: Readonly<Record<string, ReadonlyArray<string>>> = {
 		"authorization",
 		"capabilities",
 		"chats",
-		"imported",
 		"mail",
 		"models",
 		"organization",
 		"work",
 	],
-	capabilities: [
-		"apps",
-		"audit",
-		"auth",
-		"authorization",
-		"bots",
-		"chats",
-		"imported",
-		"models",
-	],
+	capabilities: ["audit", "auth", "authorization", "bots", "chats", "models"],
 	work: ["bots", "chats"],
-	imported: ["authorization", "bots"],
 	chats: [
 		"auth",
 		"authorization",
@@ -130,7 +117,6 @@ const documented: Readonly<Record<string, ReadonlyArray<string>>> = {
 		"capabilities",
 		"channels",
 		"files",
-		"imported",
 		"models",
 		"organization",
 	],
@@ -141,7 +127,6 @@ const documented: Readonly<Record<string, ReadonlyArray<string>>> = {
 		"bots",
 		"capabilities",
 		"chats",
-		"imported",
 		"models",
 		"organization",
 	],
@@ -152,11 +137,10 @@ const documented: Readonly<Record<string, ReadonlyArray<string>>> = {
 		"capabilities",
 		"chats",
 		"code",
-		"imported",
 		"models",
 		"vaults",
 	],
-	code: ["apps", "auth", "authorization", "chats", "imported", "vaults"],
+	code: ["apps", "auth", "authorization", "chats", "vaults"],
 	vaults: ["audit", "auth", "authorization", "bots"],
 	computers: ["audit", "auth", "authorization", "bots", "chats"],
 	triggers: ["audit", "auth", "authorization", "bots", "chats", "models"],
@@ -174,7 +158,7 @@ describe("PluginNeeds", () => {
 
 	it("only the plugins that nothing needs can be turned off alone", () => {
 		const alone = Arr.filter(
-			Preset.ids,
+			Rec.keys(Preset.plugins),
 			(id) =>
 				!Arr.contains(Preset.required, id) &&
 				Arr.isReadonlyArrayEmpty(stopsWith(id)),
@@ -192,7 +176,7 @@ describe("PluginNeeds", () => {
 
 	it("a plugin that a needed plugin uses can not be turned off", () => {
 		const needed = Arr.filter(
-			Preset.ids,
+			Rec.keys(Preset.plugins),
 			(id) =>
 				!Arr.contains(Preset.required, id) &&
 				Arr.some(stopsWith(id), (other) =>
@@ -203,8 +187,11 @@ describe("PluginNeeds", () => {
 	})
 
 	it("every key that a plugin needs comes from one plugin only", () => {
-		const keys = Arr.flatMap(Preset.ids, (id) =>
-			Arr.map(Feature.keys(PresetPlugins.byId[id]).publishes, (key) => key.key),
+		const keys = Arr.flatMap(Rec.keys(Preset.plugins), (id) =>
+			Arr.map(
+				Feature.keys(Preset.plugins[id].plugin).publishes,
+				(key) => key.key,
+			),
 		)
 		assert.strictEqual(Arr.dedupe(keys).length, keys.length)
 	})

@@ -14,11 +14,11 @@ import {
 } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 // Sdk is not a public entry point, so this file uses the source modules.
-import * as OAuthAuthorization from "../src/connections/OAuthAuthorization.ts"
-import * as HttpNetwork from "../src/network/HttpNetwork.ts"
-import * as Network from "../src/network/Network.ts"
-import * as Sdk from "../src/network/Sdk.ts"
-import * as NodeHttpServer from "../src/node/NodeHttpServer.ts"
+import * as OAuthAuthorization from "../src/OAuthAuthorization.ts"
+import * as HttpNetwork from "../src/HttpNetwork.ts"
+import * as Network from "../src/Network.ts"
+import * as Sdk from "../src/Sdk.ts"
+import * as NodeHttpServer from "../src/NodeHttpServer.ts"
 import { serveHttps } from "./Fixture.ts"
 
 const encoder = new TextEncoder()

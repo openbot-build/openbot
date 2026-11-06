@@ -1,7 +1,9 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { ConnectionConfigurationInvalid } from "@openbot-build/domain/AppConnections"
 import { Execution } from "@openbot-build/domain"
 import { assert, layer } from "@effect/vitest"
 import { ConnectionsApi as Api } from "@openbot-build/api"
-import { AppHost } from "@openbot-build/openbot"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import {
 	AppConnections,
 	AppFixture as Fixture,
@@ -19,7 +21,11 @@ import {
 	String as Str,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { HttpClientResponse, type HttpMethod } from "effect/http"
+import {
+	HttpClientResponse,
+	type HttpMethod,
+	FetchHttpClient,
+} from "effect/http"
 import { SqlClient } from "effect/sql"
 
 const publicOrigin = "https://openbot.fixture.test"
@@ -110,7 +116,12 @@ const verifyConnection = Effect.fn("AppLifecycleTest.verify")(function* (
 	return { _tag: "Unavailable", connection: value.connection } as const
 })
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"live connection management closes old clients, asks for review of changed targets, and resumes cleanup without calling business tools",
 		() =>
@@ -120,7 +131,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					publicOrigin,
 					discovery: publisher.discovery,
 					appProbe: publisher.probe,
-					appNetwork: Layer.succeed(AppHost.AppNetwork, {
+					appNetwork: Layer.succeed(AppNetwork, {
 						layer: (owner, origins) =>
 							NodeHttpServer.layerUserNetwork({
 								owner,
@@ -229,7 +240,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(incomplete.status, 422, yield* incomplete.text)
 				assert.deepStrictEqual(
 					(yield* HttpClientResponse.schemaBodyJson(
-						Api.ConnectionConfigurationInvalid,
+						ConnectionConfigurationInvalid,
 					)(incomplete)).keys,
 					["header:X-Secret"],
 				)
@@ -352,7 +363,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const host = yield* BrowserHost.start({
 					publicOrigin,
 					appProbe: AppConnections.probeForLoopback(publisher.ca),
-					appNetwork: Layer.succeed(AppHost.AppNetwork, { layer: network }),
+					appNetwork: Layer.succeed(AppNetwork, { layer: network }),
 				})
 				const alice = yield* host.login("manual-alice")
 				const bob = yield* host.login("manual-bob")
@@ -425,7 +436,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(unknownHeader.status, 422, yield* unknownHeader.text)
 				assert.deepStrictEqual(
 					(yield* HttpClientResponse.schemaBodyJson(
-						Api.ConnectionConfigurationInvalid,
+						ConnectionConfigurationInvalid,
 					)(unknownHeader)).keys,
 					["header:X-Unknown"],
 				)

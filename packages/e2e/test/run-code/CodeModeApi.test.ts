@@ -1,17 +1,15 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { ExecutionView } from "@openbot-build/domain/CodeRuns"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
 import { Execution } from "@openbot-build/domain"
 import { PgClient } from "@effect/sql-pg"
 import { assert, it } from "@effect/vitest"
+import { ConnectionsApi, RequestsApi, type ChatsApi } from "@openbot-build/api"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import {
-	type ChatView,
-	CodeRunsApi,
-	ConnectionsApi,
-	RequestsApi,
-	UserTokensApi,
-} from "@openbot-build/api"
-import { AppHost } from "@openbot-build/openbot"
-import {
-	Apps,
 	AppFixture as Fixture,
+	Apps,
 	BrowserHost,
 	Caller,
 	Messages,
@@ -72,7 +70,12 @@ const textOf = (message: Prompt.UserMessage) =>
 		Arr.join(""),
 	)
 
-it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+it.layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"Code Mode sends App calls through the same checks, goes on after decisions, and never sends a call twice",
 		() =>
@@ -171,7 +174,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					},
 					discovery: publisher.discovery,
 					appProbe: publisher.probe,
-					appNetwork: Layer.succeed(AppHost.AppNetwork, {
+					appNetwork: Layer.succeed(AppNetwork, {
 						layer: (owner, origins) =>
 							NodeHttpServer.layerUserNetwork({
 								owner,
@@ -274,7 +277,9 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					return request
 				})
 				/** While a call waits, the Turn ends, and the Bot reads that the call is pending. */
-				const paused = Effect.fn("CodeMode.paused")(function* (view: ChatView) {
+				const paused = Effect.fn("CodeMode.paused")(function* (
+					view: ChatsApi.ChatView,
+				) {
 					assert.strictEqual(view.status, "Completed")
 					assert.strictEqual(view.open.requests, 1)
 					assert.match(yield* jsonText(view.response), /background/)
@@ -410,7 +415,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const chatId = yield* Ref.get(chat)
 				const runs = yield* Effect.flatMap(
 					read("/v1/chats/" + chatId + "/code-runs"),
-					Caller.json(Schema.Array(CodeRunsApi.ExecutionView)),
+					Caller.json(Schema.Array(ExecutionView)),
 				)
 				assert.deepStrictEqual(
 					Arr.map(runs, (run) => [run.status, run.calls.length]),
@@ -433,7 +438,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				const token = yield* Effect.flatMap(
 					post("/v1/user/tokens", { name: "code runs" }),
-					Caller.json(UserTokensApi.CreatedToken),
+					Caller.json(CreatedToken),
 				)
 				const withToken = yield* Caller.withToken(address)(
 					token.secret,
@@ -441,7 +446,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(withToken.status, 200, yield* withToken.text)
 				assert.strictEqual(
-					(yield* Caller.json(CodeRunsApi.ExecutionView)(withToken)).id,
+					(yield* Caller.json(ExecutionView)(withToken)).id,
 					writtenRun.id,
 				)
 				assert.strictEqual(

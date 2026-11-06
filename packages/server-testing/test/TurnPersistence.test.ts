@@ -1,7 +1,9 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { Delegations } from "@openbot-build/conversation-contract/bots/Delegations"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
-import { LiveConnections } from "@openbot-build/plugin-chats/live/LiveConnections"
+import { LiveConnections } from "@openbot-build/plugin-chats/LiveConnections"
 import { ReviewTools } from "@openbot-build/conversation-contract/capabilities/ReviewTools"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
@@ -34,9 +36,8 @@ import {
 } from "effect"
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
 import * as Db from "@openbot-build/server-database/Database"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as Store from "@openbot-build/server-execution/Store"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import * as TurnPersistence from "@openbot-build/plugin-chats/TurnPersistence"
 import {
@@ -44,18 +45,17 @@ import {
 	chatHostStore,
 } from "@openbot-build/conversation-contract/chats/ChatHost"
 import * as BotFixture from "./BotFixture.ts"
-import * as PostgresTest from "./PostgresTest.ts"
-import * as Calls from "@openbot-build/server-execution/execution/Calls"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Calls from "@openbot-build/server-execution/Calls"
+import * as Records from "@openbot-build/server-kernel/Records"
 import * as ToolSteps from "@openbot-build/plugin-chats/ToolSteps"
 import * as ModelSteps from "@openbot-build/plugin-chats/ModelSteps"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import { Billing } from "@openbot-build/server-billing/Billing"
 import { WorkflowEngine } from "effect/workflow"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
-import * as EngineHost from "@openbot-build/server-execution/execution/EngineHost"
-import * as Runner from "@openbot-build/server-execution/execution/Runner"
-import * as RunScope from "@openbot-build/server-execution/execution/RunScope"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
+import * as EngineHost from "@openbot-build/server-execution/EngineHost"
+import * as Runner from "@openbot-build/server-execution/Runner"
+import * as RunScope from "@openbot-build/server-execution/RunScope"
 import * as TurnWorkflow from "@openbot-build/plugin-chats/TurnWorkflow"
 import * as TurnSession from "@openbot-build/plugin-chats/TurnSession"
 import * as TurnTools from "@openbot-build/plugin-chats/TurnTools"
@@ -64,20 +64,20 @@ import * as ToolCommands from "@openbot-build/plugin-chats/ToolCommands"
 import * as InputCommands from "@openbot-build/plugin-chats/InputCommands"
 import * as ExecutionFeatures from "@openbot-build/plugin-chats/ExecutionFeatures"
 import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
-import * as HostTools from "@openbot-build/tools-contract/chats/HostTools"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
+import * as HostTools from "@openbot-build/tools-contract/HostTools"
+import * as Observation from "@openbot-build/server-execution/Observation"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
 import { Gates } from "@openbot-build/conversation-contract/capabilities/Gate"
 import { Files } from "@openbot-build/apps-contract/files/Files"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import { TurnContext } from "@openbot-build/conversation-contract/chats/TurnContext"
 
-const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(PostgresTest.start, (db) =>
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),
@@ -476,6 +476,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								id: "tools",
 								version,
 								settings: { maxSteps: version === 1 ? 1 : 5 },
+								missing: BotFeatures.skip,
 							},
 						],
 					),
@@ -540,6 +541,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								build: "normal",
 								review: true,
 								restores: [],
+								missing: BotFeatures.wait(),
 								settings: Effect.succeed(null),
 								prepare: () =>
 									Effect.die("A feature with a new version must not be built."),
@@ -548,7 +550,12 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						return BotFeatures.BotFeatures.of({
 							...present,
 							snapshot: Effect.succeed([
-								{ id: "tools", version: 1, settings: null },
+								{
+									id: "tools",
+									version: 1,
+									settings: null,
+									missing: BotFeatures.wait(),
+								},
 							]),
 						})
 					}),

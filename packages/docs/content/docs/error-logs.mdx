@@ -53,10 +53,11 @@ of that request. Use it to find the reason for a failed request.
 
 When a Turn fails, the client gets only a short message. A model error, such as
 input that is too large for the model, keeps its message and has the code
-`model_error`. Every other failure, such as a database error, has the code
-`internal_error` and a fixed message. The full cause is in a log line at level
-`Warn` with the message `A Turn failed`. It has the same `chatId` and `turnId`
-as the error log.
+`model_error`. When a limit or a budget stops the Turn, the code is `limited`.
+Do not try again before the limit changes. Every other failure, such as a
+database error, has the code `internal_error` and a fixed message. The full
+cause is in a log line at level `Warn` with the message `A Turn failed`. It has
+the same `chatId` and `turnId` as the error log.
 
 ---
 

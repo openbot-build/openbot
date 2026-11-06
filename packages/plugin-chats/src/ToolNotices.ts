@@ -1,4 +1,6 @@
-import { Execution, ExecutionIdentity } from "@openbot-build/domain"
+import { stepId } from "@openbot-build/conversation-contract/chats/ToolSteps"
+import { ExecutionIdentity } from "@openbot-build/domain/Identity"
+import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
@@ -10,14 +12,13 @@ import {
 } from "effect"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
-import { type Authorize } from "@openbot-build/server-execution/execution/Engine"
+import { type Authorize } from "@openbot-build/server-execution/Engine"
 import {
 	Store,
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
-import { stepId } from "./ToolSteps.ts"
+} from "@openbot-build/server-execution/Store"
 import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
 import { ToolCommands } from "@openbot-build/conversation-contract/chats/ToolCommands"
 import { noticeWorkflowName } from "./ToolCommands.ts"
@@ -49,8 +50,7 @@ export interface Service {
 }
 
 export class ToolNotices extends Context.Service<ToolNotices, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-chats/ToolNotices",
+	"@openbot-build/plugin-chats/ToolNotices",
 ) {}
 
 const make = Effect.gen(function* () {

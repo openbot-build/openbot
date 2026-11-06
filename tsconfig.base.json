@@ -38,9 +38,11 @@
 			{
 				"name": "@effect/language-service",
 				// Tests are program entry points: each test provides its own layers.
+				// The helpers in `server-testing/src` run only inside tests, so
+				// they count as tests too.
 				"overrides": [
 					{
-						"include": ["**/test/**/*.ts"],
+						"include": ["**/test/**/*.ts", "**/server-testing/src/**/*.ts"],
 						"options": {
 							"diagnosticSeverity": { "strictEffectProvide": "off" }
 						}
@@ -66,7 +68,7 @@
 					"catchUnfailableEffect": "error",
 					"cryptoRandomUUID": "error",
 					"cryptoRandomUUIDInEffect": "error",
-					"deterministicKeys": "warning",
+					"deterministicKeys": "error",
 					"duplicatePackage": "error",
 					"effectDoNotation": "warning",
 					"effectFnIife": "error",

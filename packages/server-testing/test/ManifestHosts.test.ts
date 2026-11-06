@@ -1,3 +1,5 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import {
 	Array as Arr,
@@ -11,11 +13,11 @@ import {
 	References,
 	String as Str,
 } from "effect"
-import { HttpServer } from "effect/http"
+import { HttpServer, FetchHttpClient } from "effect/http"
 import { NetAddress } from "effect/net"
 import { SqlClient } from "effect/sql"
-import { InspectPlugins, PluginsFile } from "@openbot-build/openbot/Parts"
-import * as TestHost from "./TestHost.ts"
+import * as BuiltPrograms from "../src/BuiltPrograms.ts"
+import * as TestHost from "../src/TestHost.ts"
 
 const warning = "are not the same as on other runners"
 
@@ -29,6 +31,9 @@ const writeFile = (text: string) =>
 		return file
 	})
 
+/** One log line as JSON text. A logger runs outside of Effect, so it encodes at once. */
+const logLine = (line: unknown) => JSON.stringify(line)
+
 /**
  * A logger that keeps each line as JSON text. A logger runs outside of
  * Effect, so it keeps the lines in a plain variable.
@@ -38,7 +43,7 @@ const capture = () => {
 	const logger = Logger.make((line) => {
 		lines = [
 			...lines,
-			PluginsFile.canonical({
+			logLine({
 				level: line.logLevel,
 				message: line.message,
 				annotations: line.fiber.getRef(References.CurrentLogAnnotations),
@@ -90,22 +95,24 @@ const rowAt = (rows: ReadonlyArray<Row>, address: string) =>
 	)
 
 // The database is a real server, so these tests use the real clock.
-layer(TestHost.layerPlatform, {
-	excludeTestServices: true,
-	timeout: "240 seconds",
-})((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+		timeout: "240 seconds",
+	},
+)((it) => {
 	it.effect(
 		"a runner with other plugins warns and saves a record, and still starts",
 		() =>
 			Effect.gen(function* () {
 				const file = yield* writeFile("- id: triggers\n  disabled: true\n")
-				const options = yield* TestHost.makeSettings
-				yield* TestHost.migrate(options)
-				const first = yield* Layer.build(TestHost.layer(options))
+				const database = yield* TestDatabase.migrated
+				const first = yield* Layer.build(TestHost.layer({ database }))
 				const logs = capture()
 				// The second runner turns triggers off. Its start is not blocked.
 				const second = yield* Layer.build(
-					TestHost.layer({ ...options, pluginsFile: file }),
+					TestHost.layer({ database, pluginsFile: file }),
 				).pipe(Effect.provide(logs.layer))
 				const a = addressOf(first)
 				const b = addressOf(second)
@@ -122,8 +129,10 @@ layer(TestHost.layerPlatform, {
 					),
 				)
 				// The hash in the row is the one that inspect prints for the same file.
-				const report = yield* InspectPlugins.report(Option.some(file))
-				assert.strictEqual(rowAt(rows, b).manifest_hash, report.manifestHash)
+				assert.strictEqual(
+					rowAt(rows, b).manifest_hash,
+					yield* BuiltPrograms.inspectPlugins(Option.some(file)),
+				)
 
 				// The first beat runs in its own fiber, so wait for its warning.
 				while (logs.warnings().length === 0) yield* Effect.sleep("100 millis")
@@ -152,13 +161,12 @@ layer(TestHost.layerPlatform, {
 		"runners with the same plugins write the same hashes and do not warn",
 		() =>
 			Effect.gen(function* () {
-				const options = yield* TestHost.makeSettings
-				yield* TestHost.migrate(options)
+				const database = yield* TestDatabase.migrated
 				const logs = capture()
-				const first = yield* Layer.build(TestHost.layer(options)).pipe(
+				const first = yield* Layer.build(TestHost.layer({ database })).pipe(
 					Effect.provide(logs.layer),
 				)
-				const second = yield* Layer.build(TestHost.layer(options)).pipe(
+				const second = yield* Layer.build(TestHost.layer({ database })).pipe(
 					Effect.provide(logs.layer),
 				)
 				const a = addressOf(first)
@@ -173,8 +181,10 @@ layer(TestHost.layerPlatform, {
 					rowAt(rows, b).active_hash,
 				)
 				// The preset alone gives the hash that inspect prints with no file.
-				const report = yield* InspectPlugins.report(Option.none())
-				assert.strictEqual(rowAt(rows, a).manifest_hash, report.manifestHash)
+				assert.strictEqual(
+					rowAt(rows, a).manifest_hash,
+					yield* BuiltPrograms.inspectPlugins(Option.none()),
+				)
 				assert.deepStrictEqual(logs.warnings(), [])
 			}).pipe(Effect.timeout("200 seconds"), Effect.scoped),
 		240_000,

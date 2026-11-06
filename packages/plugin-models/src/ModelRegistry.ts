@@ -1,6 +1,7 @@
 import { AiError } from "effect/ai"
-import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
-import * as ChatGptProvider from "@openbot-build/model-providers/providers/chatgpt/ChatGptProvider"
+import { ProviderOAuth } from "@openbot-build/models-contract/ProviderOAuth"
+import type { Builtin } from "@openbot-build/models-contract/BuiltinModels"
+import * as ChatGptProvider from "@openbot-build/model-providers/ChatGptProvider"
 import {
 	Config,
 	Model as CoreModel,
@@ -25,62 +26,36 @@ import {
 } from "effect"
 import { DecisionModel, LanguageModel, Telemetry } from "effect/ai"
 import { HttpClient } from "effect/http"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
-import * as AnthropicProvider from "@openbot-build/model-providers/providers/anthropic/AnthropicProvider"
-import * as OpenAiCompatProvider from "@openbot-build/model-providers/providers/openai-compat/OpenAiCompatProvider"
-import * as OpenAiProvider from "@openbot-build/model-providers/providers/openai/OpenAiProvider"
-import * as TypeSafeProvider from "@openbot-build/model-providers/providers/typesafe/TypeSafeProvider"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import * as Report from "@openbot-build/server-kernel/Report"
+import * as AnthropicProvider from "@openbot-build/model-providers/AnthropicProvider"
+import * as OpenAiCompatProvider from "@openbot-build/model-providers/OpenAiCompatProvider"
+import * as OpenAiProvider from "@openbot-build/model-providers/OpenAiProvider"
+import * as TypeSafeProvider from "@openbot-build/model-providers/TypeSafeProvider"
+import { Billing } from "@openbot-build/server-billing/Billing"
 import {
 	meter,
 	meterDecision,
-} from "@openbot-build/server-billing/billing/MeteredModel"
-import { TokenThrottle } from "@openbot-build/server-billing/billing/TokenThrottle"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+} from "@openbot-build/server-billing/MeteredModel"
+import { TokenThrottle } from "@openbot-build/server-billing/TokenThrottle"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import {
 	linkedOwner,
 	ModelProviders,
 	type Stored,
-} from "@openbot-build/models-contract/models/ModelProviders"
+} from "@openbot-build/models-contract/ModelProviders"
 import {
 	type Effective,
 	effective,
 	Models,
 	modelKey,
-} from "@openbot-build/models-contract/models/Models"
-import * as ToolImages from "@openbot-build/model-providers/providers/ToolImages"
-import * as LiveBackends from "@openbot-build/models-contract/models/LiveBackends"
+} from "@openbot-build/models-contract/Models"
+import * as ToolImages from "@openbot-build/model-providers/ToolImages"
+import * as LiveBackends from "@openbot-build/models-contract/LiveBackends"
 import {
 	AnyModel,
 	ModelRegistry,
-} from "@openbot-build/models-contract/models/ModelRegistry"
-export {
-	AnyModel,
-	ModelRegistry,
-} from "@openbot-build/models-contract/models/ModelRegistry"
-export type {
-	Catalog,
-	ResolvedLive,
-} from "@openbot-build/models-contract/models/ModelRegistry"
-
-/**
- * Models that the program itself gives, such as the simulated model of the
- * development entry point. The API cannot change them, and every organization can use them.
- */
-export interface Builtin {
-	/** The default of a test or development platform. */
-	readonly defaultModel?: Config.Selection
-	readonly providers: ReadonlyArray<Config.Provider>
-	readonly models: ReadonlyArray<Config.Model>
-	readonly resolve: (
-		selection: Config.Selection,
-	) => Effect.Effect<
-		LanguageModel.LanguageModel,
-		Config.ModelConfigurationError
-	>
-}
-
+} from "@openbot-build/models-contract/ModelRegistry"
 /** One model that one provider offers, with the values of the link applied. */
 interface Offer {
 	readonly provider: Stored

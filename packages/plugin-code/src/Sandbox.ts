@@ -20,8 +20,8 @@ import type {
 	ToWorker,
 	VaultItem,
 } from "@openbot-build/apps-contract/code/Protocol"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
-import type { Records } from "@openbot-build/server-kernel/errors/Records"
+import * as Report from "@openbot-build/server-kernel/Report"
+import type { Records } from "@openbot-build/server-kernel/Records"
 
 export interface Program {
 	readonly code: string
@@ -66,8 +66,7 @@ export class Sandbox extends Context.Service<
 			) => Effect.Effect<Option.Option<ReadonlyArray<Settled>>, never, R>,
 		) => Effect.Effect<Outcome, never, R>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-code/Sandbox") {}
+>()("@openbot-build/plugin-code/Sandbox") {}
 
 /**
  * The places of the worker file. A program that runs the TypeScript source

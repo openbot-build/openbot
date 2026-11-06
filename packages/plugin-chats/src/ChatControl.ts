@@ -1,10 +1,11 @@
+import { Caller } from "@openbot-build/domain/Identity"
 import {
 	Chat,
 	ChatStoreRepository,
 	Store as CoreStore,
 	Turn,
 } from "@openbot-build/core"
-import { Authorization, Caller, Execution } from "@openbot-build/domain"
+import { Authorization, Execution } from "@openbot-build/domain"
 import { and, eq, notInArray } from "drizzle-orm"
 import { Array as Arr, Effect, Option, Schema, Stream } from "effect"
 import { SqlClient } from "effect/sql"
@@ -12,20 +13,20 @@ import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import * as Db from "@openbot-build/server-database/Database"
 import { executions } from "@openbot-build/server-database/ExecutionSchema"
-import { type Authorize } from "@openbot-build/server-execution/execution/Engine"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
+import { type Authorize } from "@openbot-build/server-execution/Engine"
+import { Observation } from "@openbot-build/server-execution/Observation"
 import {
 	Store,
 	storage,
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
-import type { End } from "@openbot-build/server-execution/execution/Program"
-import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
+} from "@openbot-build/server-execution/Store"
+import type { End } from "@openbot-build/server-execution/Program"
+import * as Todos from "@openbot-build/conversation-contract/work/Todos"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
-import { LiveConnections } from "./live/LiveConnections.ts"
+import { LiveConnections } from "./LiveConnections.ts"
 import { inExecution } from "@openbot-build/conversation-contract/chats/ChatEncoding"
 
 export const workflowName = "openbot.chat-control"

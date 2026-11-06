@@ -1,15 +1,18 @@
-import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
-import { Execution } from "@openbot-build/domain"
-import { Redacted } from "effect"
-import { assert, layer } from "@effect/vitest"
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { Bot, BotMember, Grant } from "@openbot-build/domain/Bots"
 import {
-	BotMemory,
-	BotsApi,
-	Mail,
-	OrganizationApi,
-	RequestsApi,
-	UserTokensApi,
-} from "@openbot-build/api"
+	BotInvitationSecret,
+	InvitationSecretPrefix,
+	BotInvitation,
+} from "@openbot-build/domain/BotSharing"
+import { Invitation } from "@openbot-build/domain/Organizations"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
+import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
+import { Execution, BotMemory, Mail } from "@openbot-build/domain"
+import { Redacted, Layer } from "effect"
+import { assert, layer } from "@effect/vitest"
+import { RequestsApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Effect,
@@ -63,7 +66,12 @@ const until = <A, E, R>(
 		),
 	)
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"a person joins a shared Bot by invitation and uses it in their own organization",
 		() =>
@@ -84,7 +92,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 
 				const guide = yield* json(
-					BotsApi.Bot,
+					Bot,
 					send(alice.session, "/v1/bots", "POST", {
 						name: "Guide",
 						role: "Answers questions",
@@ -94,7 +102,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				// Only a top Bot can be shared. A Bot that a Bot owns cannot.
 				const child = yield* json(
-					BotsApi.Bot,
+					Bot,
 					send(alice.session, "/v1/bots", "POST", {
 						name: "Child",
 						role: "Helps",
@@ -115,7 +123,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// An invitation link, ready for a QR code.
 				const link = yield* json(
-					BotsApi.BotInvitationSecret,
+					BotInvitationSecret,
 					send(alice.session, `/v1/bots/${guide.id}/invitations`, "POST", {
 						path: "/join",
 					}),
@@ -123,9 +131,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.ok(
 					link.secret !== null &&
-						Str.startsWith(BotsApi.InvitationSecretPrefix)(
-							Redacted.value(link.secret),
-						),
+						Str.startsWith(InvitationSecretPrefix)(Redacted.value(link.secret)),
 				)
 				assert.strictEqual(
 					link.url,
@@ -142,7 +148,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					400,
 				)
 				const again = yield* json(
-					BotsApi.BotInvitationSecret,
+					BotInvitationSecret,
 					send(
 						alice.session,
 						`/v1/bots/${guide.id}/invitations/${link.invitation.id}/secret`,
@@ -163,7 +169,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					status = 200,
 				) =>
 					json(
-						BotsApi.Bot,
+						Bot,
 						send(session, "/v1/bot-invitations/accept", "POST", payload),
 						status,
 					)
@@ -202,14 +208,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					linked.id,
 				)
 				const listed = yield* json(
-					Schema.Array(BotsApi.Bot),
+					Schema.Array(Bot),
 					send(carol.session, "/v1/bots"),
 				)
 				assert.ok(Arr.some(listed, (bot) => bot.id === linked.id))
 				assert.deepStrictEqual(
 					Arr.map(
 						yield* json(
-							Schema.Array(BotsApi.BotMember),
+							Schema.Array(BotMember),
 							send(alice.session, `/v1/bots/${guide.id}/members`),
 						),
 						(member) => [member.userId, member.organizationId],
@@ -226,17 +232,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					400,
 				)
 				yield* json(
-					BotsApi.Bot,
+					Bot,
 					send(alice.session, `/v1/bots/${guide.id}`, "PATCH", {
 						expected: guide.revision,
 						name: "Guide Two",
 					}),
 				)
 				assert.strictEqual(
-					(yield* json(
-						BotsApi.Bot,
-						send(carol.session, `/v1/bots/${linked.id}`),
-					)).name,
+					(yield* json(Bot, send(carol.session, `/v1/bots/${linked.id}`))).name,
 					"Guide Two",
 				)
 
@@ -289,14 +292,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// Her decision is a Grant of her own linked Bot. The shared Bot does not get it.
 				assert.strictEqual(
 					(yield* json(
-						Schema.Array(BotsApi.Grant),
+						Schema.Array(Grant),
 						send(carol.session, `/v1/bots/${linked.id}/grants`),
 					)).length,
 					1,
 				)
 				assert.deepStrictEqual(
 					yield* json(
-						Schema.Array(BotsApi.Grant),
+						Schema.Array(Grant),
 						send(alice.session, `/v1/bots/${guide.id}/grants`),
 					),
 					[],
@@ -343,7 +346,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// An email invitation shows in the list of the person, and needs the Bot route.
 				const emailed = yield* json(
-					BotsApi.BotInvitationSecret,
+					BotInvitationSecret,
 					send(alice.session, `/v1/bots/${guide.id}/invitations`, "POST", {
 						email: "sharing-dave@example.com",
 					}),
@@ -364,7 +367,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					404,
 				)
 				const afterResend = yield* json(
-					Schema.Array(BotsApi.BotInvitation),
+					Schema.Array(BotInvitation),
 					send(alice.session, `/v1/bots/${guide.id}/invitations`),
 				)
 				assert.deepStrictEqual(
@@ -375,7 +378,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					Option.some(emailed.invitation),
 				)
 				const mine = yield* json(
-					Schema.Struct({ items: Schema.Array(OrganizationApi.Invitation) }),
+					Schema.Struct({ items: Schema.Array(Invitation) }),
 					send(dave.session, "/v1/invitations"),
 				)
 				assert.deepStrictEqual(
@@ -407,7 +410,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					400,
 				)
 				const revokedEmail = yield* json(
-					BotsApi.BotInvitationSecret,
+					BotInvitationSecret,
 					send(alice.session, `/v1/bots/${guide.id}/invitations`, "POST", {
 						email: "sharing-unused@example.com",
 					}),
@@ -439,7 +442,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// Leaving: archiving a linked Bot ends the membership.
 				yield* json(
-					BotsApi.Bot,
+					Bot,
 					send(dave.session, `/v1/bots/${daveLinked.id}`, "PATCH", {
 						expected: daveLinked.revision,
 						archived: true,
@@ -448,7 +451,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.deepStrictEqual(
 					Arr.map(
 						yield* json(
-							Schema.Array(BotsApi.BotMember),
+							Schema.Array(BotMember),
 							send(alice.session, `/v1/bots/${guide.id}/members`),
 						),
 						(member) => member.userId,
@@ -459,7 +462,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// A user token works like the session cookie.
 				const erin = yield* host.login("sharing-erin")
 				const token = yield* json(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					send(erin.session, "/v1/user/tokens", "POST", { name: "join" }),
 					201,
 				)

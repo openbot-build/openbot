@@ -3,7 +3,7 @@ import type {
 	Preparation,
 	Exchange,
 } from "./TestCommands.ts"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { Records } from "@openbot-build/server-kernel/Records"
 import { Developers, Execution as Executions } from "@openbot-build/domain"
 
 import {
@@ -34,16 +34,16 @@ import { Digest, SecureRandom } from "effect/crypto"
 import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import { PgClient } from "@effect/sql-pg"
 import * as Rows from "./DeveloperRows.ts"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
+import type { InstanceSettings } from "@openbot-build/server-kernel/InstanceSettings"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
 import { capabilityLists, pages } from "./Capabilities.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 
-export type Execution = TestResult
 export class DeveloperTestRuntime extends Context.Service<
 	DeveloperTestRuntime,
 	{
@@ -56,7 +56,7 @@ export class DeveloperTestRuntime extends Context.Service<
 					stages: ReadonlyArray<Developers.TestStage>,
 				) => Effect.Effect<void, Developers.Failure>
 			},
-		) => Effect.Effect<Execution, Developers.Failure>
+		) => Effect.Effect<TestResult, Developers.Failure>
 		readonly prepare: (
 			owner: string,
 			id: string,
@@ -71,8 +71,7 @@ export class DeveloperTestRuntime extends Context.Service<
 			input: Exchange,
 		) => Effect.Effect<OAuthAuthorization.Grant, Developers.Failure>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/DeveloperTestRuntime") {}
+>()("@openbot-build/plugin-apps/DeveloperTestRuntime") {}
 const policy = Client.InvocationPolicy.of({
 	check: (invocation) =>
 		invocation.action === "connect" ||
@@ -114,12 +113,13 @@ export const make: Effect.Effect<
 	| DeveloperAccess
 	| Settings
 	| Records
+	| InstanceSettings
 > = Effect.gen(function* () {
 	const errors = yield* Records
 	const settings = yield* Settings
 	const stores = yield* DeveloperTestStores
 	const db = yield* Db.make
-	const namespace = yield* IndexNamespace
+	const namespace = yield* instanceNamespace
 	const network = yield* AppNetwork
 	const crypto = yield* SecureRandom.SecureRandom
 	const hashes = yield* Digest.Digest
@@ -451,7 +451,7 @@ export const make: Effect.Effect<
 						!Schema.is(Executions.NotFound)(error) &&
 						!Schema.isSchemaError(error),
 					(error) =>
-						Effect.succeed<Execution>({
+						Effect.succeed<TestResult>({
 							_tag: "Failed",
 							stages: [
 								{

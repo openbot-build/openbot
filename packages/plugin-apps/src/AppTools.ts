@@ -1,12 +1,13 @@
+import type { Identity } from "@openbot-build/domain/Identity"
 import * as AppQueries from "@openbot-build/apps-contract/apps/AppQueries"
 import { CodeCommands } from "@openbot-build/apps-contract/code/CodeCommands"
 import * as WorkflowTools from "@openbot-build/apps-contract/apps/WorkflowTools"
-import type { Fence } from "@openbot-build/server-execution/execution/Store"
-import * as Registration from "@openbot-build/tools-contract/plugins/Registration"
+import type { Fence } from "@openbot-build/server-execution/Store"
+import * as Registration from "@openbot-build/tools-contract/Registration"
 import { Vaults } from "@openbot-build/apps-contract/vaults/Vaults"
 import * as VaultCode from "@openbot-build/apps-contract/vaults/CodeMode"
 import * as StoredViews from "./StoredViews.ts"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import { Bot } from "@openbot-build/core"
 import {
 	AppCalls as AppExecution,
@@ -14,7 +15,6 @@ import {
 } from "@openbot-build/domain"
 import { ToolResult } from "./AssistanceResult.ts"
 
-import { type Identity } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
@@ -36,7 +36,7 @@ import { ActionPolicy } from "./ActionPolicy.ts"
 import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
+import * as Report from "@openbot-build/server-kernel/Report"
 
 export type Tools = Record<
 	string,
@@ -79,8 +79,7 @@ export class AppTools extends Context.Service<
 			Work | Bot.Context | Scope.Scope
 		>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/AppTools") {}
+>()("@openbot-build/plugin-apps/AppTools") {}
 
 const selectionPrompt = <E, R>(
 	db: Db.Database,

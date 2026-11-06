@@ -120,10 +120,10 @@ The receipt names the saved execution and its Turn, also when the input must
 wait. The same command key and body return the same receipt. A changed body with
 the same key returns `409` with `ExecutionKeyConflict`.
 
-New message commands include `inputId`. It names one saved input in
-`ChatView.queuedInputs`, then the same `ChatItem.id` when the Bot reads it.
-Older saved commands may omit it. OpenBot does not invent input IDs for them.
-The message command's saved `Checkpoint` also holds this input ID.
+Message commands include `inputId`. It names one saved input in
+`ChatView.queuedInputs`, then the same `ChatItem.id` when the Bot reads it. A
+message to a task Chat can have none. OpenBot does not invent input IDs. The
+message command's saved `Checkpoint` also holds this input ID.
 `receipt.sequence` is a position in the execution event log, not an Item number
 or a Chat revision.
 
@@ -364,6 +364,15 @@ that the Turn works for. In a [Channel](/developers/channels), it is the person
 who wrote the message. Each Item has `id`, `seq` (its place in the history),
 `content` and `origin` (`chat`, `turn`, `step`, and `notice` for a notice).
 
+A `Failed` status has a `message` and a `code`. The response of the Turn has the
+same code in `error.code`:
+
+| Code             | Why the Turn failed                                                           |
+| ---------------- | ----------------------------------------------------------------------------- |
+| `model_error`    | The model did not give a complete response.                                   |
+| `limited`        | A limit or a budget stopped the Turn. Try again only after the limit changes. |
+| `internal_error` | Any other failure. The log has the cause.                                     |
+
 To follow work, use the saved `executionId`. Events have a sequence number. Send
 the last number as `afterSequence` after a lost connection. Closing the stream
 only stops observation. Cancel work with an explicit execution command. The old
@@ -535,11 +544,11 @@ it is looser:
 ## Models and execution mode
 
 A new Chat, including a review Chat, uses the `model` of its Bot. A test or
-development platform can give `builtinModels.defaultModel` when the Bot has
-none. A linked Bot also uses that default when its model is not in the receiving
-organization. Without a valid model, creation fails and leaves no Chat or Turn.
-A live Chat uses its own Live model catalog. A saved review keeps its model on
-replay; a new send still checks current model rights.
+development platform can give a `defaultModel` in `BuiltinModels` when the Bot
+has none. A linked Bot also uses that default when its model is not in the
+receiving organization. Without a valid model, creation fails and leaves no Chat
+or Turn. A live Chat uses its own Live model catalog. A saved review keeps its
+model on replay; a new send still checks current model rights.
 `GET /v1/chats/:chatId/models` shows the models you can pick:
 
 ```json
@@ -661,24 +670,3 @@ does not call it complete or send it again without that decision.
 
 Only confirmed provider usage is charged. Unknown usage stays marked unknown.
 See all fields in the [Chats reference](/api/operations/tags/chats/).
-
-## Chats from an older version
-
-A data upgrade keeps Chat IDs, Items and past Turns. It also keeps old tool
-results. The tool list and read routes return these as `_tag: "Imported"`
-records. They have `chat`, `turn`, `kind` and `endedAt`. They have no
-`position`, `deadline` or `detached` field because the old record did not save
-those facts. Read `status` and `failure` from their linked execution. Old
-pending requests and delegations stay in history. They do not count as open work
-or appear in the model's list of work that will return.
-
-Old work has no proof of its original token. The upgrade does not run it again.
-Pending inputs leave the live inbox and stay in sealed history. Old task Chats
-stay as history; send new work through the parent Chat.
-
-If a direct Chat's old Turn has `outcome_unknown`, review its saved calls and
-send a `stop` decision for each unknown call through the execution decision
-route. The stop records your choice; it does not undo an outside action. New
-input returns `409` with `ChatConflict` until that execution ends. Then new
-input starts a fresh Turn with the current caller's rights. It cannot reuse the
-old caller's rights or run unresolved old calls.

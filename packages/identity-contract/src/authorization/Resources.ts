@@ -5,20 +5,7 @@ import {
 } from "@openbot-build/domain"
 import { type Bots as BotsModel } from "@openbot-build/domain"
 import { Authorization } from "@openbot-build/domain"
-
-/**
- * The member at the top of the owner tree of a Bot.
- * It is `null` when the organization owns the Bot at the top.
- */
-export const rootOf = (owner: BotsModel.BotOwner): string | null => {
-	switch (owner._tag) {
-		case "Organization":
-			return null
-		case "Member":
-		case "Bot":
-			return owner.userId
-	}
-}
+import { rootOf } from "@openbot-build/domain/AuditResources"
 
 /**
  * The resource value of a Bot. Shared Bots, and the Bots below them, have no

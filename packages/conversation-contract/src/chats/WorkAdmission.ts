@@ -1,5 +1,5 @@
 import { Context } from "effect"
-import * as Admission from "@openbot-build/server-execution/execution/Admission"
+import * as Admission from "@openbot-build/server-execution/Admission"
 
 /** Pauses control new work. They do not replace access checks or block saved results. */
 export interface Service {
@@ -7,6 +7,5 @@ export interface Service {
 }
 
 export class WorkAdmission extends Context.Service<WorkAdmission, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/conversation-contract/chats/WorkAdmission",
+	"@openbot-build/conversation-contract/chats/WorkAdmission",
 ) {}

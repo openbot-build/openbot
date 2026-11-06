@@ -1,11 +1,9 @@
-import {
-	type Bots as BotsType,
-	type ChatModelInvalid,
-	Execution,
-} from "@openbot-build/domain"
+import type { LimitControl } from "@openbot-build/domain/Delegations"
+import type { ChatModelInvalid } from "@openbot-build/domain/Chats"
+import { type Bots as BotsType, Execution } from "@openbot-build/domain"
 import type { Chat, ChatStore, Config } from "@openbot-build/core"
 import { type Schema, Context, Effect, Layer } from "effect"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import {
 	type Failure,
 	Bots,
@@ -15,7 +13,7 @@ import * as Gate from "@openbot-build/conversation-contract/capabilities/Gate"
 import { RequestCommands } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
 import * as CallFrame from "@openbot-build/conversation-contract/chats/CallFrame"
 import { inExecution } from "@openbot-build/conversation-contract/chats/ChatEncoding"
-import type { Fence } from "@openbot-build/server-execution/execution/Store"
+import type { Fence } from "@openbot-build/server-execution/Store"
 import { DelegationCommands } from "./DelegationCommands.ts"
 
 /** Approval waits hold no Chat runtime. A resumed start checks current rights. */
@@ -105,7 +103,7 @@ const continueWork = (fence: Fence) =>
 			stored.limitTurnExecutionId === undefined
 		)
 			return yield* Execution.Conflict.make({ id: fence.id })
-		const control: PolicyOrigin.Control = {
+		const control: LimitControl = {
 			kind: "delegationLimit",
 			epoch: stored.limitEpoch,
 			turnExecutionId: stored.limitTurnExecutionId,
@@ -221,8 +219,7 @@ export interface Service {
 export class DelegationSession extends Context.Service<
 	DelegationSession,
 	Service
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-bots/DelegationSession") {}
+>()("@openbot-build/plugin-bots/DelegationSession") {}
 
 const make = Effect.gen(function* () {
 	const services =

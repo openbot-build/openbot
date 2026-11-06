@@ -1,8 +1,8 @@
+import { BotId } from "@openbot-build/domain/BotId"
+import type { Caller } from "@openbot-build/domain/Identity"
 import { Redacted } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Vaults as VaultsModel } from "@openbot-build/domain"
-import { Bots as BotsModel } from "@openbot-build/domain"
-import { type Caller } from "@openbot-build/domain"
 import { and, eq, inArray } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -14,7 +14,7 @@ import {
 	Schema,
 } from "effect"
 import { Hex } from "effect/encoding"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { vaultResource } from "@openbot-build/identity-contract/authorization/Resources"
 import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
@@ -25,21 +25,15 @@ import {
 	vaultItems,
 	vaults,
 } from "@openbot-build/server-database/Schema"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import { VaultReadFailed } from "@openbot-build/apps-contract/vaults/Readers"
-import { Readers } from "./Readers.ts"
+import { Readers } from "@openbot-build/apps-contract/vaults/Readers"
 import { SecretProviders } from "./SecretProviders.ts"
 import {
 	type Vault,
 	type Item,
 	Vaults,
 } from "@openbot-build/apps-contract/vaults/Vaults"
-export { Vaults } from "@openbot-build/apps-contract/vaults/Vaults"
-export type {
-	Failure,
-	Usable,
-} from "@openbot-build/apps-contract/vaults/Vaults"
-
 type Source = VaultsModel.VaultItemSource
 
 export const unavailable = () => VaultsModel.VaultsUnavailable.make({})
@@ -552,7 +546,7 @@ export const make = Effect.gen(function* () {
 					.pipe(stored("The Bots of a Vault could not be read."))
 				return Arr.map(rows, (entry) => ({
 					vault: VaultsModel.VaultId.make(entry.vaultId),
-					bot: BotsModel.BotId.make(entry.bot),
+					bot: BotId.make(entry.bot),
 					grantedBy: entry.grantedBy,
 					grantedAt: entry.grantedAt,
 				}))

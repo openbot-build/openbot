@@ -1,3 +1,10 @@
+import type { Caller } from "@openbot-build/domain/Identity"
+import type { BotId } from "@openbot-build/domain/BotId"
+import {
+	type ChatSettingsChange,
+	ChatModelInvalid,
+	type ChatTodoChange,
+} from "@openbot-build/domain/Chats"
 import {
 	Chat,
 	ChatStoreRepository,
@@ -5,23 +12,15 @@ import {
 	Store,
 	type Turn,
 } from "@openbot-build/core"
-import {
-	Authorization,
-	Bots as BotDomain,
-	ChatModelInvalid,
-	type Caller,
-	type BotId,
-	type ChatSettingsChange,
-	type ChatTodoChange,
-} from "@openbot-build/domain"
+import { Authorization, Bots as BotDomain } from "@openbot-build/domain"
 import { Effect, Option, String as Str } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { Bots } from "../bots/Bots.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
-import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
+import * as Todos from "../work/Todos.ts"
 import * as ChatHost from "./ChatHost.ts"
 import * as ChatModels from "./ChatModels.ts"
 import * as StoredChats from "./StoredChats.ts"

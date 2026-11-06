@@ -16,9 +16,8 @@ session cookie, and `publish` on `App`. See
 
 Claim, proof, member, report, and indexing request IDs must be UUID text. This
 also applies to report page cursors (`before`) and comparison IDs (`other`).
-Both old UUID v4 and new UUID v7 values work. The API rejects other text before
-it reaches storage. Invitation bearer tokens and notice IDs keep their own
-formats.
+UUID v4 and UUID v7 values both work. The API rejects other text before it
+reaches storage. Invitation bearer tokens and notice IDs keep their own formats.
 
 ---
 
@@ -332,10 +331,3 @@ List your settings with `GET /v1/developer/subscriptions`.
 
 See the full shapes in the
 [API reference](/api/operations/tags/developer-tools/).
-
-The data move keeps existing claims, proofs, members, invitations, Apps,
-reports, and notice settings. App and proof checks keep their saved next check
-times. A relinquished proof starts no new check. Old index requests keep their
-IDs and get a history execution. A saved result stays complete. A request
-without a saved result is interrupted because its original caller is missing.
-The platform can still finish the separate public check.

@@ -1,6 +1,9 @@
+import { Job } from "@openbot-build/domain/AppIndex"
+import { ServiceId, type ServiceIdentity } from "@openbot-build/domain/Identity"
 import {
 	Array as Arr,
 	Clock,
+	Context,
 	Effect,
 	Layer,
 	Match,
@@ -15,14 +18,9 @@ import {
 	transactionFailures,
 	type Key,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
-import {
-	AppIndex,
-	Execution,
-	ServiceId,
-	type ServiceIdentity,
-} from "@openbot-build/domain"
-import { Discovery, Index, Indexing } from "@openbot-build/protocol"
+} from "@openbot-build/server-execution/Store"
+import { AppIndex, Execution } from "@openbot-build/domain"
+import { Discovery, Indexing, IndexStore } from "@openbot-build/protocol"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
 import { and, eq } from "drizzle-orm"
@@ -33,20 +31,13 @@ import {
 } from "@openbot-build/server-database/Schema"
 import * as Db from "@openbot-build/server-database/Database"
 import { Governance } from "./Governance.ts"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
 import { CheckJson } from "./IndexStore.ts"
 import {
 	CheckInput,
 	CheckResult,
 	IndexWork,
 } from "@openbot-build/apps-contract/apps/IndexWork"
-export {
-	CheckInput,
-	CheckResult,
-	IndexWork,
-} from "@openbot-build/apps-contract/apps/IndexWork"
-export type { Service } from "@openbot-build/apps-contract/apps/IndexWork"
-
 export const workflowName = "openbot.index-watch"
 
 export const serviceId = ServiceId.make("public-index")
@@ -58,18 +49,31 @@ export const identity: ServiceIdentity = {
 
 export const nextSignal = (generation: string) => `next:${generation}`
 
-export interface Options {
-	readonly intervalMs?: number
-	readonly retryMs?: number
-}
+/** A wait in milliseconds: a whole number from 1. */
+const Wait = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))
 
-export const Job = AppIndex.Job
+/**
+ * How often the work of the App Index runs. It is the config of the apps
+ * plugin. `intervalMs` is the wait after a good run. The default is one hour.
+ * `retryMs` is the wait after a failed run. The default is one minute.
+ */
+export const Options = Schema.Struct({
+	intervalMs: Schema.optionalKey(Wait),
+	retryMs: Schema.optionalKey(Wait),
+})
+export type Options = typeof Options.Type
 
-export type Job = AppIndex.Job
+/** The config of the apps plugin, as its entry gives it. An entry with no config gives `undefined`. */
+export const Config = Schema.UndefinedOr(Options)
+
+/** The timing of the work of the App Index, from the config of the apps plugin. */
+export class Timing extends Context.Service<Timing, Options | undefined>()(
+	"@openbot-build/plugin-apps/IndexWork/Timing",
+) {}
 
 const sourcesCodec = Schema.fromJsonString(Schema.Array(Discovery.Source))
 
-const entryCodec = Schema.fromJsonString(Index.Entry)
+const entryCodec = Schema.fromJsonString(IndexStore.Entry)
 
 const Reference = Schema.Struct({
 	indexNamespace: Schema.String,
@@ -103,7 +107,7 @@ const make = (options: Options) =>
 		const db = yield* Db.make
 		const sql = yield* SqlClient.SqlClient
 		const store = yield* Store
-		const namespace = yield* IndexNamespace
+		const namespace = yield* instanceNamespace
 		const inspection = yield* Indexing.PublicationInspection
 		const governance = yield* Governance
 		const crypto = yield* SecureRandom.SecureRandom

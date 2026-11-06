@@ -2,13 +2,10 @@ import * as Citations from "@openbot-build/conversation-contract/artifacts/Citat
 import { Chat, ChatStore, type Turn } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
 import { Effect } from "effect"
-import type { Calls } from "@openbot-build/server-execution/execution/Calls"
+import type { Calls } from "@openbot-build/server-execution/Calls"
 import type { Database } from "@openbot-build/server-database/Database"
-import type {
-	Fence,
-	Store,
-} from "@openbot-build/server-execution/execution/Store"
-import { databaseError } from "@openbot-build/server-kernel/database/DatabaseError"
+import type { Fence, Store } from "@openbot-build/server-execution/Store"
+import { databaseError } from "@openbot-build/server-kernel/DatabaseError"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 
 /** A Turn may write only while it holds its execution and is current in its Chat. */

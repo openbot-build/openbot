@@ -8,14 +8,15 @@ title: "模型后端"
 
 ## 内置模型
 
-当你从自己的程序中运行 OpenBot 时，可以用 `builtinModels`
-选项在代码中提供模型。参见[从代码运行](/zh-cn/server)。
+当你从自己的程序中运行 OpenBot 时，可以用 `BuiltinModels`
+服务在代码中提供模型。它是一个外部服务：在 `Host.layer` 的 `outside` 选项中给出
+`Layer.succeed(BuiltinModels, models)`。参见[从代码运行](/zh-cn/server)。
 
 - 每个组织都可以使用它们。
 - API 不能修改它们。
 - 它们和保存的提供方一起显示在模型列表中。
 
-`builtinModels` 有三个字段：
+这些模型有三个字段：
 
 | 字段        | 是什么                                                           |
 | ----------- | ---------------------------------------------------------------- |
@@ -23,19 +24,17 @@ title: "模型后端"
 | `models`    | 要显示的模型，是 `Config.Model` 值。                             |
 | `resolve`   | 一个函数，接收一个选择，返回一个带有 `LanguageModel` 的 Effect。 |
 
-`builtinModels.defaultModel`
-选项指定其中一个模型。当新 Chat 的 Bot 没有指定模型时，这个 Chat 会得到它。只有模拟的平台会设置它，例如开发环境或测试。在真实的平台上，每个 Bot 都指定自己的模型。
+可选字段 `defaultModel`
+指定其中一个模型。当新 Chat 的 Bot 没有指定模型时，这个 Chat 会得到它。只有模拟的平台会设置它，例如开发环境或测试。在真实的平台上，每个 Bot 都指定自己的模型。
 
 这个示例提供一个 Anthropic 模型，密钥来自你程序的环境：
 
 ```ts
 import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
-import {
-	AnthropicProvider,
-	EnvironmentConfiguration,
-	Host,
-} from "@openbot-build/openbot"
+import { Host, Launch } from "@openbot-build/openbot"
+import * as AnthropicProvider from "@openbot-build/model-providers/AnthropicProvider"
+import { BuiltinModels } from "@openbot-build/models-contract/BuiltinModels"
 import { Context, Effect, Layer, Redacted } from "effect"
 import { LanguageModel } from "effect/ai"
 import { FetchHttpClient } from "effect/http"
@@ -48,7 +47,7 @@ const selection = Config.Selection.make({
 NodeRuntime.runMain(
 	Effect.scoped(
 		Effect.gen(function* () {
-			const settings = yield* EnvironmentConfiguration.load
+			const settings = yield* Launch.settings
 			// 只构建一次模型。它和程序存在的时间一样长。
 			const layer = Layer.unwrap(
 				AnthropicProvider.make({ max_tokens: 4096 }).model(selection),
@@ -86,7 +85,10 @@ NodeRuntime.runMain(
 							),
 			}
 			return yield* Layer.launch(
-				Host.layer({ ...settings, builtinModels }).pipe(
+				Host.layer({
+					...settings,
+					outside: Layer.succeed(BuiltinModels, builtinModels),
+				}).pipe(
 					Layer.provide(
 						Layer.mergeAll(
 							NodeServices.layer,
@@ -97,19 +99,18 @@ NodeRuntime.runMain(
 				),
 			)
 		}),
-	),
+	).pipe(Effect.provide(NodeServices.layer)),
 )
 ```
 
-当 `resolve` 失败时，启动 Turn 会返回 `503`。开发入口用 `builtinModels`
-提供它的测试模型。完整示例参见
+当 `resolve` 失败时，启动 Turn 会返回 `503`。开发入口用 `BuiltinModels`
+服务提供它的测试模型。完整示例参见
 `packages/server-development/src/DevelopmentModel.ts`。
 
 ### 提供方模块
 
-提供方模块为某一种 API 把模型名称变成一个
-`LanguageModel`。`@openbot-build/openbot`
-导出了三个这样的模块。每个模块都有同样的部分：
+提供方模块为某一种 API 把模型名称变成一个 `LanguageModel`。包 `model-providers`
+有三个这样的模块。每个模块都有同样的部分：
 
 | 部分                        | 作用                                                           |
 | --------------------------- | -------------------------------------------------------------- |
@@ -159,6 +160,6 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
   http://localhost/v1/chats/$CHAT_ID
 ```
 
-开发入口通过 `builtinModels`
+开发入口通过 `BuiltinModels`
 提供这些模型，所以开发平台的每个组织都可以使用它们。它把 `mock-text` 作为
-`builtinModels.defaultModel`，所以当新 Chat 的 Bot 没有指定模型时，这个 Chat 会得到它。生产程序永远不会使用它们。
+`defaultModel`，所以当新 Chat 的 Bot 没有指定模型时，这个 Chat 会得到它。生产程序永远不会使用它们。

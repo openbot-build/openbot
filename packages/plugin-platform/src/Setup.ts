@@ -1,22 +1,22 @@
+import type { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
 import * as Access from "@openbot-build/domain/Access"
 import { type Settings as SettingsModel } from "@openbot-build/domain"
 
-import { Authorization } from "@openbot-build/domain"
 import { Effect, Option, Redacted, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
-import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { hint, Secrets } from "@openbot-build/server-kernel/Secrets"
 import {
 	filesDefaults,
-	filesOf,
+	platformDefaults,
 	type PlatformDocument,
-} from "@openbot-build/server-kernel/settings/Documents"
+} from "@openbot-build/server-kernel/Documents"
 import {
 	bindings,
 	changeFiles,
 	changeMail,
-} from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+} from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
 
 export interface Input {
@@ -78,7 +78,7 @@ export const run = (input: Input) =>
 			Option.match(input.fileStorage, {
 				onNone: () => true,
 				onSome: (wanted) => {
-					const storage = filesOf(document).storage
+					const storage = document.files.storage
 					return (
 						storage !== null &&
 						storage.endpoint === wanted.endpoint &&
@@ -154,7 +154,7 @@ export const run = (input: Input) =>
 					secrets,
 					Option.match(current, {
 						onNone: () => filesDefaults,
-						onSome: ({ document }) => filesOf(document),
+						onSome: ({ document }) => document.files,
 					}),
 					{ storage },
 				).pipe(Effect.map((files) => ({ files }))),
@@ -164,12 +164,7 @@ export const run = (input: Input) =>
 			PlatformDocument,
 			"publicOrigin" | "authSecret" | "identityProvider"
 		> = Option.match(current, {
-			onNone: () => ({
-				organizationCreation: "platform_admins",
-				registration: Access.defaults,
-				ceiling: Authorization.emptyPolicy,
-				appRestrictions: [],
-			}),
+			onNone: () => platformDefaults,
 			onSome: ({ document }) => document,
 		})
 		const mail =
@@ -178,9 +173,7 @@ export const run = (input: Input) =>
 				: {
 						mail: yield* changeMail(
 							secrets,
-							Option.isSome(current)
-								? (current.value.document.mail ?? null)
-								: null,
+							Option.isSome(current) ? current.value.document.mail : null,
 							input.mail,
 						),
 					}
@@ -203,7 +196,7 @@ export const run = (input: Input) =>
 						: // Another instance ran setup at the same time.
 							"unchanged",
 				),
-			onSome: (): Effect.Effect<Outcome, SettingsModel.SettingsUnavailable> =>
+			onSome: (): Effect.Effect<Outcome, SettingsUnavailable> =>
 				input.force
 					? Effect.as(settings.replacePlatform(document), "replaced")
 					: Effect.succeed("unchanged"),

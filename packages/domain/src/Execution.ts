@@ -1,4 +1,4 @@
-import { Schema, String as Str } from "effect"
+import { Option, Schema, SchemaAST, String as Str } from "effect"
 import { ArtifactId, SourceId, SourceReference, Version } from "./Artifacts.ts"
 
 export const Id = Schema.String.check(
@@ -94,21 +94,66 @@ export const canTransition = (from: Status, to: Status): boolean => {
 	}
 }
 
+/**
+ * The public kind of a failure. It tells a client what to do next.
+ *
+ * - `invalid`: the input is wrong. Change it before you try again.
+ * - `forbidden`: the caller may not do this.
+ * - `not_found`: a resource does not exist.
+ * - `conflict`: the state changed. Read it again before you try again.
+ * - `limited`: a limit or a budget stopped the work. Try again only after the
+ *   limit changes.
+ * - `unavailable`: OpenBot could not do the work now. You can try again.
+ * - `external`: an outside service failed.
+ * - `outcome_unknown`: the outside action may or may not have happened.
+ * - `interrupted`: the work stopped before it ended.
+ */
+export const Category = Schema.Literals([
+	"invalid",
+	"forbidden",
+	"not_found",
+	"conflict",
+	"limited",
+	"unavailable",
+	"external",
+	"outcome_unknown",
+	"interrupted",
+]).annotate({
+	description:
+		"What a client can do next: invalid (change the input), forbidden, not_found, conflict (read again), limited (a limit or budget stopped the work; try again after it changes), unavailable (try again later), external, outcome_unknown, interrupted.",
+})
+export type Category = typeof Category.Type
+
 /** Public failures carry no provider text, input, or stored cause. */
 export const Failure = Schema.Struct({
 	errorId: ErrorId,
-	category: Schema.Literals([
-		"invalid",
-		"forbidden",
-		"not_found",
-		"conflict",
-		"unavailable",
-		"external",
-		"outcome_unknown",
-		"interrupted",
-	]),
+	category: Category,
 })
 export type Failure = typeof Failure.Type
+
+/**
+ * The schema annotation that gives the failure category of an error class.
+ * Its value is a category, or a function that reads it from the error.
+ */
+export const categoryAnnotation = "@openbot-build/domain/Category"
+
+/**
+ * The annotations of an error class whose failures have this category. Give
+ * them as the last argument of `Schema.TaggedError`.
+ */
+export const category = <E = never>(
+	value: Category | ((error: E) => Category),
+) => ({ [categoryAnnotation]: value })
+
+/** The failure category that the class of an error gives, if it gives one. */
+export const categoryOf = (error: unknown): Option.Option<Category> => {
+	if (typeof error !== "object" || error === null) return Option.none()
+	const schema: unknown = error.constructor
+	if (!Schema.isSchema(schema)) return Option.none()
+	const value: unknown = SchemaAST.resolve(schema.ast)?.[categoryAnnotation]
+	const found: unknown = typeof value === "function" ? value(error) : value
+	return Schema.is(Category)(found) ? Option.some(found) : Option.none()
+}
 
 export const Resource = Schema.Struct({
 	kind: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
@@ -245,15 +290,15 @@ export const maySend = (status: CallStatus, retry: Retry): boolean =>
 export class NotFound extends Schema.TaggedError<
 	NotFound,
 	{ readonly brand: unique symbol }
->()("ExecutionNotFound", { id: Id }) {}
+>()("ExecutionNotFound", { id: Id }, category("not_found")) {}
 export class Conflict extends Schema.TaggedError<
 	Conflict,
 	{ readonly brand: unique symbol }
->()("ExecutionConflict", { id: Id }) {}
+>()("ExecutionConflict", { id: Id }, category("conflict")) {}
 export class KeyConflict extends Schema.TaggedError<
 	KeyConflict,
 	{ readonly brand: unique symbol }
->()("ExecutionKeyConflict", {}) {}
+>()("ExecutionKeyConflict", {}, category("conflict")) {}
 export class StorageError extends Schema.TaggedError<
 	StorageError,
 	{ readonly brand: unique symbol }
@@ -262,7 +307,7 @@ export class StorageError extends Schema.TaggedError<
 export class Forbidden extends Schema.TaggedError<
 	Forbidden,
 	{ readonly brand: unique symbol }
->()("ExecutionForbidden", {}) {}
+>()("ExecutionForbidden", {}, category("forbidden")) {}
 
 /** The workflow must settle this call before it can make more progress. */
 export class OutcomeUnknown extends Schema.TaggedError<

@@ -1,4 +1,6 @@
-import type { Caller, Delegations, Execution } from "@openbot-build/domain"
+import type { DelegationId } from "@openbot-build/domain/DelegationId"
+import type { Caller } from "@openbot-build/domain/Identity"
+import type { Delegations, Execution } from "@openbot-build/domain"
 import { Context, type Effect } from "effect"
 
 /** A delegation with the state of its execution. */
@@ -17,7 +19,7 @@ export class DelegationQueries extends Context.Service<
 	{
 		readonly read: (
 			caller: Caller,
-			id: Delegations.DelegationId,
+			id: DelegationId,
 		) => Effect.Effect<
 			DelegationHistory,
 			| Delegations.DelegationConflict
@@ -28,5 +30,4 @@ export class DelegationQueries extends Context.Service<
 			| Execution.StorageError
 		>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/bots/DelegationQueries") {}
+>()("@openbot-build/conversation-contract/bots/DelegationQueries") {}

@@ -1,3 +1,8 @@
+import {
+	type ExecutionIdentity,
+	Caller,
+	executionCallers,
+} from "@openbot-build/domain/Identity"
 import { Digest } from "effect/crypto"
 import { SecureRandom } from "effect/crypto"
 import { Chat, Item } from "@openbot-build/core"
@@ -5,11 +10,8 @@ import {
 	ArtifactCommands,
 	Artifacts as Data,
 	Authorization,
-	Caller,
 	Execution,
-	ExecutionIdentity,
 	Files as FileData,
-	executionCallers,
 } from "@openbot-build/domain"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import {
@@ -46,13 +48,13 @@ import {
 	type Fence,
 	type Key,
 	transactionFailures,
-} from "@openbot-build/server-execution/execution/Store"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
+} from "@openbot-build/server-execution/Store"
+import { Observation } from "@openbot-build/server-execution/Observation"
+import { Calls } from "@openbot-build/server-execution/Calls"
 import {
 	Workflows,
 	type Authorize,
-} from "@openbot-build/server-execution/execution/Workflows"
+} from "@openbot-build/server-execution/Workflows"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
 import { ArtifactFiles } from "@openbot-build/apps-contract/artifacts/ArtifactFiles"
 import { Materials, normalizeText } from "./Materials.ts"

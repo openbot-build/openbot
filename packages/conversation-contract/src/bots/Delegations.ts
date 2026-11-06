@@ -1,3 +1,5 @@
+import type { DelegationId } from "@openbot-build/domain/DelegationId"
+import type { BotId } from "@openbot-build/domain/BotId"
 import { Chat, Turn } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
 import { Delegations as DelegationDomain } from "@openbot-build/domain"
@@ -18,7 +20,7 @@ type Delegation = DelegationDomain.Delegation
  * A limit is reached when the usage since `window` reaches it.
  */
 export const Stored = Schema.Struct({
-	executionId: Schema.optionalKey(Execution.Id),
+	executionId: Execution.Id,
 	/** Each new limit pause gets a new number and keeps its task Turn. */
 	limitEpoch: Schema.optionalKey(Schema.Natural),
 	limitTurnExecutionId: Schema.optionalKey(Execution.Id),
@@ -34,17 +36,17 @@ export const Stored = Schema.Struct({
 export type Stored = typeof Stored.Type
 
 export interface CreateInput {
-	readonly id?: DelegationDomain.DelegationId
-	readonly executionId?: Execution.Id
+	readonly id?: DelegationId
+	readonly executionId: Execution.Id
 	readonly userId: string
 	readonly author: Turn.Author
 	readonly chain: Chain
 	readonly parent: Delegation["parent"]
 	readonly trigger?: Delegation["trigger"]
-	readonly bot: BotsApi.BotId
+	readonly bot: BotId
 	readonly task: string
 	readonly reason?: string
-	readonly limits?: DelegationDomain.DelegationLimits
+	readonly limits: DelegationDomain.DelegationLimits
 	/** The task Chat of earlier work that this work goes on with. */
 	readonly chat?: Chat.Id
 	readonly status: "authorizing" | "queued" | "running" | "failed"
@@ -99,8 +101,7 @@ export class Delegations extends Context.Service<
 			when?: (stored: Stored) => boolean,
 		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/bots/Delegations") {}
+>()("@openbot-build/conversation-contract/bots/Delegations") {}
 
 /** Nothing used yet. */
 export const noUsage: DelegationDomain.DelegationUsage = {

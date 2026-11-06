@@ -1,22 +1,23 @@
+import { DelegationId } from "@openbot-build/domain/DelegationId"
+import type { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import type { LimitControl } from "@openbot-build/domain/Delegations"
+import { Caller, type ExecutionIdentity } from "@openbot-build/domain/Identity"
+import type { BotId } from "@openbot-build/domain/BotId"
+import type { TriggerId } from "@openbot-build/domain/TriggerId"
+import type { ChatModelInvalid } from "@openbot-build/domain/Chats"
 import {
 	type MemberExecution,
 	Store,
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import {
-	type BotId,
 	type Bots as BotsType,
-	type Settings as SettingsData,
-	type TriggerId,
 	type Computers,
 	type ToolExecution,
-	type ChatModelInvalid,
 	Delegations as Domain,
 	Execution,
-	Caller,
-	type ExecutionIdentity,
 } from "@openbot-build/domain"
 import {
 	type ChatStore,
@@ -39,7 +40,7 @@ import {
 	Struct,
 } from "effect"
 import { Digest } from "effect/crypto"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import {
 	type Failure,
 	Bots,
@@ -58,31 +59,20 @@ import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredC
 import * as ToolOrigins from "@openbot-build/conversation-contract/chats/ToolOrigins"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as Db from "@openbot-build/server-database/Database"
-import type {
-	Authorize,
-	Decide,
-} from "@openbot-build/server-execution/execution/Engine"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
-import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
-import { delegationTimeLimitOf } from "@openbot-build/server-kernel/settings/Documents"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import type { Authorize, Decide } from "@openbot-build/server-execution/Engine"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
+import * as Todos from "@openbot-build/conversation-contract/work/Todos"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import * as DelegationUsage from "@openbot-build/conversation-contract/bots/DelegationUsage"
 import {
 	Delegations,
 	noUsage,
 } from "@openbot-build/conversation-contract/bots/Delegations"
 
-export {
-	workflowName,
-	noticeWorkflowName,
-	Input,
-	Request,
-} from "@openbot-build/conversation-contract/bots/DelegationSource"
 import * as DelegationSource from "@openbot-build/conversation-contract/bots/DelegationSource"
 import {
 	workflowName,
 	noticeWorkflowName,
-	Input,
 	Request,
 	codec,
 } from "@openbot-build/conversation-contract/bots/DelegationSource"
@@ -105,7 +95,7 @@ export interface Service {
 			readonly task: string
 			readonly reason: string
 			readonly limits?: Domain.DelegationLimits
-			readonly previous?: Domain.DelegationId
+			readonly previous?: DelegationId
 			readonly bot?: BotId
 		},
 	) => Effect.Effect<
@@ -119,16 +109,16 @@ export interface Service {
 		| PlatformError.PlatformError
 		| Schema.SchemaError
 		| SecretStorageError
-		| SettingsData.SettingsUnavailable
+		| SettingsUnavailable
 		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
 	>
 	readonly cancel: (
 		source: Fence,
 		site: Execution.CallSite,
-		id: Domain.DelegationId,
+		id: DelegationId,
 	) => Effect.Effect<
 		{
-			readonly delegation: Domain.DelegationId
+			readonly delegation: DelegationId
 			readonly executionId: Execution.Id
 			readonly accepted: true
 		},
@@ -145,8 +135,8 @@ export interface Service {
 					readonly bot: BotId
 					readonly task: string
 					readonly reason: string
-					readonly limits?: Domain.DelegationLimits
-					readonly previous?: Domain.DelegationId
+					readonly limits: Domain.DelegationLimits
+					readonly previous?: DelegationId
 					readonly source:
 						| { readonly _tag: "Tool"; readonly site: Execution.CallSite }
 						| {
@@ -164,7 +154,7 @@ export interface Service {
 						  }
 				}
 				stored: {
-					readonly executionId?: Execution.Id
+					readonly executionId: Execution.Id
 					readonly limitEpoch?: number
 					readonly limitTurnExecutionId?: Execution.Id
 					readonly delegation: Domain.Delegation
@@ -193,8 +183,8 @@ export interface Service {
 					readonly bot: BotId
 					readonly task: string
 					readonly reason: string
-					readonly limits?: Domain.DelegationLimits
-					readonly previous?: Domain.DelegationId
+					readonly limits: Domain.DelegationLimits
+					readonly previous?: DelegationId
 					readonly source:
 						| { readonly _tag: "Tool"; readonly site: Execution.CallSite }
 						| {
@@ -212,7 +202,7 @@ export interface Service {
 						  }
 				}
 				stored: {
-					readonly executionId?: Execution.Id
+					readonly executionId: Execution.Id
 					readonly limitEpoch?: number
 					readonly limitTurnExecutionId?: Execution.Id
 					readonly delegation: Domain.Delegation
@@ -417,7 +407,7 @@ export interface Service {
 	>
 	readonly stopLimit: (
 		fence: Fence,
-		control: PolicyOrigin.Control,
+		control: LimitControl,
 	) => Effect.Effect<
 		Execution.Receipt,
 		| Execution.Conflict
@@ -444,8 +434,7 @@ export interface Service {
 export class DelegationCommands extends Context.Service<
 	DelegationCommands,
 	Service
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-bots/DelegationCommands") {}
+>()("@openbot-build/plugin-bots/DelegationCommands") {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
@@ -491,7 +480,7 @@ const make = Effect.gen(function* () {
 							request.previous,
 						)
 					: Option.none()
-			const input: Input = {
+			const input = {
 				...request,
 				bot:
 					request.bot ??
@@ -517,7 +506,9 @@ const make = Effect.gen(function* () {
 					body: {
 						source: source.id,
 						site,
-						input: yield* Schema.encodeEffect(Schema.toCodecJson(Input))(input),
+						input: yield* Schema.encodeEffect(Schema.toCodecJson(Request))(
+							input,
+						),
 					},
 				},
 				(create) =>
@@ -536,8 +527,7 @@ const make = Effect.gen(function* () {
 							(Option.isNone(earlier) ||
 								earlier.value.userId !== frame.identity.owner.userId ||
 								earlier.value.delegation.parent.chat !== frame.position.chat ||
-								earlier.value.delegation.bot !== input.bot ||
-								earlier.value.executionId === undefined)
+								earlier.value.delegation.bot !== input.bot)
 						)
 							return yield* Execution.Forbidden.make({})
 						const previousChat = Option.isSome(earlier)
@@ -612,11 +602,9 @@ const make = Effect.gen(function* () {
 						if (Option.isNone(bot) || bot.value.archived)
 							return yield* Execution.Forbidden.make({})
 						const limits = input.limits ?? {
-							timeMs: delegationTimeLimitOf(
-								(yield* settings.organization(
-									frame.identity.owner.organizationId,
-								)).document,
-							),
+							timeMs: (yield* settings.organization(
+								frame.identity.owner.organizationId,
+							)).document.delegationTimeLimitMs,
 						}
 						return yield* store.commit(
 							source,
@@ -630,7 +618,7 @@ const make = Effect.gen(function* () {
 								],
 							},
 							Effect.gen(function* () {
-								const id = Domain.DelegationId.make(`dlg_${hash}`)
+								const id = DelegationId.make(`dlg_${hash}`)
 								const key = yield* create({
 									workflow: workflowName,
 									resource: { kind: "Delegation", id },
@@ -702,7 +690,7 @@ const make = Effect.gen(function* () {
 	const cancel = Effect.fn("DelegationCommands.cancel")(function* (
 		source: Fence,
 		site: Execution.CallSite,
-		id: Domain.DelegationId,
+		id: DelegationId,
 	) {
 		const frame = yield* frames.read(source, site)
 		const found = yield* delegations.find(
@@ -711,7 +699,6 @@ const make = Effect.gen(function* () {
 		)
 		if (
 			Option.isNone(found) ||
-			found.value.executionId === undefined ||
 			found.value.userId !== frame.identity.owner.userId ||
 			found.value.delegation.parent.chat !== frame.position.chat
 		)
@@ -905,7 +892,7 @@ const make = Effect.gen(function* () {
 										...stored.delegation,
 										status: "running",
 										chat: id,
-										usage: stored.delegation.usage ?? noUsage,
+										usage: stored.delegation.usage,
 									},
 								}),
 							)
@@ -1151,7 +1138,7 @@ const make = Effect.gen(function* () {
 	/** Save the pause and its policy subject under the owner fence. Metered values come from saved calls. */
 	const pause = Effect.fn("DelegationCommands.pause")(function* (
 		fence: Fence,
-		control: PolicyOrigin.Control,
+		control: LimitControl,
 	) {
 		const saved = yield* load(fence)
 		const origin = yield* policies.limit(fence, control)
@@ -1199,15 +1186,11 @@ const make = Effect.gen(function* () {
 								return yield* Execution.Conflict.make({ id: fence.id })
 							const now = yield* Clock.currentTimeMillis
 							const usage = yield* metering.read(fence, now)
-							const limits = current.stored.delegation.limits
-							const reached =
-								limits === undefined
-									? Option.none()
-									: Domain.reached(
-											limits,
-											usage,
-											current.stored.window ?? noUsage,
-										)
+							const reached = Domain.reached(
+								current.stored.delegation.limits,
+								usage,
+								current.stored.window ?? noUsage,
+							)
 							if (Option.isNone(reached))
 								return yield* Execution.Conflict.make({ id: fence.id })
 							yield* metering.close(fence, now)
@@ -1239,7 +1222,7 @@ const make = Effect.gen(function* () {
 	/** The policy workflow calls this only after its saved check allows the work. */
 	const resume = Effect.fn("DelegationCommands.resume")(function* (
 		fence: Fence,
-		control: PolicyOrigin.Control,
+		control: LimitControl,
 	) {
 		const saved = yield* load(fence)
 		const origin = yield* policies.limit(fence, control)
@@ -1382,40 +1365,36 @@ const make = Effect.gen(function* () {
 			} as const
 		}
 		const limits = saved.stored.delegation.limits
-		if (limits !== undefined) {
-			const latest = yield* store.latestCalls(task.value.key)
-			const pendingModel = Arr.some(
-				latest,
-				(call) =>
-					call.retry === "read_only" &&
-					call.status === "intended" &&
-					Schema.is(Schema.Struct({ purpose: Schema.Literal("turn") }))(
-						call.input,
-					),
-			)
-			const wake =
-				yield* sql`select 1 from openbot_execution_events where namespace = ${fence.namespace} and execution_id = ${fence.id} and event_key = ${`wake:limit:${saved.stored.limitEpoch ?? 0}:steps`} limit 1`
-			const reached = Domain.reached(
-				pendingModel || wake.length > 0
-					? limits
-					: Struct.omit(limits, ["steps"]),
-				snapshot.usage,
-				saved.stored.window ?? noUsage,
-			)
-			if (Option.isSome(reached))
-				return {
-					_tag: "Limit",
-					control: {
-						kind: "delegationLimit",
-						turnExecutionId: task.value.key.id,
-						epoch: (saved.stored.limitEpoch ?? 0) + 1,
-					},
-				} as const
-		}
+		const latest = yield* store.latestCalls(task.value.key)
+		const pendingModel = Arr.some(
+			latest,
+			(call) =>
+				call.retry === "read_only" &&
+				call.status === "intended" &&
+				Schema.is(Schema.Struct({ purpose: Schema.Literal("turn") }))(
+					call.input,
+				),
+		)
+		const wake =
+			yield* sql`select 1 from openbot_execution_events where namespace = ${fence.namespace} and execution_id = ${fence.id} and event_key = ${`wake:limit:${saved.stored.limitEpoch ?? 0}:steps`} limit 1`
+		const reached = Domain.reached(
+			pendingModel || wake.length > 0 ? limits : Struct.omit(limits, ["steps"]),
+			snapshot.usage,
+			saved.stored.window ?? noUsage,
+		)
+		if (Option.isSome(reached))
+			return {
+				_tag: "Limit",
+				control: {
+					kind: "delegationLimit",
+					turnExecutionId: task.value.key.id,
+					epoch: (saved.stored.limitEpoch ?? 0) + 1,
+				},
+			} as const
 		return {
 			_tag: "Wait",
 			watch: snapshot.watch,
-			...(limits === undefined || !snapshot.running
+			...(!snapshot.running
 				? {}
 				: {
 						deadline:
@@ -1519,7 +1498,7 @@ const make = Effect.gen(function* () {
 		inspect,
 		pause,
 		resume,
-		stopLimit: (fence: Fence, control: PolicyOrigin.Control) =>
+		stopLimit: (fence: Fence, control: LimitControl) =>
 			store.commit(
 				fence,
 				{},

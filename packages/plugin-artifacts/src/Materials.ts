@@ -1,10 +1,9 @@
-import { type Chat } from "@openbot-build/core"
 import {
-	AppCalls,
-	Artifacts,
-	executionCallers,
 	type ExecutionIdentity,
-} from "@openbot-build/domain"
+	executionCallers,
+} from "@openbot-build/domain/Identity"
+import { type Chat } from "@openbot-build/core"
+import { AppCalls, Artifacts } from "@openbot-build/domain"
 import { PublicNetwork } from "@openbot-build/protocol/Network"
 import {
 	Array as Arr,
@@ -18,8 +17,8 @@ import {
 } from "effect"
 import { parse, defaultTreeAdapter, type DefaultTreeAdapterTypes } from "parse5"
 import * as AppQueries from "@openbot-build/apps-contract/apps/AppQueries"
-import { ComputerFiles } from "@openbot-build/tools-contract/computers/ComputerFiles"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { ComputerFiles } from "@openbot-build/apps-contract/computers/ComputerFiles"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 
 /** A source keeps the text that was read, not a later view of its address. */
 export interface Material {

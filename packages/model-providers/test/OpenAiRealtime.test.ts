@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest"
 import { Array as Arr, Effect } from "effect"
 import { Execution } from "@openbot-build/domain"
 import { Live } from "@openbot-build/core"
-import * as OpenAiRealtime from "@openbot-build/model-providers/providers/openai/OpenAiRealtime"
+import * as OpenAiRealtime from "@openbot-build/model-providers/OpenAiRealtime"
 
 const config: Live.Config = {
 	instructions: "Be short.",

@@ -1,9 +1,8 @@
 import {
-	Computers as ComputerData,
-	Execution,
-	ExecutionIdentity,
+	type ExecutionIdentity,
 	executionCallers,
-} from "@openbot-build/domain"
+} from "@openbot-build/domain/Identity"
+import { Computers as ComputerData, Execution } from "@openbot-build/domain"
 import { Chat } from "@openbot-build/core"
 import {
 	Array as Arr,
@@ -28,11 +27,11 @@ import {
 	String as Str,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import * as Background from "@openbot-build/server-kernel/execution/Background"
-import * as Send from "@openbot-build/server-execution/execution/Send"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import * as Resource from "@openbot-build/server-execution/resources/Resource"
-import { Transport } from "@openbot-build/server-execution/resources/Transport"
+import * as Background from "@openbot-build/server-kernel/Background"
+import * as Send from "@openbot-build/server-execution/Send"
+import { Records } from "@openbot-build/server-kernel/Records"
+import * as Resource from "@openbot-build/server-execution/Resource"
+import { Transport } from "@openbot-build/server-execution/Transport"
 import {
 	ComputerCallFailed,
 	ComputerGone,
@@ -40,7 +39,7 @@ import {
 	type Exit,
 	type Machine,
 	type Process,
-} from "./Computer.ts"
+} from "@openbot-build/apps-contract/computers/Computer"
 import { Computers } from "./Computers.ts"
 
 /** The account and Chat that own the session, and the current caller. */
@@ -218,8 +217,7 @@ export interface Service {
 }
 
 export class Sessions extends Context.Service<Sessions, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-computers/Sessions",
+	"@openbot-build/plugin-computers/Sessions",
 ) {}
 
 export const make = Effect.gen(function* () {

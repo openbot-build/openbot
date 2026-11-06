@@ -2,7 +2,7 @@ import type { Bot, Chat, ChatStore } from "@openbot-build/core"
 import { Array as Arr, Effect, Option, Order, Record as Rec } from "effect"
 import type { Tool } from "effect/ai"
 import type { FeatureStopped } from "@openbot-build/conversation-contract/chats/BotFeatures"
-import * as Registration from "@openbot-build/tools-contract/plugins/Registration"
+import * as Registration from "@openbot-build/tools-contract/Registration"
 
 /** The tools of a part. A hook of a feature can stop the Turn. */
 type Built = Bot.ToolRegistration<{}, FeatureStopped>

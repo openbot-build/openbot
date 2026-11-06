@@ -11,13 +11,7 @@
 	],
 	"exports": {
 		".": "./dist/index.js",
-		"./ArtifactTools": "./dist/ArtifactTools.js",
-		"./HttpHandlers": "./dist/HttpHandlers.js",
-		"./Workflow": "./dist/Workflow.js",
-		"./Materials": "./dist/Materials.js",
-		"./Artifacts": "./dist/Artifacts.js",
-		"./ArtifactFeature": "./dist/ArtifactFeature.js",
-		"./HttpMounts": "./dist/HttpMounts.js"
+		"./Artifacts": "./dist/Artifacts.js"
 	},
 	"scripts": {
 		"build": "tsdown",

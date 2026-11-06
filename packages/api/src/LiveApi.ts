@@ -1,6 +1,7 @@
+import { BotId } from "@openbot-build/domain/BotId"
 import { BotAuth } from "./AuthApi.ts"
 import { Authorize, Required, own } from "./Authorization.ts"
-import { BotErrors, BotId } from "./BotsApi.ts"
+import { BotErrors } from "./BotsApi.ts"
 import {
 	ChatExecutionUnavailable,
 	ChatOperationErrors,
@@ -20,18 +21,6 @@ import {
 	LiveUnavailable,
 } from "@openbot-build/domain/Live"
 // Explicit names keep namespace exports in the generated declaration files.
-export {
-	AudioFormat,
-	AudioFormatText,
-	Capabilities,
-	CreateLiveChatRequest,
-	LiveClientMessage,
-	LiveErrorCode,
-	LiveQuery,
-	LiveServerMessage,
-	LiveUnavailable,
-} from "@openbot-build/domain/Live"
-
 export class LiveApi extends HttpApiGroup.make("live")
 	.add(
 		HttpApiEndpoint.post("createLiveChat", "/v1/bots/:botId/live", {

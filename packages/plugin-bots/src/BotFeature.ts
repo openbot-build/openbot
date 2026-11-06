@@ -1,6 +1,9 @@
 import { Context, Effect, Layer, Scope } from "effect"
 import type { Gate } from "@openbot-build/conversation-contract/capabilities/Gate"
-import { BotFeatures } from "@openbot-build/conversation-contract/chats/BotFeatures"
+import {
+	BotFeatures,
+	wait,
+} from "@openbot-build/conversation-contract/chats/BotFeatures"
 import * as BotTools from "./BotTools.ts"
 import * as DelegationTools from "./WorkflowTools.ts"
 
@@ -25,6 +28,7 @@ export const contribute = Effect.gen(function* () {
 		build: "normal",
 		review: true,
 		restores: [],
+		missing: wait(),
 		settings: Effect.succeed(null),
 		prepare: (fence) =>
 			BotTools.durable(fence).pipe(

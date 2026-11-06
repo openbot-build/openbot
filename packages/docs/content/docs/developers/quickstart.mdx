@@ -43,8 +43,7 @@ Run every command from the top folder of the code, inside `devenv shell --`.
 devenv shell -- pnpm dev:setup
 ```
 
-This command makes `.env.development` with a new secret key. If you have an
-`.env.development` from an older version, delete it first.
+This command makes `.env.development` with a new secret key.
 
 </Step>
 
@@ -150,14 +149,17 @@ Send your Bot a message:
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"input":"Hello"}' \
+  -d '{"commandKey":"hello-1","input":"Hello"}' \
   http://localhost/v1/bots/<botId>/messages
 ```
 
+`commandKey` is your own name for this message. If the network fails, send the
+same key and body again, and OpenBot does not take the message twice.
+
 OpenBot makes your Chat with the Bot, and the message starts a Turn. The Turn
-runs in the background and you get `202` at once, with `delivery: "started"`.
-Add `"stream": true` to get the answer as a live stream. To read the answer
-later, take `chat` from the answer and call `GET /v1/chats/<chatId>`.
+runs in the background and you get `202` at once. The receipt has `executionId`,
+`commandKey`, `sequence`, `chat`, `turn`, and `inputId`. To read the answer,
+take `chat` from the receipt and call `GET /v1/chats/<chatId>`.
 
 </Step>
 

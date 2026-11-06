@@ -1,8 +1,9 @@
+import { BotId } from "@openbot-build/domain/BotId"
 import * as Db from "@openbot-build/server-database/Database"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
-import * as ModelFailure from "@openbot-build/models-contract/models/ModelFailure"
-import * as Resource from "@openbot-build/server-execution/resources/Resource"
+import * as ModelFailure from "@openbot-build/models-contract/ModelFailure"
+import * as Resource from "@openbot-build/server-execution/Resource"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -13,7 +14,7 @@ import {
 	Model,
 	Provider,
 } from "@openbot-build/core"
-import { Authorization, Bots, Execution } from "@openbot-build/domain"
+import { Authorization, Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
@@ -32,13 +33,13 @@ import {
 } from "effect"
 import { LanguageModel, Response } from "effect/ai"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
-import * as LiveConnections from "@openbot-build/plugin-chats/live/LiveConnections"
-import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
-import * as Send from "@openbot-build/server-execution/execution/Send"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import { Directory } from "@openbot-build/server-execution/resources/Directory"
-import { Transport } from "@openbot-build/server-execution/resources/Transport"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import * as LiveConnections from "@openbot-build/plugin-chats/LiveConnections"
+import { Workflows } from "@openbot-build/server-execution/Workflows"
+import * as Send from "@openbot-build/server-execution/Send"
+import * as Store from "@openbot-build/server-execution/Store"
+import { Directory } from "@openbot-build/server-execution/Directory"
+import { Transport } from "@openbot-build/server-execution/Transport"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 import * as ResourceFixture from "./ResourceFixture.ts"
 
 class Allowed extends Context.Service<Allowed, Ref.Ref<boolean>>()(
@@ -131,7 +132,7 @@ const begin = (chat: Chat.Id) =>
 			settings: { model: selection },
 			business: {
 				[ChatHost.chatHostId]: {
-					bot: Bots.BotId.make("live-bot"),
+					bot: BotId.make("live-bot"),
 					kind: "live",
 					chain: {
 						organizationId: actor.organizationId,

@@ -1,3 +1,4 @@
+import type { Database } from "@openbot-build/server-database/Database"
 import * as Models from "./DeveloperModels.ts"
 import type { PgClient } from "@effect/sql-pg"
 import { Developers } from "@openbot-build/domain"
@@ -10,30 +11,13 @@ import {
 	developerTestFlows,
 	developerTests,
 } from "@openbot-build/server-database/Schema"
-import { transactionFailures } from "@openbot-build/server-execution/execution/Store"
+import { transactionFailures } from "@openbot-build/server-execution/Store"
 import {
-	type Database,
-	stored,
 	Json,
 	decodeRow,
 	ProofRow,
 	AppRow,
 } from "@openbot-build/apps-contract/apps/DeveloperRows"
-export {
-	stored,
-	Json,
-	decodeRow,
-	ProofRow,
-	decodeProof,
-	decodeApp,
-	findApp,
-	getApp,
-} from "@openbot-build/apps-contract/apps/DeveloperRows"
-export type {
-	Database,
-	ProofRecord,
-} from "@openbot-build/apps-contract/apps/DeveloperRows"
-
 /** Drizzle queries join this transaction. A nested call uses a savepoint. */
 export const transaction =
 	(sql: PgClient.PgClient) =>
@@ -73,7 +57,7 @@ export const putApp = Effect.fn("DeveloperRows.putApp")(function* (
 	app: AppRecord,
 ) {
 	const row = { namespace, ...(yield* encodeRow(AppRow)(app)) }
-	yield* stored(
+	yield* transactionFailures(
 		db
 			.insert(developerApps)
 			.values(row)
@@ -99,7 +83,7 @@ export const postNotice = Effect.fn("DeveloperRows.postNotice")(function* (
 	notice: Developers.Notice,
 ) {
 	const row = yield* encodeRow(NoticeRow)(notice)
-	yield* stored(
+	yield* transactionFailures(
 		db
 			.insert(developerNotices)
 			.values({ namespace, owner, ...row })
@@ -129,7 +113,7 @@ export const findTest = (
 	lock: boolean = false,
 ) => {
 	const query = db.select().from(developerTests).where(testWhere(namespace, id))
-	return stored(lock ? query.for("update") : query).pipe(
+	return transactionFailures(lock ? query.for("update") : query).pipe(
 		Effect.flatMap((rows) =>
 			Effect.transposeOption(Option.map(Arr.head(rows), decodeTest)),
 		),
@@ -165,7 +149,7 @@ export const putTest = Effect.fn("DeveloperRows.putTest")(function* (
 		cleanup: record.value.cleanup,
 		expiresAt: record.value.expiresAt,
 	}
-	yield* stored(
+	yield* transactionFailures(
 		db
 			.insert(developerTests)
 			.values({ namespace, id: record.value.id, ...row })
@@ -210,7 +194,9 @@ export const getFlow = Effect.fn("DeveloperRows.getFlow")(function* (
 				eq(developerTestFlows.flowId, flowId),
 			),
 		)
-	const row = (yield* stored(lock ? query.for("update") : query))[0]
+	const row = (yield* transactionFailures(
+		lock ? query.for("update") : query,
+	))[0]
 	if (row === undefined) return yield* Developers.DeveloperNotFound.make({})
 	return yield* decodeFlow(row)
 })
@@ -226,7 +212,7 @@ export const putFlow = Effect.fn("DeveloperRows.putFlow")(function* (
 		status: record.value.status,
 		expiresAt: record.value.expiresAt,
 	}
-	yield* stored(
+	yield* transactionFailures(
 		db
 			.insert(developerTestFlows)
 			.values({ namespace, flowId: record.value.flowId, ...row })
@@ -258,7 +244,7 @@ export const saveReport = Effect.fn("DeveloperRows.saveReport")(function* (
 	value: Models.SavedReport,
 ) {
 	const report = yield* encodeRow(Json(Models.InspectionReport))(value.report)
-	yield* stored(
+	yield* transactionFailures(
 		db.insert(developerReports).values({
 			namespace,
 			id: value.id,

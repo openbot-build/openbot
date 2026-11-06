@@ -123,10 +123,10 @@ Der Beleg nennt die gespeicherte Ausführung und ihren Turn, auch wenn die
 Eingabe noch wartet. Gleicher Schlüssel und Inhalt geben denselben Beleg. Ein
 anderer Inhalt mit demselben Schlüssel gibt `409` mit `ExecutionKeyConflict`.
 
-Neue Nachrichtenbefehle enthalten `inputId`. Sie nennt eine gespeicherte Eingabe
-in `ChatView.queuedInputs`. Wenn der Bot sie liest, wird dieselbe ID zu
-`ChatItem.id`. Ältere gespeicherte Befehle können das Feld weglassen. OpenBot
-erfindet dafür keine Eingabe-IDs. Der gespeicherte `Checkpoint` des Befehls
+Nachrichtenbefehle enthalten `inputId`. Sie nennt eine gespeicherte Eingabe in
+`ChatView.queuedInputs`. Wenn der Bot sie liest, wird dieselbe ID zu
+`ChatItem.id`. Eine Nachricht an einen Aufgaben-Chat kann das Feld weglassen.
+OpenBot erfindet keine Eingabe-IDs. Der gespeicherte `Checkpoint` des Befehls
 enthält diese Eingabe-ID ebenfalls. `receipt.sequence` ist eine Stelle im
 Ereignislog der Ausführung, keine Item-Nummer und keine Chat-Revision.
 
@@ -379,6 +379,15 @@ ist es die Person, die die Nachricht geschrieben hat. Jedes Item hat `id`, `seq`
 (seine Stelle im Verlauf), `content` und `origin` (`chat`, `turn`, `step` und
 bei einer Mitteilung `notice`).
 
+Ein Status `Failed` hat eine `message` und einen `code`. Die Response des Turns
+hat denselben Code in `error.code`:
+
+| Code             | Warum der Turn fehlgeschlagen ist                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| `model_error`    | Das Modell hat keine vollständige Antwort gegeben.                                                    |
+| `limited`        | Ein Limit oder ein Budget hat den Turn gestoppt. Versuche es erst wieder, wenn sich das Limit ändert. |
+| `internal_error` | Jeder andere Fehler. Das Log hat die Ursache.                                                         |
+
 Nutze die gespeicherte `executionId`, um Arbeit zu verfolgen. Ereignisse haben
 eine Sequenznummer. Sende nach einer verlorenen Verbindung die letzte Nummer als
 `afterSequence`. Das Schließen des Streams beendet nur das Beobachten. Ein
@@ -563,13 +572,13 @@ festlegt, gewinnt, auch wenn sie lockerer ist:
 ## Models und Ausführungsmodus
 
 Ein neuer Chat, auch ein Prüf-Chat, nutzt das `model` seines Bots. Eine Test-
-oder Entwicklungsplattform kann `builtinModels.defaultModel` geben, wenn der Bot
-keines hat. Ein verknüpfter Bot nutzt diesen Wert auch, wenn sein Model in der
-empfangenden Organisation fehlt. Ohne gültiges Model schlägt die Erstellung fehl
-und lässt keinen Chat oder Turn zurück. Ein Live-Chat nutzt seinen eigenen
-Live-Katalog. Eine gespeicherte Prüfung behält ihr Model beim Wiederholen. Jeder
-neue Aufruf prüft die aktuellen Model-Rechte. `GET /v1/chats/:chatId/models`
-zeigt die Models, die du wählen kannst:
+oder Entwicklungsplattform kann ein `defaultModel` in `BuiltinModels` geben,
+wenn der Bot keines hat. Ein verknüpfter Bot nutzt diesen Wert auch, wenn sein
+Model in der empfangenden Organisation fehlt. Ohne gültiges Model schlägt die
+Erstellung fehl und lässt keinen Chat oder Turn zurück. Ein Live-Chat nutzt
+seinen eigenen Live-Katalog. Eine gespeicherte Prüfung behält ihr Model beim
+Wiederholen. Jeder neue Aufruf prüft die aktuellen Model-Rechte.
+`GET /v1/chats/:chatId/models` zeigt die Models, die du wählen kannst:
 
 ```json
 {
@@ -700,27 +709,3 @@ sendet ihn ohne diese Entscheidung nicht erneut.
 Nur bestätigte Nutzung wird berechnet. Unbekannte Nutzung bleibt als unbekannt
 markiert. Alle Felder stehen in der
 [Chats-Referenz](/api/operations/tags/chats/).
-
-## Chats aus einer älteren Version
-
-Ein Datenupgrade erhält Chat-IDs, Items und frühere Turns. Es erhält auch alte
-Tool-Ergebnisse. Die Routen zum Auflisten und Lesen geben diese als Datensätze
-mit `_tag: "Imported"` zurück. Sie haben `chat`, `turn`, `kind` und `endedAt`.
-Sie haben kein `position`, `deadline` oder `detached`, weil der alte Datensatz
-diese Angaben nicht gespeichert hat. Lies `status` und `failure` aus der
-verknüpften Ausführung. Alte wartende Anfragen und Delegationen bleiben im
-Verlauf. Sie zählen nicht als offene Arbeit und stehen nicht in der Liste der
-Arbeit, deren Ergebnis das Modell noch erwartet.
-
-Alte Arbeit hat keinen Nachweis für das ursprüngliche Token. Das Upgrade führt
-sie nicht erneut aus. Wartende Eingaben verlassen den aktiven Posteingang und
-bleiben im verschlüsselten Verlauf. Alte Aufgaben-Chats bleiben als Verlauf;
-sende neue Arbeit über den übergeordneten Chat.
-
-Hat der alte Turn eines direkten Chats den Zustand `outcome_unknown`, prüfe die
-gespeicherten Aufrufe. Sende über die Entscheidungsroute der Ausführung eine
-`stop`-Entscheidung für jeden unbekannten Aufruf. Sie hält deine Wahl fest und
-macht keine externe Aktion rückgängig. Bis die Ausführung endet, erhält neue
-Eingabe `409` mit `ChatConflict`. Danach startet sie einen neuen Turn mit den
-aktuellen Rechten des Aufrufers. Sie kann weder die alten Rechte nutzen noch
-alte offene Aufrufe ausführen.

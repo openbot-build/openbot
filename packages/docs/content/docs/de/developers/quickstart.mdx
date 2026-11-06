@@ -46,8 +46,6 @@ devenv shell -- pnpm dev:setup
 ```
 
 Dieser Befehl erstellt `.env.development` mit einem neuen geheimen Schlüssel.
-Wenn du eine `.env.development` von einer älteren Version hast, lösche sie
-zuerst.
 
 </Step>
 
@@ -155,15 +153,19 @@ Schicke deinem Bot eine Nachricht:
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"input":"Hello"}' \
+  -d '{"commandKey":"hello-1","input":"Hello"}' \
   http://localhost/v1/bots/<botId>/messages
 ```
 
+`commandKey` ist dein eigener Name für diese Nachricht. Wenn das Netz ausfällt,
+schicke denselben Schlüssel und denselben Body noch einmal. OpenBot nimmt die
+Nachricht dann nicht zweimal an.
+
 OpenBot erstellt deinen Chat mit dem Bot, und die Nachricht startet einen Turn.
-Der Turn läuft im Hintergrund, und du bekommst sofort `202` mit
-`delivery: "started"`. Füge `"stream": true` hinzu, um die Antwort als
-Live-Stream zu bekommen. Um die Antwort später zu lesen, nimm `chat` aus der
-Antwort und rufe `GET /v1/chats/<chatId>` auf.
+Der Turn läuft im Hintergrund, und du bekommst sofort `202`. Die Quittung hat
+`executionId`, `commandKey`, `sequence`, `chat`, `turn` und `inputId`. Um die
+Antwort zu lesen, nimm `chat` aus der Quittung und rufe `GET /v1/chats/<chatId>`
+auf.
 
 </Step>
 

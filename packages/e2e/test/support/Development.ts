@@ -1,6 +1,7 @@
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Config, Item, Model, Provider } from "@openbot-build/core"
-import { DatabasePostgres } from "@openbot-build/openbot"
 import { DevelopmentLogin, Messages } from "@openbot-build/server-testing"
 import {
 	Context,
@@ -55,8 +56,8 @@ export const ItemPage = Schema.Struct({
 export const toJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 /** Runs the migrations with a database pool of their own, which closes at the end. */
 export const migrate = (options: ReturnType<typeof settings>) =>
-	DatabasePostgres.migrate.pipe(
-		Effect.provide(DatabasePostgres.layer(options)),
+	Migrations.migrate.pipe(
+		Effect.provide(PgClient.layer({ url: options.databaseUrl })),
 		// A failed setup must stop the test before it starts its server.
 		Effect.orDie,
 	)

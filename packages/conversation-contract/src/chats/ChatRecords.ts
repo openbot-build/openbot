@@ -2,13 +2,13 @@ import { Chat, Item, Store, Turn } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { executions } from "@openbot-build/server-database/ExecutionSchema"
-import { databaseError } from "@openbot-build/server-kernel/database/DatabaseError"
+import { databaseError } from "@openbot-build/server-kernel/DatabaseError"
 import { Array as Arr, Effect, Option } from "effect"
 import * as Db from "@openbot-build/server-database/Database"
 import * as ChatHost from "./ChatHost.ts"
 import * as StoredChats from "./StoredChats.ts"
 import { decode } from "./ChatEncoding.ts"
-import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
+import * as Todos from "../work/Todos.ts"
 
 const size = (limit: number | undefined) =>
 	Math.max(1, Math.min(100, Math.floor(limit ?? 50)))

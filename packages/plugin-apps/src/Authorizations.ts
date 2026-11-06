@@ -1,15 +1,16 @@
+import { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import {
+	ExperienceNotFound,
+	ExperienceStorageUnavailable,
+} from "@openbot-build/domain/ExperienceErrors"
+import { Identity, Caller } from "@openbot-build/domain/Identity"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
 import { AuthorizationCommands, actorBinding } from "./AuthorizationCommands.ts"
 import {
-	Settings as SettingsApi,
 	AppAuthorizations as Api,
 	AppConnections as ConnectionsApi,
 	AppIndex,
-	ConnectionId,
-	ExperienceNotFound,
-	ExperienceStorageUnavailable,
-	Caller,
 	Execution,
-	Identity,
 } from "@openbot-build/domain"
 import { App, Authorization, Network, Store } from "@openbot-build/protocol"
 import {
@@ -29,14 +30,14 @@ import {
 	appAuthorizations,
 	appConnections,
 } from "@openbot-build/server-database/Schema"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import { ProtocolStores } from "./ProtocolStores.ts"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as ClientMetadata from "./ClientMetadata.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 
 type CommandError = Effect.Error<
 	ReturnType<(typeof AuthorizationCommands.Service)["start"]>
@@ -64,7 +65,7 @@ export class Authorizations extends Context.Service<
 		/** The client metadata for the current public origin, for its public route. */
 		readonly metadata: Effect.Effect<
 			Authorization.ClientMetadata,
-			SettingsApi.SettingsUnavailable
+			SettingsUnavailable
 		>
 		readonly begin: (
 			id: string,
@@ -88,8 +89,7 @@ export class Authorizations extends Context.Service<
 			owners: Option.Option<ReadonlyArray<string>>,
 		) => Effect.Effect<Receipt, Error>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/Authorizations") {}
+>()("@openbot-build/plugin-apps/Authorizations") {}
 
 const failureMessages: Readonly<Record<string, string>> = {
 	AlreadyConsumed:
@@ -183,7 +183,7 @@ const FlowRecord = Schema.Struct({
 	state: Api.State,
 	owner: Schema.NonEmptyString,
 	revision: Schema.Natural,
-	actor: Schema.NullOr(Caller),
+	actor: Caller,
 	callback: Schema.NullOr(Schema.String),
 })
 const ScopesJson = Schema.fromJsonString(Schema.Array(Schema.String))
@@ -229,16 +229,11 @@ export const make: Effect.Effect<
 		return yield* Schema.decodeUnknownEffect(FlowRecord)({
 			owner: row.owner,
 			revision: row.revision,
-			actor:
-				row.actor === null
-					? null
-					: yield* secrets
-							.open(row.actor, actorBinding(row.owner, row.id))
-							.pipe(
-								Effect.flatMap(
-									Schema.decodeEffect(Schema.fromJsonString(Caller)),
-								),
-							),
+			actor: yield* secrets
+				.open(row.actor, actorBinding(row.owner, row.id))
+				.pipe(
+					Effect.flatMap(Schema.decodeEffect(Schema.fromJsonString(Caller))),
+				),
 			callback,
 			state: {
 				flowId: row.id,
@@ -333,9 +328,7 @@ export const make: Effect.Effect<
 	})
 	return Authorizations.of({
 		metadata: Effect.flatMap(
-			Platform.publicOriginOr(settings, () =>
-				SettingsApi.SettingsUnavailable.make({}),
-			),
+			Platform.publicOriginOr(settings, () => SettingsUnavailable.make({})),
 			ClientMetadata.metadata,
 		),
 		begin: (id, { commandKey, ...input }) =>
@@ -436,7 +429,7 @@ export const make: Effect.Effect<
 								status: "Received",
 								reason: null,
 							})
-							if (Option.isSome(owners) && record.actor !== null)
+							if (Option.isSome(owners))
 								yield* commands.start(
 									record.actor,
 									{ kind: "Complete", flowId: id },

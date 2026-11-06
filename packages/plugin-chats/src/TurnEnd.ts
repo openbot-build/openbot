@@ -1,4 +1,4 @@
-import { resultCodec } from "@openbot-build/models-contract/models/ModelCalls"
+import { resultCodec } from "@openbot-build/models-contract/ModelCalls"
 import {
 	ChatState,
 	type Item,
@@ -10,8 +10,10 @@ import type { Execution } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option, Schema } from "effect"
 import { Prompt } from "effect/ai"
 import * as ToolResults from "@openbot-build/conversation-contract/chats/ToolResults"
-import { outputCodec } from "@openbot-build/conversation-contract/chats/ToolSteps"
-import { stepId } from "./ToolSteps.ts"
+import {
+	outputCodec,
+	stepId,
+} from "@openbot-build/conversation-contract/chats/ToolSteps"
 
 const modelCodec = resultCodec(Schema.toCodecJson(ModelStep.Result))
 

@@ -1,7 +1,16 @@
+import { FetchHttpClient } from "effect/http"
+import {
+	FromConnector,
+	ToConnector,
+	ConnectorToken,
+	Computer,
+	type ComputerState,
+	connectorProtocolVersion,
+	SessionOutput,
+} from "@openbot-build/domain/Computers"
 import { changed } from "./Commands.ts"
-import { NodeWS } from "@effect/platform-node"
+import { NodeWS, NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
-import { ComputersApi } from "@openbot-build/api"
 import {
 	Deferred,
 	Effect,
@@ -17,12 +26,8 @@ import { BrowserHost, Caller } from "@openbot-build/server-testing"
 
 const publicOrigin = "https://connectors.example.com"
 
-const encodeMessage = Schema.encodeEffect(
-	Schema.fromJsonString(ComputersApi.FromConnector),
-)
-const decodeMessage = Schema.decodeEffect(
-	Schema.fromJsonString(ComputersApi.ToConnector),
-)
+const encodeMessage = Schema.encodeEffect(Schema.fromJsonString(FromConnector))
+const decodeMessage = Schema.decodeEffect(Schema.fromJsonString(ToConnector))
 
 /** The Computer did not get to a state in time. */
 class TimedOut extends Schema.TaggedError<
@@ -35,7 +40,10 @@ class TimedOut extends Schema.TaggedError<
 }
 
 it.layer(
-	Layer.merge(BrowserHost.layerPlatform, NodeWS.layerWebSocketConstructor),
+	Layer.merge(
+		Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+		NodeWS.layerWebSocketConstructor,
+	),
 	{ excludeTestServices: true },
 )((it) => {
 	it.effect(
@@ -60,12 +68,12 @@ it.layer(
 					alice.session,
 					path + "/connector-token",
 					"PUT",
-				).pipe(Effect.flatMap(Caller.json(ComputersApi.ConnectorToken)))
+				).pipe(Effect.flatMap(Caller.json(ConnectorToken)))
 				const state = send(alice.session, path).pipe(
-					Effect.flatMap(Caller.json(ComputersApi.Computer)),
+					Effect.flatMap(Caller.json(Computer)),
 					Effect.map((current) => current.state),
 				)
-				const waitFor = (expected: ComputersApi.ComputerState) =>
+				const waitFor = (expected: ComputerState) =>
 					state.pipe(
 						Effect.repeat({
 							until: (current) => current === expected,
@@ -89,7 +97,7 @@ it.layer(
 						})
 						const frames = yield* Socket.readerString(socket)
 						const writer = yield* socket.writer
-						const reply = (message: ComputersApi.FromConnector) =>
+						const reply = (message: FromConnector) =>
 							Effect.flatMap(encodeMessage(message), writer.write)
 						const answer = Effect.fn("Connectors.answer")(function* (
 							frame: string,
@@ -127,7 +135,7 @@ it.layer(
 						yield* reply({
 							_tag: "Hello",
 							hello: {
-								version: ComputersApi.connectorProtocolVersion,
+								version: connectorProtocolVersion,
 								os: "linux",
 								arch: "x64",
 								desktop,
@@ -144,7 +152,7 @@ it.layer(
 					assert.strictEqual(yield* first.closed, 1000)
 					const ran = yield* send(alice.session, path + "/sessions", "POST", {
 						command: "uname",
-					}).pipe(Effect.flatMap(Caller.json(ComputersApi.SessionOutput)))
+					}).pipe(Effect.flatMap(Caller.json(SessionOutput)))
 					assert.strictEqual(ran.output, "second")
 					assert.strictEqual(yield* state, "running")
 					// The new connection has a desktop, but a paired machine gives no desktop stream.

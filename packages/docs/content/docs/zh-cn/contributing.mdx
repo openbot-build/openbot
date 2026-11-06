@@ -36,9 +36,7 @@ devenv shell -- pnpm dev:setup
 ```
 
 `dev:setup` 创建 `.env.development`，并在 `OPENBOT_SECRET_KEYS`
-中放入一个新的随机密钥。如果你的 `.env.development`
-来自旧版本，请删除它，然后再次运行
-`dev:setup`。你也可以重置开发数据库。请看[配置](/zh-cn/configuration#开发)。
+中放入一个新的随机密钥。你也可以重置开发数据库。请看[配置](/zh-cn/configuration#开发)。
 
 </Step>
 <Step>
@@ -244,6 +242,11 @@ v7 的开头是毫秒时间。同一毫秒内生成的 ID 顺序是随机的。�
    或 `unknown`。在构建服务时取得依赖，调用方提供的上下文除外。
 4. 用 `Service.of`
    检查实现，再构建 Layer。局部辅助函数可以使用类型推导。共享类型可以引用另一个已声明的契约，但不能依赖构造函数推导出的结果。
+5. 服务、引用或符号的键是它所在模块的路径，与 Effect 语言服务的
+   `deterministicKeys`
+   检查计算的结果相同：`@openbot-build/<包>/<模块路径>`，当名字不是模块名时再加上
+   `/<名字>`。不要关闭这项检查。保存到数据库或日志中的值（例如存储键）使用
+   `openbot.<名字>` 名称或包名，绝不使用模块路径。
 
 `service-contract` 检查也会跟踪导入的类型别名，阻止从 `make`
 推导服务类型。编译器还会拒绝错误和依赖通道中的 `any` 或
@@ -332,7 +335,8 @@ Affero 通用公共许可证第 3 版，且仅限该版本（`AGPL-3.0-only`）�
 客户端包使用 MIT 协议。`packages/client/LICENSE`
 也为客户端打包的 OpenBot 代码提供 MIT 授权。其他包仍使用 AGPL。客户端在
 `@openbot-build/client/Api` 导出 API 定义，在 `@openbot-build/client/Core`
-导出聊天数据结构。应用无需安装其他 OpenBot 包。
+导出聊天数据结构，在 `@openbot-build/client/Domain`
+导出领域模型。应用无需安装其他 OpenBot 包。
 
 ## 包发布
 

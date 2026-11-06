@@ -2,9 +2,9 @@ import {
 	type BillingStorageError,
 	Billing,
 	periodStart,
-} from "@openbot-build/server-billing/billing/Billing"
+} from "@openbot-build/server-billing/Billing"
 import { type Bots, type Developers, Execution } from "@openbot-build/domain"
-import type { Paused } from "@openbot-build/server-execution/execution/Admission"
+import type { Paused } from "@openbot-build/server-execution/Admission"
 import {
 	type Cause,
 	Array as Arr,
@@ -17,16 +17,13 @@ import {
 } from "effect"
 import { Config } from "@openbot-build/core"
 import { LanguageModel, Prompt, Response } from "effect/ai"
-import { attribute } from "@openbot-build/server-billing/billing/MeteredModel"
+import { attribute } from "@openbot-build/server-billing/MeteredModel"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import * as Permits from "@openbot-build/server-execution/execution/Permits"
-import {
-	Store,
-	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
-import * as ModelCalls from "@openbot-build/models-contract/models/ModelCalls"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import * as Permits from "@openbot-build/server-execution/Permits"
+import { Store, type Fence } from "@openbot-build/server-execution/Store"
+import * as ModelCalls from "@openbot-build/models-contract/ModelCalls"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
 import { MemoryBot } from "@openbot-build/conversation-contract/bots/MemoryBot"
 import { MemoryBudgetSpent, memoryBotId } from "./MemoryBot.ts"
 import type { Home } from "@openbot-build/conversation-contract/bots/BotMemories"
@@ -80,8 +77,7 @@ export interface Service {
 }
 
 export class MemoryModels extends Context.Service<MemoryModels, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-bots/MemoryModels",
+	"@openbot-build/plugin-bots/MemoryModels",
 ) {}
 
 const make = Effect.gen(function* () {

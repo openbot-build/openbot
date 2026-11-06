@@ -4,7 +4,7 @@ import { Array as Arr, Clock, Effect, Option } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Db from "@openbot-build/server-database/Database"
 import { computers, executions } from "@openbot-build/server-database/Schema"
-import { transactionFailures } from "@openbot-build/server-execution/execution/Store"
+import { transactionFailures } from "@openbot-build/server-execution/Store"
 
 export const workflowName = "openbot.computer-lifecycle"
 export const pauseWorkflowName = "openbot.computer-idle-pause"

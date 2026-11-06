@@ -1,4 +1,5 @@
-import { ChatConflict, AppCalls } from "@openbot-build/domain"
+import { ChatConflict } from "@openbot-build/domain/Chats"
+import { AppCalls } from "@openbot-build/domain"
 
 import { Client } from "@openbot-build/protocol"
 import { Effect, Match, Schema } from "effect"

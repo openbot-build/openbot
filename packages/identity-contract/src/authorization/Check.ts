@@ -1,16 +1,14 @@
-import { Authorization } from "@openbot-build/domain"
-import type { Config } from "@openbot-build/core"
+import type { Auth as Services } from "@openbot-build/domain/Authorization"
 import {
 	type Caller,
-	type ExecutionIdentity,
 	Identity,
+	type ExecutionIdentity,
 	executionCallers,
-} from "@openbot-build/domain"
+} from "@openbot-build/domain/Identity"
+import { Authorization } from "@openbot-build/domain"
+import type { Config } from "@openbot-build/core"
 import { type Authorizer, Condition, type Policy } from "@nmnmcc/ability"
 import { Effect } from "effect"
-
-/** The service that a check needs. */
-export type Services = Authorization.Auth
 
 type OpenBot = Authorization.OpenBot
 /** The errors of a check. */

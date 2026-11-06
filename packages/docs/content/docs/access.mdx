@@ -3,17 +3,11 @@ title: Account access
 description: Control new accounts, approvals, email codes, and SSO group roles.
 ---
 
-## Defaults and upgrades
+## Defaults
 
-New and upgraded platforms use invitations for new accounts. Self-service and
-SSO account creation are closed. Existing accounts and memberships remain.
-Existing organization roles stay as manual grants. Only platform admins can
-create organizations by default.
-
-The migration adds tables and fields. Stop all servers, back up the database and
-secret keys, run `openbot-migrate`, then start the new server and client
-versions. The migration can run again. Old pending invitations follow the new
-invitation rule. An invitation never restores a suspended account.
+A new platform uses invitations for new accounts. Self-service and SSO account
+creation are closed. Only platform admins can create organizations by default.
+An invitation never restores a suspended account.
 
 ## Admission settings
 

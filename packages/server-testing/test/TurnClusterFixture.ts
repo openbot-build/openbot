@@ -1,7 +1,7 @@
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
-import { LiveConnections } from "@openbot-build/plugin-chats/live/LiveConnections"
+import { LiveConnections } from "@openbot-build/plugin-chats/LiveConnections"
 import { ReviewTools } from "@openbot-build/conversation-contract/capabilities/ReviewTools"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import { Billing } from "@openbot-build/server-billing/Billing"
 import { PgClient } from "@effect/sql-pg"
 import {
 	Array as Arr,
@@ -13,9 +13,9 @@ import {
 	Option,
 } from "effect"
 import { LanguageModel, Response } from "effect/ai"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Runner from "@openbot-build/server-execution/execution/Runner"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Runner from "@openbot-build/server-execution/Runner"
+import * as Observation from "@openbot-build/server-execution/Observation"
 import * as InputCommands from "@openbot-build/plugin-chats/InputCommands"
 import * as ToolCommands from "@openbot-build/plugin-chats/ToolCommands"
 import * as ToolControls from "@openbot-build/plugin-chats/ToolControls"
@@ -25,9 +25,9 @@ import * as TurnSession from "@openbot-build/plugin-chats/TurnSession"
 import * as TurnWorkflow from "@openbot-build/plugin-chats/TurnWorkflow"
 import * as ExecutionFeatures from "@openbot-build/plugin-chats/ExecutionFeatures"
 import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
-import * as HostTools from "@openbot-build/tools-contract/chats/HostTools"
+import * as HostTools from "@openbot-build/tools-contract/HostTools"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
 
 /** Kill the first owner after its model result, before its Chat checkpoint. */
 export const layer = Layer.unwrap(

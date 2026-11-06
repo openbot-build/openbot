@@ -2,6 +2,7 @@ import type {
 	BotSharing as BotSharingModel,
 	Roles,
 	Accounts as AccountsModel,
+	Invitation,
 	Organizations as OrganizationsModel,
 	Platform as PlatformModel,
 } from "@openbot-build/domain"
@@ -148,7 +149,7 @@ export class Organization extends Context.Service<
 		/** The invitations of an organization, newest first. */
 		readonly listInvitations: (
 			organizationId: string,
-			status?: OrganizationsModel.InvitationStatus,
+			status?: Invitation.InvitationStatus,
 		) => Effect.Effect<
 			ReadonlyArray<OrganizationsModel.Invitation>,
 			OrganizationUnavailable
@@ -164,7 +165,7 @@ export class Organization extends Context.Service<
 			readonly invitedBy: string
 		}) => Effect.Effect<
 			OrganizationsModel.Invitation,
-			OrganizationsModel.InvitationInvalid | OrganizationUnavailable
+			Invitation.InvitationInvalid | OrganizationUnavailable
 		>
 		/** Takes back a pending invitation. */
 		readonly revokeInvitation: (
@@ -172,8 +173,8 @@ export class Organization extends Context.Service<
 			invitationId: string,
 		) => Effect.Effect<
 			OrganizationsModel.Invitation,
-			| OrganizationsModel.InvitationNotFound
-			| OrganizationsModel.InvitationInvalid
+			| Invitation.InvitationNotFound
+			| Invitation.InvitationInvalid
 			| OrganizationUnavailable
 		>
 		/** The pending invitations for the verified email of a user. */
@@ -194,15 +195,15 @@ export class Organization extends Context.Service<
 			answer: "accepted" | "declined",
 		) => Effect.Effect<
 			OrganizationsModel.Invitation,
-			| OrganizationsModel.InvitationNotFound
-			| OrganizationsModel.InvitationInvalid
+			| Invitation.InvitationNotFound
+			| Invitation.InvitationInvalid
 			| OrganizationUnavailable
 		>
 		/** The invitations to use one Bot of an organization, newest first. */
 		readonly listBotInvitations: (
 			organizationId: string,
 			bot: string,
-			status?: OrganizationsModel.InvitationStatus,
+			status?: Invitation.InvitationStatus,
 		) => Effect.Effect<
 			ReadonlyArray<BotSharingModel.BotInvitation>,
 			OrganizationUnavailable
@@ -221,7 +222,7 @@ export class Organization extends Context.Service<
 			readonly invitedBy: string
 		}) => Effect.Effect<
 			BotSharingModel.BotInvitation,
-			OrganizationsModel.InvitationInvalid | OrganizationUnavailable
+			Invitation.InvitationInvalid | OrganizationUnavailable
 		>
 		/** One invitation to use a Bot, with the secret of a link. */
 		readonly botInvitation: (
@@ -233,7 +234,7 @@ export class Organization extends Context.Service<
 				readonly invitation: BotSharingModel.BotInvitation
 				readonly link: LinkSecret | null
 			},
-			OrganizationsModel.InvitationNotFound | OrganizationUnavailable
+			Invitation.InvitationNotFound | OrganizationUnavailable
 		>
 		readonly revokeBotInvitation: (
 			organizationId: string,
@@ -241,8 +242,8 @@ export class Organization extends Context.Service<
 			invitationId: string,
 		) => Effect.Effect<
 			BotSharingModel.BotInvitation,
-			| OrganizationsModel.InvitationNotFound
-			| OrganizationsModel.InvitationInvalid
+			| Invitation.InvitationNotFound
+			| Invitation.InvitationInvalid
 			| OrganizationUnavailable
 		>
 		/**
@@ -261,8 +262,8 @@ export class Organization extends Context.Service<
 				readonly organizationId: string
 				readonly bot: string
 			},
-			| OrganizationsModel.InvitationNotFound
-			| OrganizationsModel.InvitationInvalid
+			| Invitation.InvitationNotFound
+			| Invitation.InvitationInvalid
 			| OrganizationUnavailable
 		>
 		/** Whether a member or the default roles use a role. */
@@ -271,8 +272,7 @@ export class Organization extends Context.Service<
 			roleId: Roles.RoleId,
 		) => Effect.Effect<boolean, OrganizationUnavailable>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/identity-contract/organization/Organization") {}
+>()("@openbot-build/identity-contract/organization/Organization") {}
 
 /** The part of an email after its last "@", in lower case. */
 export const domainOf = (email: string) =>

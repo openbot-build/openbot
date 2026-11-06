@@ -1,3 +1,6 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import type { DelegationStatus } from "@openbot-build/domain/Delegations"
+import { Bot } from "@openbot-build/domain/Bots"
 import {
 	BrowserHost,
 	Caller,
@@ -7,12 +10,7 @@ import {
 import { Execution } from "@openbot-build/domain"
 import { assert, layer } from "@effect/vitest"
 import { Item } from "@openbot-build/core"
-import {
-	ChatView,
-	BotsApi,
-	DelegationsApi,
-	RequestsApi,
-} from "@openbot-build/api"
+import { DelegationsApi, RequestsApi, ChatsApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Deferred,
@@ -25,9 +23,10 @@ import {
 	Schema,
 	Stream,
 	String as Str,
+	Layer,
 } from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
-import type { HttpMethod } from "effect/http"
+import { type HttpMethod, FetchHttpClient } from "effect/http"
 
 const { until } = Wait
 
@@ -274,7 +273,7 @@ const direct = Effect.fn("Delegation.direct")(function* (
 	)
 	const delegation = (id: string) =>
 		read(DelegationsApi.Delegation, "/v1/delegations/" + id)
-	const ended = (id: string, status: DelegationsApi.DelegationStatus) =>
+	const ended = (id: string, status: DelegationStatus) =>
 		until(
 			`the work ${id} is ${status}`,
 			Effect.map(
@@ -302,7 +301,12 @@ const direct = Effect.fn("Delegation.direct")(function* (
 })
 
 // The host is a real server with real time.
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"a Bot gives slow work to itself without a request, answers the person at once while it runs, and takes more work into the same task",
 		() =>
@@ -471,7 +475,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						role: "Knows other things",
 						instructions: "Help.",
 					}),
-					Caller.json(BotsApi.Bot),
+					Caller.json(Bot),
 				)
 				yield* Ref.update(known, (ids) => ({ ...ids, other: other.id }))
 				yield* chat.turn("ask the other Bot")
@@ -604,7 +608,8 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// Cancellation keeps known results in history without reporting success.
 				assert.strictEqual(stopped.result, null)
 				assert.strictEqual(
-					(yield* api.read(ChatView, "/v1/chats/" + stopped.chat)).status,
+					(yield* api.read(ChatsApi.ChatView, "/v1/chats/" + stopped.chat))
+						.status,
 					"Interrupted",
 				)
 				yield* chat.says('Noted: {\\"delegation\\":\\"' + slow.value.id)

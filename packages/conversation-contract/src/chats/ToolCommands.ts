@@ -1,22 +1,16 @@
-import {
-	type TokenId,
-	type BotId,
-	type DelegationId,
-	Execution,
-	ToolExecution,
-} from "@openbot-build/domain"
-import type { Check } from "@openbot-build/server-execution/execution/Admission"
-import * as DecisionWait from "@openbot-build/server-execution/execution/DecisionWait"
-import { type Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
+import type { TokenId } from "@openbot-build/domain/TokenId"
+import type { BotId } from "@openbot-build/domain/BotId"
+import type { DelegationId } from "@openbot-build/domain/DelegationId"
+import { Execution, ToolExecution } from "@openbot-build/domain"
+import type { Check } from "@openbot-build/server-execution/Admission"
+import * as DecisionWait from "@openbot-build/server-execution/DecisionWait"
+import { type Definition } from "@openbot-build/tools-contract/ToolDefinitions"
 import * as ToolRecords from "./ToolRecords.ts"
 import { Chat, type Operations } from "@openbot-build/core"
 import { Context, Duration, Effect, Schema } from "effect"
 import { Prompt } from "effect/ai"
-import { type Authorize } from "@openbot-build/server-execution/execution/Engine"
-import {
-	type Fence,
-	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+import { type Authorize } from "@openbot-build/server-execution/Engine"
+import { type Fence, type Key } from "@openbot-build/server-execution/Store"
 
 export const End = Schema.Union([
 	Schema.Struct({ status: Schema.Literal("completed") }),
@@ -143,6 +137,5 @@ export interface Service {
 }
 
 export class ToolCommands extends Context.Service<ToolCommands, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/conversation-contract/chats/ToolCommands",
+	"@openbot-build/conversation-contract/chats/ToolCommands",
 ) {}

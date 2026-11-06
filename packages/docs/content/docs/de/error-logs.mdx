@@ -59,11 +59,12 @@ Grund für einen fehlgeschlagenen Request.
 
 Wenn ein Turn fehlschlägt, bekommt der Client nur eine kurze Nachricht. Ein
 Fehler des Modells, zum Beispiel eine Eingabe, die zu groß für das Modell ist,
-behält seine Nachricht und hat den Code `model_error`. Jeder andere Fehler, zum
-Beispiel ein Fehler der Datenbank, hat den Code `internal_error` und einen
-festen Text. Die ganze Ursache steht in einer Log-Zeile mit der Stufe `Warn` und
-der Nachricht `A Turn failed`. Sie hat dieselbe `chatId` und `turnId` wie das
-Fehler-Log.
+behält seine Nachricht und hat den Code `model_error`. Wenn ein Limit oder ein
+Budget den Turn stoppt, ist der Code `limited`. Versuche es nicht wieder, bevor
+sich das Limit ändert. Jeder andere Fehler, zum Beispiel ein Fehler der
+Datenbank, hat den Code `internal_error` und einen festen Text. Die ganze
+Ursache steht in einer Log-Zeile mit der Stufe `Warn` und der Nachricht
+`A Turn failed`. Sie hat dieselbe `chatId` und `turnId` wie das Fehler-Log.
 
 ---
 

@@ -1,11 +1,11 @@
+import { SecretProviderId } from "@openbot-build/domain/Vaults"
 import { Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
-import { VaultsApi } from "@openbot-build/api"
 import { Array as Arr, Effect, Record as Rec, Ref, String as Str } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
-import * as Readers from "../src/Readers.ts"
+import * as Readers from "../src/Outside.ts"
 
-const provider = VaultsApi.SecretProviderId.make("spr_test")
+const provider = SecretProviderId.make("spr_test")
 
 interface Seen {
 	readonly url: string

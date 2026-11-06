@@ -1,3 +1,6 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { InputCommands as InputCommandsModel } from "@openbot-build/conversation-contract/chats/InputCommands"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { Delegations } from "@openbot-build/conversation-contract/bots/Delegations"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
@@ -22,18 +25,16 @@ import {
 } from "effect"
 import { Prompt } from "effect/ai"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import { DatabasePostgres } from "@openbot-build/openbot"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as ErrorRecords from "@openbot-build/server-kernel/errors/Records"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as ErrorRecords from "@openbot-build/server-kernel/Records"
+import * as Observation from "@openbot-build/server-execution/Observation"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 import * as InputCommands from "@openbot-build/plugin-chats/InputCommands"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import * as BotFixture from "./BotFixture.ts"
-import * as PostgresTest from "./PostgresTest.ts"
 
 layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 	excludeTestServices: true,
@@ -42,7 +43,7 @@ layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 		"another process completes a Turn from its saved model result",
 		() =>
 			Effect.gen(function* () {
-				const database = yield* PostgresTest.start
+				const database = yield* TestDatabase.start
 				const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 				const spawn = (runner: number) =>
 					spawner.spawn(
@@ -64,14 +65,14 @@ layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 						),
 					)
 				const run = Effect.gen(function* () {
-					yield* DatabasePostgres.migrate
+					yield* Migrations.migrate
 					const sql = yield* PgClient.PgClient
 					yield* sql`create table execution_test_steps (
 				execution_id text not null, step text not null, count integer not null, runner integer not null,
 				primary key (execution_id, step))`
 					const db = yield* Db.make
 					const store = yield* Store.Store
-					const inputs = yield* InputCommands.InputCommands
+					const inputs = yield* InputCommandsModel
 					const observation = yield* Observation.Observation
 					const definition = yield* CoreStore.define({
 						stores: { [ChatHost.chatHostId]: ChatHost.chatHostStore },
@@ -185,8 +186,8 @@ layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 								Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 							),
 							Layer.provideMerge(
-								DatabasePostgres.layer({
-									databaseUrl: Redacted.make(database.url),
+								PgClient.layer({
+									url: Redacted.make(database.url),
 								}),
 							),
 						),

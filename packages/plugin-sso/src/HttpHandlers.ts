@@ -1,14 +1,20 @@
+import {
+	type SsoConnection,
+	SsoUnavailable,
+	SsoConnectionNotFound,
+} from "@openbot-build/domain/Sso"
+import type { AuditActionOf } from "@openbot-build/domain/Organizations"
+import { type Caller, Identity } from "@openbot-build/domain/Identity"
 import { Access } from "@openbot-build/identity-contract/access/Access"
-import { OpenBotApi, type OrganizationApi, SsoApi } from "@openbot-build/api"
+import { OpenBotApi } from "@openbot-build/api"
 
-import { type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, DateTime, Effect, Option, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import { organizationKey } from "@openbot-build/identity-contract/audit/Resources"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { organizationKey } from "@openbot-build/domain/AuditResources"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import { type Connection, Sso } from "@openbot-build/identity-contract/sso/Sso"
 
 /** The API form. The client secret only shows whether it is set. */
@@ -18,7 +24,7 @@ export const view = ({
 }: {
 	readonly connection: Connection
 	readonly publicOrigin: string
-}): SsoApi.SsoConnection => ({
+}): SsoConnection => ({
 	id: connection.id,
 	name: connection.name,
 	issuer: connection.issuer,
@@ -44,11 +50,11 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "sso", (handlers) =>
 		const settings = yield* Settings
 		/** The redirect URI of a connection uses the public origin of the platform now. */
 		const publicOrigin = Platform.publicOriginOr(settings, () =>
-			SsoApi.SsoUnavailable.make({}),
+			SsoUnavailable.make({}),
 		)
 		const record = (
 			caller: Caller,
-			action: OrganizationApi.AuditActionOf<"domain" | "sso_connection">,
+			action: AuditActionOf<"domain" | "sso_connection">,
 			details: Parameters<typeof audit.record>[0]["details"],
 		) =>
 			audit
@@ -64,7 +70,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "sso", (handlers) =>
 						access.record(action, caller.userId, caller.organizationId),
 					),
 					Failures.replace("Could not write the audit log", () =>
-						SsoApi.SsoUnavailable.make({}),
+						SsoUnavailable.make({}),
 					),
 				)
 		return handlers
@@ -123,7 +129,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "sso", (handlers) =>
 						params.connectionId,
 					)
 					if (Option.isNone(found))
-						return yield* SsoApi.SsoConnectionNotFound.make({
+						return yield* SsoConnectionNotFound.make({
 							connectionId: params.connectionId,
 						})
 					return view({ connection: found.value, publicOrigin: origin })

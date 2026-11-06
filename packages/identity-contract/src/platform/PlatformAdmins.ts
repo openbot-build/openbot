@@ -44,8 +44,7 @@ export class PlatformAdmins extends Context.Service<
 			account: Account,
 		) => Effect.Effect<boolean, PlatformAdminsUnavailable>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/identity-contract/platform/PlatformAdmins") {}
+>()("@openbot-build/identity-contract/platform/PlatformAdmins") {}
 
 export const normalizeEmail = (email: string) =>
 	pipe(email, Str.trim, Str.toLowerCase)

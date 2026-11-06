@@ -1,23 +1,29 @@
+/**
+ * The Developer Center tables in Postgres: the codecs between rows and product
+ * values, and the queries that more than one Developer module uses.
+ * Every table has a `namespace` column, so the development host keeps its own rows.
+ */
+
+import type { Database } from "@openbot-build/server-database/Database"
+import { transactionFailures as stored } from "@openbot-build/server-execution/Store"
 import { Developers } from "@openbot-build/domain"
 import { Discovery } from "@openbot-build/protocol"
+import { InstanceSettings } from "@openbot-build/server-kernel/InstanceSettings"
 import { and, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option, Schema } from "effect"
 import {
 	developerApps,
 	developerProofs,
 } from "@openbot-build/server-database/Schema"
-import * as Db from "@openbot-build/server-database/Database"
-import { transactionFailures } from "@openbot-build/server-execution/execution/Store"
 
 /**
- * The Developer Center tables in Postgres: the codecs between rows and product
- * values, and the queries that more than one Developer module uses.
- * Every table has a `namespace` column, so the development host keeps its own rows.
+ * The namespace of the App rows of this instance, such as Index jobs, Index
+ * entries and Developer Center rows. A development instance uses its own
+ * namespace, so its checks never reach the public Index.
  */
-export type Database = Db.Database
-
-/** Keep SQL failures separate from a bad stored value. The boundary hides details. */
-export const stored = transactionFailures
+export const instanceNamespace = Effect.map(InstanceSettings, (instance) =>
+	instance.development ? "development" : "public",
+)
 
 /** A column that holds a value as JSON text. */
 export const Json = <S extends Schema.Top>(schema: S) =>

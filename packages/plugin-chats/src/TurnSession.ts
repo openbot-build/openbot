@@ -1,13 +1,10 @@
+import type { ChatModelInvalid } from "@openbot-build/domain/Chats"
 import type {
 	Busy,
 	Failed,
 	Gone,
-} from "@openbot-build/server-execution/resources/Resource"
-import {
-	type ChatModelInvalid,
-	Execution,
-	Bots as BotDomain,
-} from "@openbot-build/domain"
+} from "@openbot-build/server-execution/Resource"
+import { Execution, Bots as BotDomain } from "@openbot-build/domain"
 import {
 	type Bot,
 	type Config,
@@ -23,8 +20,8 @@ import {
 import {
 	type BillingStorageError,
 	Billing,
-} from "@openbot-build/server-billing/billing/Billing"
-import type { Paused } from "@openbot-build/server-execution/execution/Admission"
+} from "@openbot-build/server-billing/Billing"
+import type { Paused } from "@openbot-build/server-execution/Admission"
 import {
 	type Scope,
 	Array as Arr,
@@ -36,29 +33,26 @@ import {
 	Stream,
 } from "effect"
 import { Digest } from "effect/crypto"
-import { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
+import { Definition } from "@openbot-build/tools-contract/ToolDefinitions"
 import { ReviewTools } from "@openbot-build/conversation-contract/capabilities/ReviewTools"
-import * as Registration from "@openbot-build/tools-contract/plugins/Registration"
+import * as Registration from "@openbot-build/tools-contract/Registration"
 import { LanguageModel, Prompt, Toolkit } from "effect/ai"
 import * as Hex from "effect/encoding/Hex"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as ChatModels from "@openbot-build/conversation-contract/chats/ChatModels"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import { CurrentAttribution } from "@openbot-build/server-billing/billing/MeteredModel"
+import { Records } from "@openbot-build/server-kernel/Records"
+import { CurrentAttribution } from "@openbot-build/server-billing/MeteredModel"
 import * as Db from "@openbot-build/server-database/Database"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import {
-	Store,
-	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
-import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import { Store, type Fence } from "@openbot-build/server-execution/Store"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
+import * as Todos from "@openbot-build/conversation-contract/work/Todos"
 import { ExecutionFeatures } from "./ExecutionFeatures.ts"
 import type * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import { inExecution } from "@openbot-build/conversation-contract/chats/ChatEncoding"
 import * as Compaction from "./Compaction.ts"
-import { HostTools } from "@openbot-build/tools-contract/chats/HostTools"
+import { HostTools } from "@openbot-build/tools-contract/HostTools"
 import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
 import * as ModelSteps from "./ModelSteps.ts"
 import { ToolControls } from "./ToolControls.ts"
@@ -66,7 +60,7 @@ import * as TurnPersistence from "./TurnPersistence.ts"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import { TurnTools } from "./TurnTools.ts"
 
-import { LiveConnections } from "./live/LiveConnections.ts"
+import { LiveConnections } from "./LiveConnections.ts"
 
 const Reference = Schema.Struct({
 	chat: Chat.Id,
@@ -89,6 +83,7 @@ export interface Service {
 		| Bot.ExecutionError<
 				{},
 				| BotFeatures.FeatureStopped
+				| BotFeatures.FeatureMissing
 				| BillingStorageError
 				| Execution.Conflict
 				| Execution.KeyConflict
@@ -105,8 +100,7 @@ export interface Service {
 }
 
 export class TurnSession extends Context.Service<TurnSession, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-chats/TurnSession",
+	"@openbot-build/plugin-chats/TurnSession",
 ) {}
 
 const make = Effect.gen(function* () {

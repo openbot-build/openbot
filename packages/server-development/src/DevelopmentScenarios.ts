@@ -18,10 +18,7 @@ export class Scenarios extends Context.Service<
 		readonly mode: Effect.Effect<Mode>
 		readonly set: (mode: Mode) => Effect.Effect<void>
 	}
->()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/server-development/DevelopmentScenarios/Scenarios",
-) {}
+>()("@openbot-build/server-development/DevelopmentScenarios/Scenarios") {}
 export const layer = Layer.effect(
 	Scenarios,
 	Effect.map(Ref.make<Mode>("available"), (state) =>

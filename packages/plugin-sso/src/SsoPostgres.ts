@@ -18,17 +18,17 @@ import { SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import { SqlError } from "effect/sql"
 import { and, asc, eq, isNotNull, ne } from "drizzle-orm"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
-import { DomainControl } from "@openbot-build/server-kernel/apps/DomainControl"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import * as Report from "@openbot-build/server-kernel/Report"
+import { DomainControl } from "@openbot-build/server-kernel/DomainControl"
 import { openbot_auth_account } from "@openbot-build/server-database/AuthSchema"
 import {
 	organizationDomains,
 	ssoConnections,
 } from "@openbot-build/server-database/Schema"
-import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import { signInScope } from "@openbot-build/server-kernel/settings/Documents"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { hint, Secrets } from "@openbot-build/server-kernel/Secrets"
+import { signInScope } from "@openbot-build/server-kernel/Documents"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import {
 	type Connection,
 	recordName,

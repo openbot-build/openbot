@@ -1,21 +1,24 @@
+import type {
+	SessionOutput,
+	ConnectorSessionId,
+	ComputerSessionNotFound,
+} from "@openbot-build/domain/Computers"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
+import type { AppViewId } from "@openbot-build/domain/AppViews"
+import type { AppOperationId } from "@openbot-build/domain/AppCalls"
+import type {
+	Model as ModelView,
+	ModelProvider,
+} from "@openbot-build/domain/Models"
+import { Revalidation } from "@openbot-build/domain/AppConnections"
 import { assert, it } from "@effect/vitest"
 import { Model, Operation, Provider } from "@openbot-build/core"
 import { Effect, Schema } from "effect"
 import { expectTypeOf } from "vitest"
 import {
-	ComputerSessionNotFound,
-	ConnectorSessionId,
-	SessionOutput,
-} from "../src/ComputersApi.ts"
-import { AppOperationId } from "../src/AppExecution.ts"
-import { AppViewId } from "../src/AppViewsApi.ts"
-import {
-	ConnectionId,
 	ConnectionRequest,
 	ManualConnectionRequest,
-	RevalidationRequest,
 } from "../src/ConnectionsApi.ts"
-import { Model as ModelView, ModelProvider } from "../src/ModelProvidersApi.ts"
 import { DeveloperApi } from "../src/DeveloperApi.ts"
 import { UserTokensApi } from "../src/UserTokensApi.ts"
 
@@ -55,7 +58,7 @@ it.effect("connection drafts accept UUID v4 and v7 IDs", () =>
 	Effect.gen(function* () {
 		for (const schema of [
 			ConnectionRequest.fields.draftId,
-			RevalidationRequest.fields.draftId,
+			Revalidation.fields.draftId,
 		]) {
 			const decode = Schema.decodeEffect(schema)
 			yield* Effect.flip(decode("draft-1"))

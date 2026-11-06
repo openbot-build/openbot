@@ -1,5 +1,8 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { ExecutionView } from "@openbot-build/domain/AppCalls"
 import { assert, layer } from "@effect/vitest"
-import { AppExecution, ArtifactsApi, ConnectionsApi } from "@openbot-build/api"
+import { ArtifactsApi, ConnectionsApi } from "@openbot-build/api"
 import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
@@ -15,14 +18,13 @@ import {
 import { LanguageModel, Response as AiResponse } from "effect/ai"
 import * as Network from "@openbot-build/protocol/NodeHttpServer"
 import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
-import { filesOf } from "@openbot-build/server-kernel/settings/Documents"
-import { bindings } from "@openbot-build/server-kernel/settings/Platform"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Fixture from "./AppFixture.ts"
-import * as BrowserHost from "./BrowserHost.ts"
-import * as Caller from "./Caller.ts"
-import * as Messages from "./Messages.ts"
-import * as Wait from "./Wait.ts"
+import { bindings } from "@openbot-build/server-kernel/Platform"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
+import * as Fixture from "../src/AppFixture.ts"
+import * as BrowserHost from "../src/BrowserHost.ts"
+import * as Caller from "../src/Caller.ts"
+import * as Messages from "../src/Messages.ts"
+import * as Wait from "../src/Wait.ts"
 
 const publicOrigin = "https://artifact-apps.example.com"
 const usage = {
@@ -75,7 +77,12 @@ const terminal = (send: Messages.Send, receipt: Execution.Receipt) =>
 		(record) => Execution.isTerminal(record.status),
 	)
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"App sources keep saved results and reject failed, other Chat, and other caller results",
 		() =>
@@ -136,7 +143,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				yield* host.updatePlatform((document) => ({
 					...document,
 					files: {
-						...filesOf(document),
+						...document.files,
 						storage: {
 							endpoint: "http://artifact-apps.test",
 							publicEndpoint: null,
@@ -194,7 +201,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const receipt = yield* Messages.message(send, bot, "Read the document")
 				yield* Messages.settled(send, receipt.chat)
 				const operations = yield* Caller.read(
-					Schema.Array(AppExecution.ExecutionView),
+					Schema.Array(ExecutionView),
 					send(`/v1/chats/${receipt.chat}/app-operations`, "GET"),
 				)
 				const operation = yield* Effect.fromOption(Arr.head(operations))
@@ -248,7 +255,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const failed = yield* Effect.fromOption(
 					Arr.head(
 						yield* Caller.read(
-							Schema.Array(AppExecution.ExecutionView),
+							Schema.Array(ExecutionView),
 							send(`/v1/chats/${failedChat.chat}/app-operations`, "GET"),
 						),
 					),

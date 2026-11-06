@@ -23,7 +23,7 @@ description:
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"input":"Plan three days in Rome."}' \
+  -d '{"commandKey":"rome-1","input":"Plan three days in Rome."}' \
   https://api.example.com/v1/bots/$BOT/messages
 ```
 
@@ -57,9 +57,6 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 可以移除默认 Bot。
 
 你仍然可以归档默认 Bot。归档之后，没有指定 Bot 的 trigger 会失败，直到你选另一个默认 Bot。
-
-旧版本的 OpenBot 会为每个成员创建一个 Main Bot。升级时，每个 Main
-Bot 会变成普通的 Bot，并成为它的成员的默认 Bot。它的记忆和 Grants 都会保留。
 
 ### Bot 不知道的限制
 

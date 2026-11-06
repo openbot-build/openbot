@@ -1,13 +1,20 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import {
+	Token,
+	CreatedToken,
+	TokenVerification,
+} from "@openbot-build/domain/Tokens"
+import { Chat, Bot, Organization } from "@openbot-build/domain/Authorization"
 import {
 	BrowserHost,
 	Caller,
-	Policies,
 	Messages,
+	Policies,
 } from "@openbot-build/server-testing"
-import { Redacted } from "effect"
+import { Redacted, Layer } from "effect"
 import { assert, layer } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
-import { Authorization, ChatView, UserTokensApi } from "@openbot-build/api"
+import { ChatsApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Clock,
@@ -17,12 +24,17 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import { Headers, type HttpClientResponse, HttpClient } from "effect/http"
+import {
+	Headers,
+	type HttpClientResponse,
+	HttpClient,
+	FetchHttpClient,
+} from "effect/http"
 
 const publicOrigin = "https://api.example.com"
 
 const Root = Schema.Struct({ tokens: Schema.String })
-const TokenList = Schema.Struct({ items: Schema.Array(UserTokensApi.Token) })
+const TokenList = Schema.Struct({ items: Schema.Array(Token) })
 
 const decodeTagged = Schema.decodeUnknownEffect(
 	Schema.Struct({ _tag: Schema.String }),
@@ -39,7 +51,12 @@ const json = <S extends Schema.Constraint>(
 	status?: number,
 ) => Effect.flatMap(call, Caller.json(schema, status))
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"User tokens authenticate headless clients, stay with their member and stop working when revoked",
 		() =>
@@ -70,9 +87,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					Option.getOrNull(Headers.get(created.headers, "cache-control")),
 					"no-store",
 				)
-				const { token, secret } = yield* Caller.json(
-					UserTokensApi.CreatedToken,
-				)(created)
+				const { token, secret } = yield* Caller.json(CreatedToken)(created)
 				assert.match(Redacted.value(secret), /^obut_[A-Za-z0-9_-]{43}$/)
 				assert.strictEqual(token.name, "CI pipeline")
 				assert.ok(Str.startsWith(token.prefix)(Redacted.value(secret)))
@@ -97,7 +112,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 
 				const verified = yield* json(
-					UserTokensApi.TokenVerification,
+					TokenVerification,
 					keyed(secret, "/v1/tokens/verify"),
 				)
 				assert.strictEqual(verified.caller.kind, "user_token")
@@ -109,7 +124,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(verified.token?.id, token.id)
 				assert.strictEqual(
 					(yield* json(
-						UserTokensApi.TokenVerification,
+						TokenVerification,
 						account(alice.session, "/v1/tokens/verify"),
 					)).token,
 					null,
@@ -160,16 +175,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					{
 						name: "Other organization",
 						policy: yield* Policies.json(function* (_) {
-							yield* _.allow("read", Authorization.Chat, {
+							yield* _.allow("read", Chat, {
 								when: ($) => $.under("org", "someone-else"),
 							})
 						}),
 					},
 				)
 				assert.strictEqual(foreignPolicy.status, 201)
-				const foreign = yield* Caller.json(UserTokensApi.CreatedToken)(
-					foreignPolicy,
-				)
+				const foreign = yield* Caller.json(CreatedToken)(foreignPolicy)
 				assert.deepStrictEqual(
 					yield* keyed(foreign.secret, "/v1/chats").pipe(
 						Effect.flatMap(Caller.json(Schema.Array(Schema.Unknown), 200)),
@@ -208,7 +221,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 
 				const expiring = yield* json(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					account(alice.session, "/v1/user/tokens", "POST", {
 						name: "Short-lived",
 						expiresInDays: 1,
@@ -283,8 +296,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						{ name: "Scoped", policy },
 					)
 					assert.strictEqual(response.status, 201, yield* response.text)
-					return (yield* Caller.json(UserTokensApi.CreatedToken)(response))
-						.secret
+					return (yield* Caller.json(CreatedToken)(response)).secret
 				})
 
 				const bot = yield* host.defaultBot(alice.session)
@@ -299,13 +311,13 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				const readOnly = yield* make(
 					yield* Policies.json(function* (_) {
-						yield* _.allow("read", Authorization.Chat, Policies.own)
+						yield* _.allow("read", Chat, Policies.own)
 					}),
 				)
 				assert.strictEqual((yield* keyed(readOnly, "/v1/chats")).status, 200)
 				const read = yield* keyed(readOnly, chatPath)
 				assert.strictEqual(read.status, 200, yield* read.text)
-				const { chat } = yield* Caller.json(ChatView)(read)
+				const { chat } = yield* Caller.json(ChatsApi.ChatView)(read)
 				const write = yield* keyed(readOnly, chatPath, "PATCH", {
 					expected: chat.revision,
 					mode: "plan",
@@ -327,14 +339,10 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const allowChats = function* (_: Policies.Builder) {
 					yield* _.allow(
 						["run", "read", "write"],
-						Authorization.Chat,
+						Chat,
 						Policies.inOrganization,
 					)
-					yield* _.allow(
-						["read", "delegate"],
-						Authorization.Bot,
-						Policies.inOrganization,
-					)
+					yield* _.allow(["read", "delegate"], Bot, Policies.inOrganization)
 				}
 				const full = yield* make(yield* Policies.json(allowChats))
 				const sent = yield* keyed(full, messages, "POST", {
@@ -345,7 +353,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const denied = yield* make(
 					yield* Policies.json(function* (_) {
 						yield* allowChats(_)
-						yield* _.deny("write", Authorization.Chat, Policies.own)
+						yield* _.deny("write", Chat, Policies.own)
 					}),
 				)
 				assert.strictEqual((yield* keyed(denied, "/v1/chats")).status, 200)
@@ -365,7 +373,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					yield* Policies.json(function* (_) {
 						yield* _.allow(
 							["read", "write"],
-							Authorization.Organization,
+							Organization,
 							Policies.inOrganization,
 						)
 					}),

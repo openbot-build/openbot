@@ -1,9 +1,9 @@
+import { ExecutionIdentity } from "@openbot-build/domain/Identity"
 import { ChatStoreRepository, Store as CoreStore } from "@openbot-build/core"
-import { Execution, ExecutionIdentity } from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
-import { AppApprovals } from "@openbot-build/apps-contract/apps/AppApprovals"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import {
 	InputCommands,
@@ -12,14 +12,14 @@ import {
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as Db from "@openbot-build/server-database/Database"
-import { type Authorize } from "@openbot-build/server-execution/execution/Engine"
+import { type Authorize } from "@openbot-build/server-execution/Engine"
 import {
 	Store,
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
-import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
+} from "@openbot-build/server-execution/Store"
+import * as Todos from "@openbot-build/conversation-contract/work/Todos"
 import { approvedCallId } from "@openbot-build/conversation-contract/capabilities/Approvals"
 import { describe } from "@openbot-build/conversation-contract/capabilities/Capability"
 import { RequestCommands } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
@@ -67,8 +67,7 @@ export interface Service {
 }
 
 export class RequestNotices extends Context.Service<RequestNotices, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-capabilities/RequestNotices",
+	"@openbot-build/plugin-capabilities/RequestNotices",
 ) {}
 
 const make = Effect.gen(function* () {
@@ -78,7 +77,6 @@ const make = Effect.gen(function* () {
 	const commands = yield* RequestCommands
 	const inputs = yield* InputCommands
 	const access = yield* TurnAccess
-	const apps = yield* AppApprovals
 	const definition = yield* CoreStore.define({
 		stores: { [ChatHost.chatHostId]: ChatHost.chatHostStore, ...Todos.stores },
 		schemaVersion: "chat/1",
@@ -110,7 +108,7 @@ const make = Effect.gen(function* () {
 				commands.authorize(requestKey, actor, mode),
 			),
 		)
-	/** State, App approval, input, result and outbox writes share one transaction. */
+	/** State, input, result and outbox writes share one transaction. */
 	const deliver = Effect.fn("RequestNotices.deliver")(
 		function* (fence: Fence) {
 			const saved = yield* load(fence)
@@ -139,11 +137,6 @@ const make = Effect.gen(function* () {
 					const open = yield* access.notice(view.chat, source.identity)
 					const allowed = request.status === "allowed"
 					const plan = request.capability.action === "plans.run"
-					let changed = false
-					if (open && request.app !== undefined)
-						changed =
-							(yield* apps.decide(fence.namespace, request.app, allowed)) ===
-							"Changed"
 					if (open && plan && allowed)
 						yield* chats.modifyEffect({
 							chat: request.chat,
@@ -170,15 +163,13 @@ const make = Effect.gen(function* () {
 									? allowed
 										? "[OpenBot] Your plan is approved. Carry it out now, and keep the todo list up to date."
 										: `[OpenBot] Your plan was not approved: ${reason(saved.stored)}\n\nYou stay in plan mode.`
-									: allowed && changed
-										? `[OpenBot] Your request ${request.id} was allowed, but the App connection or call changed after it. Ask again.`
-										: allowed && call !== undefined
-											? `[OpenBot] Your request ${request.id} was allowed. OpenBot runs ${call.name} now.`
-											: allowed
-												? `[OpenBot] Your request ${request.id} to ${describe(request.capability)} was allowed. You can do it now.`
-												: `[OpenBot] Your request ${request.id} to ${describe(request.capability)} was not allowed: ${reason(saved.stored)}`,
+									: allowed && call !== undefined
+										? `[OpenBot] Your request ${request.id} was allowed. OpenBot runs ${call.name} now.`
+										: allowed
+											? `[OpenBot] Your request ${request.id} to ${describe(request.capability)} was allowed. You can do it now.`
+											: `[OpenBot] Your request ${request.id} to ${describe(request.capability)} was not allowed: ${reason(saved.stored)}`,
 						),
-						...(open && !plan && allowed && !changed && call !== undefined
+						...(open && !plan && allowed && call !== undefined
 							? {
 									approved: {
 										id: approvedCallId(request.id),

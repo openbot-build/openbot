@@ -1,12 +1,11 @@
+import {
+	PublishVersionRequest,
+	CaptureSourceRequest,
+} from "@openbot-build/domain/ArtifactCommands"
+import { ArtifactVersion, Source } from "@openbot-build/domain/Artifacts"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { Execution } from "@openbot-build/domain"
-import {
-	ArtifactVersion,
-	CaptureSourceRequest,
-	PublishVersionRequest,
-	Source,
-} from "../src/ArtifactsApi.ts"
 import { ChatResponse, OutputText } from "../src/ChatsApi.ts"
 
 const file = {

@@ -1,11 +1,8 @@
+import { ChatModelInvalid, type ChatKind } from "@openbot-build/domain/Chats"
 import { Config, ConfigurationOperations } from "@openbot-build/core"
-import {
-	ChatModelInvalid,
-	type ChatKind,
-	type Bots,
-} from "@openbot-build/domain"
+import { type Bots } from "@openbot-build/domain"
 import { Effect, Option } from "effect"
-import type { Catalog } from "@openbot-build/models-contract/models/ModelRegistry"
+import type { Catalog } from "@openbot-build/models-contract/ModelRegistry"
 
 /** Check the full selection, including reasoning effort and service tier. */
 export const validate = (catalog: Catalog, selection: Config.Selection) => {

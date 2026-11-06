@@ -1,3 +1,4 @@
+import { DelegationId } from "@openbot-build/domain/DelegationId"
 import { Delegations as DelegationDomain } from "@openbot-build/domain"
 import {
 	Array as Arr,
@@ -20,19 +21,12 @@ import {
 	Delegations,
 	noUsage,
 } from "@openbot-build/conversation-contract/bots/Delegations"
-export {
-	Stored,
-	Delegations,
-	noUsage,
-} from "@openbot-build/conversation-contract/bots/Delegations"
-export type { CreateInput } from "@openbot-build/conversation-contract/bots/Delegations"
-
 /** What the work used, with the running time up to now. */
 export const usageOf = (
 	stored: Stored,
 	now: number,
 ): DelegationDomain.DelegationUsage => {
-	const usage = stored.delegation.usage ?? noUsage
+	const usage = stored.delegation.usage
 	return stored.runningSince === undefined
 		? usage
 		: {
@@ -42,10 +36,10 @@ export const usageOf = (
 }
 
 /** The delegation as people see it, with the running time up to now. */
-export const view = (stored: Stored, now: number): Delegation =>
-	stored.delegation.usage === undefined
-		? stored.delegation
-		: { ...stored.delegation, usage: usageOf(stored, now) }
+export const view = (stored: Stored, now: number): Delegation => ({
+	...stored.delegation,
+	usage: usageOf(stored, now),
+})
 
 const isOpenStatus = Schema.is(DelegationDomain.OpenDelegationStatus)
 
@@ -106,9 +100,7 @@ export const make: Effect.Effect<
 					if (Option.isSome(existing)) return existing.value
 					const now = yield* Clock.currentTimeMillis
 					return yield* put(organizationId, {
-						...(input.executionId === undefined
-							? {}
-							: { executionId: input.executionId }),
+						executionId: input.executionId,
 						userId: input.userId,
 						author: input.author,
 						chain: input.chain,
@@ -117,7 +109,7 @@ export const make: Effect.Effect<
 							? {}
 							: { runningSince: input.runningSince }),
 						delegation: {
-							id: DelegationDomain.DelegationId.make(id),
+							id: DelegationId.make(id),
 							parent: input.parent,
 							...(input.trigger === undefined
 								? {}
@@ -128,9 +120,8 @@ export const make: Effect.Effect<
 							task: input.task,
 							...(input.reason === undefined ? {} : { reason: input.reason }),
 							result: input.result ?? null,
-							...(input.limits === undefined
-								? {}
-								: { limits: input.limits, usage: noUsage }),
+							limits: input.limits,
+							usage: noUsage,
 							createdAt: now,
 							updatedAt: now,
 						},

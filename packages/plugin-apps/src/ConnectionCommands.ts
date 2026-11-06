@@ -1,3 +1,6 @@
+import { scopeOf } from "@openbot-build/apps-contract/apps/GrantUses"
+import { Caller, executionCallers } from "@openbot-build/domain/Identity"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
 import {
 	type MemberExecution,
 	Store,
@@ -5,19 +8,16 @@ import {
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import {
 	type SecretStorageError,
 	Secrets,
-} from "@openbot-build/server-kernel/secrets/Secrets"
+} from "@openbot-build/server-kernel/Secrets"
 import {
 	type Developers,
 	AppConnections,
 	Authorization,
-	Caller,
-	ConnectionId,
 	Execution,
-	executionCallers,
 } from "@openbot-build/domain"
 import * as GrantUses from "@openbot-build/apps-contract/apps/GrantUses"
 import { Discovery, Store as Protocol } from "@openbot-build/protocol"
@@ -43,8 +43,8 @@ import {
 	appRecords,
 	appSecrets,
 } from "@openbot-build/server-database/Schema"
-import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
-import type { End } from "@openbot-build/server-execution/execution/Program"
+import type { Authorize } from "@openbot-build/server-execution/Engine"
+import type { End } from "@openbot-build/server-execution/Program"
 import { Governance } from "./Governance.ts"
 import * as DiscoveryService from "./Discovery.ts"
 import * as GrantCleanup from "./GrantCleanup.ts"
@@ -150,8 +150,7 @@ export interface Service {
 export class ConnectionCommands extends Context.Service<
 	ConnectionCommands,
 	Service
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/ConnectionCommands") {}
+>()("@openbot-build/plugin-apps/ConnectionCommands") {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
@@ -510,9 +509,7 @@ const make = Effect.gen(function* () {
 							"Authorized" &&
 						input.credential !== null
 					)
-						yield* cleanup.assertInstallable(
-							GrantCleanup.scopeOf(input.credential),
-						)
+						yield* cleanup.assertInstallable(scopeOf(input.credential))
 					const changed =
 						input.action._tag === "Update" ||
 						input.action._tag === "Manual" ||

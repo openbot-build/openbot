@@ -1,10 +1,14 @@
+import { emptyPolicy } from "@openbot-build/domain/Authorization"
 import { assert, it } from "@effect/vitest"
-import { Authorization } from "@openbot-build/api"
 import { Effect, RcMap, Ref } from "effect"
-import type { PlatformDocument } from "@openbot-build/server-kernel/settings/Documents"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import {
+	platformDefaults,
+	type PlatformDocument,
+} from "@openbot-build/server-kernel/Documents"
+import * as Platform from "@openbot-build/server-kernel/Platform"
 
 const document: PlatformDocument = {
+	...platformDefaults,
 	publicOrigin: "https://api.example.com",
 	authSecret: "sealed-secret",
 	identityProvider: {
@@ -14,7 +18,7 @@ const document: PlatformDocument = {
 		clientSecretHint: "cret",
 	},
 	organizationCreation: "anyone",
-	ceiling: Authorization.emptyPolicy,
+	ceiling: emptyPolicy,
 	appRestrictions: [],
 }
 

@@ -1,17 +1,21 @@
 import {
-	AuthApi,
-	type OrganizationApi,
-	OpenBotApi,
-	UserTokensApi,
-} from "@openbot-build/api"
+	setSessionCookies,
+	layerNoStore,
+} from "@openbot-build/identity-contract/auth/SessionHttp"
+import type { AuditActionOf } from "@openbot-build/domain/Organizations"
+import {
+	type Token,
+	TokenStorageUnavailable,
+} from "@openbot-build/domain/Tokens"
+import { type Caller, Identity } from "@openbot-build/domain/Identity"
+import { AuthApi, OpenBotApi } from "@openbot-build/api"
 
-import { type Caller, Identity } from "@openbot-build/domain"
 import { Effect, Layer, Option } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import { userKey } from "@openbot-build/identity-contract/audit/Resources"
+import { userKey } from "@openbot-build/domain/AuditResources"
 import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
 import { Auth } from "@openbot-build/identity-contract/auth/Auth"
 import * as HttpMiddleware from "./HttpMiddleware.ts"
@@ -27,8 +31,8 @@ const userTokens = HttpApiBuilder.group(OpenBotApi, "userTokens", (handlers) =>
 		const audit = yield* AuditLog
 		const record = (
 			caller: Caller,
-			action: OrganizationApi.AuditActionOf<"token">,
-			token: UserTokensApi.Token,
+			action: AuditActionOf<"token">,
+			token: Token,
 		) =>
 			audit
 				.record({
@@ -43,7 +47,7 @@ const userTokens = HttpApiBuilder.group(OpenBotApi, "userTokens", (handlers) =>
 				})
 				.pipe(
 					Failures.replace("OpenBot could not write the audit log", () =>
-						UserTokensApi.TokenStorageUnavailable.make({}),
+						TokenStorageUnavailable.make({}),
 					),
 				)
 		// Write handlers do not stop when the client goes away, so a change
@@ -98,7 +102,7 @@ const signIn = HttpApiBuilder.group(OpenBotApi, "signIn", (handlers) =>
 					invitation: payload.invitation,
 					returnTo: payload.returnTo,
 				})
-				yield* HttpMiddleware.setSessionCookies(started.setCookies)
+				yield* setSessionCookies(started.setCookies)
 				return { url: started.url }
 			}).pipe(
 				// The Auth service logs the cause of each failure.
@@ -115,7 +119,7 @@ export const layerMiddleware = Layer.mergeAll(
 	HttpMiddleware.layerAccountAuth,
 	HttpMiddleware.layerSessionAuth,
 	HttpMiddleware.layerOrigin,
-	HttpMiddleware.layerNoStore,
+	layerNoStore,
 )
 
 /** The session, user token and sign-in groups. Better Auth serves its own routes. */

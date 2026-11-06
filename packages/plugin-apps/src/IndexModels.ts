@@ -1,10 +1,10 @@
+import { IndexStore } from "@openbot-build/protocol"
 import { AppIndex } from "@openbot-build/domain"
-import { Index } from "@openbot-build/protocol"
 import { Schema } from "effect"
 
 /** An App description joins the protocol entry with product index facts. */
 export const App = Schema.Struct({
-	entry: Index.Entry,
+	entry: IndexStore.Entry,
 	sources: Schema.Array(AppIndex.Source),
 	matches: Schema.Array(AppIndex.Match),
 	check: Schema.optionalKey(AppIndex.Check),

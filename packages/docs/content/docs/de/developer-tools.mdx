@@ -17,10 +17,9 @@ Nutzer-Token oder das Session-Cookie, und `publish` auf `App`. Siehe
 
 IDs für Claims, Nachweise, Mitglieder, Berichte und Indexanfragen müssen
 UUID-Text sein. Das gilt auch für den Seitencursor `before` und die
-Vergleichs-ID `other` bei Berichten. Alte UUID-v4- und neue UUID-v7-Werte
-funktionieren. Die API weist anderen Text vor dem Zugriff auf die Speicherung
-zurück. Bearer-Tokens für Einladungen und Hinweis-IDs behalten ihre eigenen
-Formate.
+Vergleichs-ID `other` bei Berichten. UUID-v4- und UUID-v7-Werte funktionieren.
+Die API weist anderen Text vor dem Zugriff auf die Speicherung zurück.
+Bearer-Tokens für Einladungen und Hinweis-IDs behalten ihre eigenen Formate.
 
 ---
 
@@ -357,12 +356,3 @@ schicke `PUT /v1/developer/subscriptions` mit
 
 Die vollständigen Formen findest du in der
 [API-Referenz](/api/operations/tags/developer-tools/).
-
-Die Datenmigration behält bestehende Ansprüche, Nachweise, Mitglieder,
-Einladungen, Apps, Berichte und Nachrichteneinstellungen. App- und
-Nachweisprüfungen behalten ihren nächsten Prüftermin. Ein aufgegebener Nachweis
-startet keine neue Prüfung. Alte Indexanfragen behalten ihre IDs und erhalten
-eine Ausführung für ihren Verlauf. Ein gespeichertes Ergebnis bleibt
-abgeschlossen. Eine Anfrage ohne Ergebnis wird unterbrochen, da der
-ursprüngliche Aufrufer fehlt. Die Plattform kann die getrennte öffentliche
-Prüfung abschließen.

@@ -10,13 +10,12 @@
 		"src"
 	],
 	"exports": {
-		"./billing/Billing": "./dist/billing/Billing.js",
-		"./billing/BillingPostgres": "./dist/billing/BillingPostgres.js",
-		"./billing/Host": "./dist/billing/Host.js",
-		"./billing/MeteredModel": "./dist/billing/MeteredModel.js",
-		"./billing/RateLimit": "./dist/billing/RateLimit.js",
-		"./billing/TokenThrottle": "./dist/billing/TokenThrottle.js",
-		"./models/ModelMethods": "./dist/models/ModelMethods.js"
+		"./Billing": "./dist/Billing.js",
+		"./BillingPostgres": "./dist/BillingPostgres.js",
+		"./MeteredModel": "./dist/MeteredModel.js",
+		"./RateLimit": "./dist/RateLimit.js",
+		"./TokenThrottle": "./dist/TokenThrottle.js",
+		"./ModelMethods": "./dist/ModelMethods.js"
 	},
 	"scripts": {
 		"build": "tsdown",

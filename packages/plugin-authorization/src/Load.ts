@@ -1,10 +1,8 @@
-import {
-	type Settings as SettingsModel,
-	type Tokens as TokensModel,
-} from "@openbot-build/domain"
+import type { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import type { AccountCaller } from "@openbot-build/domain/Identity"
+import { type Tokens as TokensModel } from "@openbot-build/domain"
 
 import { Authorization } from "@openbot-build/domain"
-import { type AccountCaller } from "@openbot-build/domain"
 import { Policy } from "@nmnmcc/ability"
 import { Array as Arr, Clock, DateTime, Effect, Option, pipe } from "effect"
 import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
@@ -16,7 +14,7 @@ import {
 	PlatformAdmins,
 	type PlatformAdminsUnavailable,
 } from "@openbot-build/identity-contract/platform/PlatformAdmins"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import {
 	Roles,
 	type RolesUnavailable,
@@ -24,14 +22,12 @@ import {
 
 export type Services = Organization | Tokens | Roles | Settings | PlatformAdmins
 
-type OpenBotPolicy = Authorization.Policy
-
 /** The storage errors while loading a policy. A check turns them into `PolicyUnavailable`. */
 export type Unavailable =
 	| OrganizationUnavailable
 	| TokensModel.TokenStorageUnavailable
 	| RolesUnavailable
-	| SettingsModel.SettingsUnavailable
+	| SettingsUnavailable
 	| PlatformAdminsUnavailable
 
 const define = Policy.define(Authorization.OpenBot)
@@ -59,8 +55,8 @@ const platformAdmin = define(function* (_) {
  * `Policy.any` gives the allow of any child.
  */
 export const overriding = (
-	policies: ReadonlyArray<OpenBotPolicy>,
-): OpenBotPolicy => {
+	policies: ReadonlyArray<Authorization.Policy>,
+): Authorization.Policy => {
 	const [first, ...rest] = policies
 	if (first === undefined) return Authorization.emptyPolicy
 	if (rest.length === 0) return first
@@ -74,13 +70,13 @@ export const overriding = (
 export const memberPolicy = (input: {
 	readonly member: {
 		readonly roles: ReadonlyArray<string>
-		readonly policy: OpenBotPolicy
+		readonly policy: Authorization.Policy
 	}
 	readonly roles: ReadonlyArray<{
 		readonly id: string
-		readonly policy: OpenBotPolicy
+		readonly policy: Authorization.Policy
 	}>
-}): OpenBotPolicy =>
+}): Authorization.Policy =>
 	Policy.all([
 		overriding([
 			...pipe(
@@ -108,7 +104,7 @@ export const memberPolicy = (input: {
 export const policyOf = (
 	caller: AccountCaller,
 	options: { readonly platform: boolean },
-): Effect.Effect<OpenBotPolicy, Unavailable, Services> =>
+): Effect.Effect<Authorization.Policy, Unavailable, Services> =>
 	Effect.gen(function* () {
 		const organization = yield* Organization
 		const tokens = yield* Tokens

@@ -1,30 +1,46 @@
-import { Lifecycle } from "./Lifecycle.ts"
-import * as ExecutionHttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
-import { Redacted } from "effect"
 import {
-	ComputersApi,
-	OpenBotApi,
-	type OrganizationApi,
-} from "@openbot-build/api"
+	ComputerUnsupported,
+	type ComputerProvider,
+	ComputersUnavailable,
+	type ComputerProviderCredentials,
+	ComputerProviderFailed,
+	ComputerInvalid,
+	type Computer,
+	ComputerExecutionFailed,
+	type ConnectorSessionId,
+	ComputerSessionNotFound,
+	PairingInvalid,
+	ConnectorDenied,
+} from "@openbot-build/domain/Computers"
+import type { AuditAction } from "@openbot-build/domain/Organizations"
+import { type Caller, Identity } from "@openbot-build/domain/Identity"
+import { Lifecycle } from "./Lifecycle.ts"
+import * as ExecutionHttpErrors from "@openbot-build/server-execution/HttpErrors"
+import { Redacted } from "effect"
+import { OpenBotApi } from "@openbot-build/api"
 
-import { Execution, type Caller, Identity } from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import { Effect, Option, Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import { computerKey } from "@openbot-build/identity-contract/audit/Resources"
-import type { ComputerCallFailed, ComputerError, Machine } from "./Computer.ts"
+import { computerKey } from "@openbot-build/domain/AuditResources"
+import type {
+	ComputerCallFailed,
+	ComputerError,
+	Machine,
+} from "@openbot-build/apps-contract/computers/Computer"
 import { ComputerProviders } from "./ComputerProviders.ts"
 import { checkFile, Computers } from "./Computers.ts"
-import { Connectors } from "./connector/Connectors.ts"
-import { Drivers } from "./Drivers.ts"
+import { Connectors } from "./Connectors.ts"
+import { Drivers } from "@openbot-build/apps-contract/computers/Drivers"
 import { Pairings } from "./Pairings.ts"
 import { type Owner, SessionGone, Sessions } from "./Sessions.ts"
 
 const desktopOf = (machine: Machine) =>
 	machine.desktop === undefined
-		? Effect.fail(ComputersApi.ComputerUnsupported.make({ feature: "desktop" }))
+		? Effect.fail(ComputerUnsupported.make({ feature: "desktop" }))
 		: Effect.succeed(machine.desktop)
 
 export const layerProviders = HttpApiBuilder.group(
@@ -37,8 +53,8 @@ export const layerProviders = HttpApiBuilder.group(
 			const audit = yield* AuditLog
 			const record = (
 				caller: Caller,
-				action: OrganizationApi.AuditAction,
-				provider: ComputersApi.ComputerProvider,
+				action: AuditAction,
+				provider: ComputerProvider,
 				details: Schema.JsonObject,
 			) =>
 				audit
@@ -56,11 +72,11 @@ export const layerProviders = HttpApiBuilder.group(
 					})
 					.pipe(
 						Failures.replace("OpenBot could not write the audit log", () =>
-							ComputersApi.ComputersUnavailable.make({}),
+							ComputersUnavailable.make({}),
 						),
 					)
 			/** The provider must take the key before OpenBot stores it. */
-			const verify = (credentials: ComputersApi.ComputerProviderCredentials) =>
+			const verify = (credentials: ComputerProviderCredentials) =>
 				drivers.make(credentials).pipe(
 					Effect.flatMap((driver) => driver.verify),
 					// A failure that can pass, such as a timeout, does not say that the key is wrong.
@@ -68,10 +84,10 @@ export const layerProviders = HttpApiBuilder.group(
 						"The Computer provider check failed",
 						(error: ComputerCallFailed) =>
 							error.retry
-								? ComputersApi.ComputerProviderFailed.make({
+								? ComputerProviderFailed.make({
 										message: "The Computer provider did not answer.",
 									})
-								: ComputersApi.ComputerInvalid.make({
+								: ComputerInvalid.make({
 										message: "The provider did not take the key.",
 									}),
 					),
@@ -137,8 +153,8 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 		const audit = yield* AuditLog
 		const record = (
 			caller: Caller,
-			action: OrganizationApi.AuditAction,
-			computer: Pick<ComputersApi.Computer, "id" | "owner">,
+			action: AuditAction,
+			computer: Pick<Computer, "id" | "owner">,
 			details: Schema.JsonObject,
 		) =>
 			audit
@@ -156,7 +172,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 				})
 				.pipe(
 					Failures.replace("OpenBot could not write the audit log", () =>
-						ComputersApi.ComputersUnavailable.make({}),
+						ComputersUnavailable.make({}),
 					),
 				)
 		/** Work on the machine of a Computer that the caller may use. */
@@ -176,7 +192,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 			effect: Effect.Effect<A, Execution.Failure | E, R>,
 		) =>
 			Effect.catchIf(effect, Schema.is(Execution.Failure), (failure) =>
-				Effect.fail(ComputersApi.ComputerExecutionFailed.make({ failure })),
+				Effect.fail(ComputerExecutionFailed.make({ failure })),
 			)
 		/** Maps the errors of the machine, and keeps a missing session as it is. */
 		const workOn = <A>(
@@ -194,7 +210,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 		/** The sessions of a caller, on a Computer that the caller may still use. */
 		const onSession = <A, E>(
 			computerId: string,
-			sessionId: ComputersApi.ConnectorSessionId,
+			sessionId: ConnectorSessionId,
 			use: (owner: Owner) => Effect.Effect<A, E>,
 		) =>
 			Effect.gen(function* () {
@@ -207,10 +223,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 					Effect.catchIf(
 						(error): error is Extract<E, SessionGone> =>
 							Schema.is(SessionGone)(error),
-						() =>
-							Effect.fail(
-								ComputersApi.ComputerSessionNotFound.make({ id: sessionId }),
-							),
+						() => Effect.fail(ComputerSessionNotFound.make({ id: sessionId })),
 					),
 				)
 			})
@@ -349,7 +362,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 								.pipe(
 									sessionFailure,
 									Effect.catchTag("SessionGone", () =>
-										Effect.fail(ComputersApi.ComputersUnavailable.make({})),
+										Effect.fail(ComputersUnavailable.make({})),
 									),
 								),
 						),
@@ -405,7 +418,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 						params.computerId,
 					)
 					if (machine.ports === undefined)
-						return yield* ComputersApi.ComputerUnsupported.make({
+						return yield* ComputerUnsupported.make({
 							feature: "ports",
 						})
 					const url = yield* computers.work(machine.ports.open(params.port))
@@ -435,9 +448,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 				onMachine(params.computerId, (machine) =>
 					Effect.flatMap(desktopOf(machine), (desktop) =>
 						desktop.stream === undefined
-							? Effect.fail(
-									ComputersApi.ComputerUnsupported.make({ feature: "stream" }),
-								)
+							? Effect.fail(ComputerUnsupported.make({ feature: "stream" }))
 							: computers.work(desktop.stream),
 					),
 				),
@@ -472,7 +483,7 @@ export const layerHooks = HttpApiBuilder.group(
 				.handle("startPairing", ({ payload }) => pairings.start(payload))
 				.handle("pollPairing", ({ params, headers }) =>
 					Option.match(bearer(headers.authorization), {
-						onNone: () => Effect.fail(ComputersApi.PairingInvalid.make({})),
+						onNone: () => Effect.fail(PairingInvalid.make({})),
 						onSome: (secret) => pairings.poll(params.pairingId, secret),
 					}),
 				)
@@ -480,16 +491,14 @@ export const layerHooks = HttpApiBuilder.group(
 					Effect.gen(function* () {
 						const request = yield* HttpServerRequest.HttpServerRequest
 						const token = bearer(request.headers["authorization"])
-						if (Option.isNone(token))
-							return yield* ComputersApi.ConnectorDenied.make({})
+						if (Option.isNone(token)) return yield* ConnectorDenied.make({})
 						const found = yield* computers.byToken(token.value)
-						if (Option.isNone(found))
-							return yield* ComputersApi.ConnectorDenied.make({})
+						if (Option.isNone(found)) return yield* ConnectorDenied.make({})
 						const { organizationId, id } = found.value
 						// The token is good, so a failure here is not a denial. A proxy may drop the upgrade.
 						const socket = yield* request.upgrade.pipe(
 							Failures.replace("The connector WebSocket did not open", () =>
-								ComputersApi.ComputersUnavailable.make({}),
+								ComputersUnavailable.make({}),
 							),
 						)
 						yield* connectors.serve({

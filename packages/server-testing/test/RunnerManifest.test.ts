@@ -1,10 +1,11 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { FetchHttpClient } from "effect/http"
+import { PgClient } from "@effect/sql-pg"
 import { assert, describe, it, layer } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
-import { Array as Arr, Effect, Layer, Option } from "effect"
+import { Array as Arr, Effect, Layer, Option, Redacted } from "effect"
 import { SqlClient } from "effect/sql"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as RunnerManifest from "@openbot-build/server-execution/execution/RunnerManifest"
-import * as TestHost from "./TestHost.ts"
+import * as RunnerManifest from "@openbot-build/server-execution/RunnerManifest"
 
 const mine: RunnerManifest.Seen = {
 	runnerAddress: "a:3000",
@@ -118,16 +119,18 @@ const processA = "00000000-0000-4000-8000-00000000000a"
 const processB = "00000000-0000-4000-8000-00000000000b"
 
 // The database is a real server, so these tests use the real clock.
-layer(TestHost.layerPlatform, {
-	excludeTestServices: true,
-	timeout: "120 seconds",
-})((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+		timeout: "120 seconds",
+	},
+)((it) => {
 	it.effect(
 		"the store keeps one row for each runner, and old rows expire",
 		() =>
 			Effect.gen(function* () {
-				const options = yield* TestHost.makeSettings
-				yield* TestHost.migrate(options)
+				const database = yield* TestDatabase.migrated
 				yield* Effect.gen(function* () {
 					const sql = yield* SqlClient.SqlClient
 					const store = yield* RunnerManifest.makeStore
@@ -178,7 +181,7 @@ layer(TestHost.layerPlatform, {
 					assert.strictEqual((yield* rows).length, 0)
 				}).pipe(
 					Effect.provide(
-						DatabasePostgres.layer(options).pipe(
+						PgClient.layer({ url: Redacted.make(database.url) }).pipe(
 							Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 						),
 					),
@@ -188,8 +191,7 @@ layer(TestHost.layerPlatform, {
 
 	it.effect("a new process at the same address starts a new row", () =>
 		Effect.gen(function* () {
-			const options = yield* TestHost.makeSettings
-			yield* TestHost.migrate(options)
+			const database = yield* TestDatabase.migrated
 			yield* Effect.gen(function* () {
 				const sql = yield* SqlClient.SqlClient
 				const store = yield* RunnerManifest.makeStore
@@ -211,7 +213,7 @@ layer(TestHost.layerPlatform, {
 				)
 			}).pipe(
 				Effect.provide(
-					DatabasePostgres.layer(options).pipe(
+					PgClient.layer({ url: Redacted.make(database.url) }).pipe(
 						Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 					),
 				),

@@ -1,3 +1,4 @@
+import { Source } from "@openbot-build/domain/BotMemory"
 import { PgClient } from "@effect/sql-pg"
 import {
 	Array as Arr,
@@ -8,12 +9,12 @@ import {
 	Record as Rec,
 	Schema,
 } from "effect"
-import type * as Audience from "./memory/Audience.ts"
-import * as Memory from "./memory/BotMemory.ts"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import type * as Audience from "./Audience.ts"
+import * as Memory from "./BotMemory.ts"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import type { Home } from "@openbot-build/conversation-contract/bots/BotMemories"
 
-const Sources = Schema.fromJsonString(Schema.Array(Memory.Source))
+const Sources = Schema.fromJsonString(Schema.Array(Source))
 const Policy = Schema.fromJsonString(
 	Schema.Struct({
 		entry: Schema.String,
@@ -243,9 +244,7 @@ export const make = Effect.gen(function* () {
 			const tags = Arr.dedupe(entry.tags)
 			if (Arr.isArrayNonEmpty(tags))
 				yield* sql`insert into openbot_bot_memory_tags ${sql.insert(Arr.map(tags, (tag) => ({ organization_id: home.organizationId, home_bot: home.bot, memory_id: entry.id, tag })))}`
-			if (entry.sourcePolicies === undefined)
-				yield* sql`delete from openbot_bot_records where kind = 'memory_source_policy' and organization_id = ${home.organizationId} and id = ${policyId(home, entry.id)}`
-			else {
+			if (entry.layer === "fact") {
 				const body = yield* Schema.encodeEffect(Policy)({
 					entry: entry.id,
 					policies: entry.sourcePolicies,

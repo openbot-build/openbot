@@ -1,3 +1,5 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { PgClient } from "@effect/sql-pg"
 import { assert, it } from "@effect/vitest"
 import {
 	Array as Arr,
@@ -15,7 +17,7 @@ import { SqlClient } from "effect/sql"
 import { ChatStoreRepository, Item, Store } from "@openbot-build/core"
 import { Prompt } from "effect/ai"
 import { getTableName, is, Table } from "drizzle-orm"
-import * as Migration from "@openbot-build/server-upgrade/Migrations"
+import * as Migration from "@openbot-build/server-database/Migrations"
 import * as AuthSchema from "@openbot-build/server-database/AuthSchema"
 import * as DatabaseSchema from "@openbot-build/server-database/Schema"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
@@ -23,8 +25,6 @@ import {
 	chatHostId,
 	chatHostStore,
 } from "@openbot-build/conversation-contract/chats/ChatHost"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as PostgresTest from "./PostgresTest.ts"
 import * as Db from "@openbot-build/server-database/Database"
 import * as BotFixture from "./BotFixture.ts"
 
@@ -40,14 +40,14 @@ const definedTables = Arr.sort(
 /** The OpenBot data of a Chat. The table of Chats copies its Bot and kind into columns. */
 const { kind, chain } = BotFixture.direct()
 const host = { [chatHostId]: { bot: BotFixture.bot.id, kind, chain } }
-assert.strictEqual(chatHostId, "@openbot-build/openbot/chat-host")
+assert.strictEqual(chatHostId, "openbot.chat-host")
 /**
  * The OpenBot database layer over a new PostgreSQL. Each test gets its own
  * layer, so each test starts with an empty database.
  */
 const database = Layer.unwrap(
-	Effect.map(PostgresTest.start, (database) =>
-		DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }),
+	Effect.map(TestDatabase.start, (database) =>
+		PgClient.layer({ url: Redacted.make(database.url) }),
 	),
 ).pipe(Layer.provideMerge(NodeServices.layer))
 /** An Item as JSON, the way the store keeps it. */
@@ -63,12 +63,12 @@ it.layer(database, { excludeTestServices: true })((it) => {
 		"PostgreSQL saves the revision and the new Items of each Chat in one step within each namespace",
 		() =>
 			Effect.gen(function* () {
-				yield* Migration.initialize
+				yield* Migration.migrate
 				yield* Migration.check
 				const db = yield* Db.make,
 					definition = yield* Store.define({
 						// The literal key keeps the type of the state exact.
-						stores: { "@openbot-build/openbot/chat-host": chatHostStore },
+						stores: { "openbot.chat-host": chatHostStore },
 						schemaVersion: "chat/1",
 					})
 				const store = yield* ChatStoreRepository.make({
@@ -244,10 +244,10 @@ it.layer(database, { excludeTestServices: true })((it) => {
 		() =>
 			Effect.gen(function* () {
 				const before = yield* Effect.flip(Migration.check)
-				assert.strictEqual(before.reason, "storage-failed")
-				yield* Migration.initialize
+				assert.strictEqual(before._tag, "SchemaMismatch")
+				yield* Migration.migrate
 				yield* Migration.check
-				yield* Migration.initialize
+				yield* Migration.migrate
 				const sql = yield* SqlClient.SqlClient
 				const tables = Arr.sort(
 					Arr.map(

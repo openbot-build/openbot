@@ -4,6 +4,7 @@ import { Schema } from "effect"
 import { PlanApproval } from "./PlanApproval.ts"
 import { ChatTodos, todoProblem } from "./Todos.ts"
 import { DelegationId } from "./DelegationId.ts"
+import * as Execution from "./Execution.ts"
 
 /**
  * Why a Chat exists. OpenBot makes every Chat itself.
@@ -32,10 +33,14 @@ export type ChatParent = typeof ChatParent.Type
 export class ChatModelInvalid extends Schema.TaggedError<
 	ChatModelInvalid,
 	{ readonly brand: unique symbol }
->()("ChatModelInvalid", {
-	reason: Config.SelectionReason,
-	message: Schema.String,
-}) {}
+>()(
+	"ChatModelInvalid",
+	{
+		reason: Config.SelectionReason,
+		message: Schema.String,
+	},
+	Execution.category("invalid"),
+) {}
 
 /** A settings change is guarded by the saved Chat revision. */
 export const ChatSettingsChange = Schema.Struct({

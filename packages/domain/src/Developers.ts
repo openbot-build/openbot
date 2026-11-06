@@ -5,22 +5,30 @@ import * as Execution from "./Execution.ts"
 export class DeveloperInputInvalid extends Schema.TaggedError<
 	DeveloperInputInvalid,
 	{ readonly brand: unique symbol }
->()("DeveloperInputInvalid", {
-	message: Schema.String,
-	keys: Schema.optionalKey(Schema.Array(Schema.String)),
-}) {}
+>()(
+	"DeveloperInputInvalid",
+	{
+		message: Schema.String,
+		keys: Schema.optionalKey(Schema.Array(Schema.String)),
+	},
+	Execution.category("invalid"),
+) {}
 export class DeveloperNotFound extends Schema.TaggedError<
 	DeveloperNotFound,
 	{ readonly brand: unique symbol }
->()("DeveloperNotFound", {}) {}
+>()("DeveloperNotFound", {}, Execution.category("not_found")) {}
 export class DeveloperForbidden extends Schema.TaggedError<
 	DeveloperForbidden,
 	{ readonly brand: unique symbol }
->()("DeveloperForbidden", {}) {}
+>()("DeveloperForbidden", {}, Execution.category("forbidden")) {}
 export class DeveloperConflict extends Schema.TaggedError<
 	DeveloperConflict,
 	{ readonly brand: unique symbol }
->()("DeveloperConflict", { reason: Schema.String }) {}
+>()(
+	"DeveloperConflict",
+	{ reason: Schema.String },
+	Execution.category("conflict"),
+) {}
 export class DeveloperUnavailable extends Schema.TaggedError<
 	DeveloperUnavailable,
 	{ readonly brand: unique symbol }

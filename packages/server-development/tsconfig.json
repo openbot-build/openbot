@@ -44,6 +44,9 @@
 			"path": "../protocol"
 		},
 		{
+			"path": "../server-database"
+		},
+		{
 			"path": "../server-kernel"
 		},
 		{

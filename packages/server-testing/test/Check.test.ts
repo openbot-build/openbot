@@ -1,10 +1,12 @@
+import type { Caller } from "@openbot-build/domain/Identity"
+import { Auth, OpenBot } from "@openbot-build/domain/Authorization"
+import { TriggerNotFound } from "@openbot-build/domain/Triggers"
 import { assert, describe, it } from "@effect/vitest"
-import { Authorization, type Caller, TriggersApi } from "@openbot-build/api"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { Effect } from "effect"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { triggerResource } from "@openbot-build/identity-contract/authorization/Resources"
-import * as Policies from "./Policies.ts"
+import * as Policies from "../src/Policies.ts"
 
 const organizationId = "org_checks"
 const alice: Caller = { kind: "member", organizationId, userId: "alice" }
@@ -20,20 +22,20 @@ const aliceTrigger = triggerOf("alice")
 const bobTrigger = triggerOf("bob")
 
 /** An authorizer that gives each member every act on their own things. */
-const layerOwnOnly = Authorizer.layer(Authorization.Auth, {
+const layerOwnOnly = Authorizer.layer(Auth, {
 	policy: () =>
 		Effect.succeed(
-			Policy.define(Authorization.OpenBot)(function* (_) {
+			Policy.define(OpenBot)(function* (_) {
 				yield* _.allow("*", "*", Policies.own)
 			}),
 		),
 })
 
 /** An authorizer that gives every act to everyone. */
-const layerEverything = Authorizer.layer(Authorization.Auth, {
+const layerEverything = Authorizer.layer(Auth, {
 	policy: () =>
 		Effect.succeed(
-			Policy.define(Authorization.OpenBot)(function* (_) {
+			Policy.define(OpenBot)(function* (_) {
 				yield* _.allow("*", "*")
 			}),
 		),
@@ -84,7 +86,7 @@ describe("Check", () => {
 	it.effect("guard hides a resource that the caller may not read", () =>
 		Effect.gen(function* () {
 			const { guard } = yield* checks
-			const hidden = TriggersApi.TriggerNotFound.make({ id: bobTrigger.id })
+			const hidden = TriggerNotFound.make({ id: bobTrigger.id })
 			const error = yield* Effect.flip(
 				guard(
 					alice,

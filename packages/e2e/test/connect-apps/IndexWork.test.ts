@@ -1,3 +1,4 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { AppIndexApi as Api } from "@openbot-build/api"
 import {
@@ -7,9 +8,10 @@ import {
 	Schedule,
 	Schema,
 	String as Str,
+	Layer,
 } from "effect"
 import { Discovery, Store } from "@openbot-build/protocol"
-import { HttpClient } from "effect/http"
+import { HttpClient, FetchHttpClient } from "effect/http"
 import {
 	AppFixture as Fixture,
 	AppIndex,
@@ -57,7 +59,12 @@ const waitFor = (address: string, count: number) =>
 		Effect.map((current) => current.body),
 	)
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"public checks update, retry and withdraw through saved executions",
 		() =>

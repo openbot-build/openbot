@@ -1,4 +1,31 @@
-import { CreditConflict } from "./BillingApi.ts"
+import {
+	OrganizationStorageUnavailable,
+	Organization,
+} from "@openbot-build/domain/Organizations"
+import { Email } from "@openbot-build/domain/Email"
+import { Delivery } from "@openbot-build/domain/Mail"
+import {
+	ModelProvider,
+	Model,
+	CreatePlatformModelRequest,
+	UpdatePlatformModelRequest,
+	CreatePlatformModelProviderRequest,
+	UpdatePlatformModelProviderRequest,
+} from "@openbot-build/domain/Models"
+import {
+	PlatformSettings,
+	UpdatePlatformSettingsRequest,
+} from "@openbot-build/domain/Settings"
+import {
+	ModelPrices,
+	SetModelPriceRequest,
+	ModelPrice,
+	Credits,
+	UpdateCreditsRequest,
+	GrantCreditsRequest,
+	CreditGrant,
+	CreditConflict,
+} from "@openbot-build/domain/Billing"
 import * as ProviderOAuth from "@openbot-build/domain/ProviderOAuth"
 import { Model as CoreModel, Provider } from "@openbot-build/core"
 import { Schema } from "effect"
@@ -9,41 +36,14 @@ import {
 	OpenApi,
 } from "effect/http-api"
 import { AccountAuth, NoStore } from "./AuthApi.ts"
-import { Email } from "./Email.ts"
-import { Delivery } from "./Mail.ts"
 import { Limit } from "./Page.ts"
-import {
-	CreditGrant,
-	Credits,
-	GrantCreditsRequest,
-	ModelPrice,
-	ModelPrices,
-	SetModelPriceRequest,
-	UpdateCreditsRequest,
-} from "./BillingApi.ts"
-import {
-	CreatePlatformModelProviderRequest,
-	CreatePlatformModelRequest,
-	Model,
-	ModelProvider,
-	ModelProviderErrors,
-	UpdatePlatformModelProviderRequest,
-	UpdatePlatformModelRequest,
-} from "./ModelProvidersApi.ts"
-import {
-	Organization,
-	OrganizationStorageUnavailable,
-} from "./OrganizationApi.ts"
+import { ModelProviderErrors } from "./ModelProvidersApi.ts"
 import {
 	GroupRequired,
 	onPlatform,
 	PlatformAuthorize,
 } from "./Authorization.ts"
-import {
-	PlatformSettings,
-	SettingsErrors,
-	UpdatePlatformSettingsRequest,
-} from "./Settings.ts"
+import { SettingsErrors } from "./Settings.ts"
 
 import {
 	PlatformAdmin,
@@ -54,16 +54,6 @@ import {
 	OrganizationNotFound,
 	PlatformUnavailable,
 } from "@openbot-build/domain/Platform"
-export {
-	PlatformAdmin,
-	AddPlatformAdminRequest,
-	UpdatePlatformOrganizationRequest,
-	PlatformAdminNotFound,
-	LastPlatformAdmin,
-	OrganizationNotFound,
-	PlatformUnavailable,
-} from "@openbot-build/domain/Platform"
-
 const errors = [
 	PlatformUnavailable.pipe(HttpApiSchema.status(503)),
 	OrganizationStorageUnavailable.pipe(HttpApiSchema.status(503)),

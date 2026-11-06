@@ -1,13 +1,14 @@
+import type { BotId as BotIdModel } from "@openbot-build/domain/BotId"
+import type { Caller } from "@openbot-build/domain/Identity"
 import type { Config } from "@openbot-build/core"
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { type Authorization } from "@openbot-build/domain"
-import { type Caller } from "@openbot-build/domain"
 import { Context, Effect, Option } from "effect"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 
 type Bot = BotsApi.Bot
 
-type BotId = BotsApi.BotId
+type BotId = BotIdModel
 
 export type Failure =
 	| BotsApi.BotNotFound
@@ -105,7 +106,6 @@ export class Bots extends Context.Service<
 			bot: Bot,
 		) => Effect.Effect<ReadonlyArray<BotId>, BotsApi.BotStorageUnavailable>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/bots/Bots") {}
+>()("@openbot-build/conversation-contract/bots/Bots") {}
 
 export { type Bot, type BotId }

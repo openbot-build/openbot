@@ -1,12 +1,12 @@
+import type { Caller } from "@openbot-build/domain/Identity"
 import { Redacted } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Vaults as VaultsModel } from "@openbot-build/domain"
 
-import { type Caller } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { Hex } from "effect/encoding"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { secretProviderResource } from "@openbot-build/identity-contract/authorization/Resources"
 import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
@@ -15,8 +15,8 @@ import {
 	secretProviders,
 	vaultItems,
 } from "@openbot-build/server-database/Schema"
-import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import { Readers } from "./Readers.ts"
+import { hint, Secrets } from "@openbot-build/server-kernel/Secrets"
+import { Readers } from "@openbot-build/apps-contract/vaults/Readers"
 
 type Provider = VaultsModel.SecretProvider
 type Credentials = VaultsModel.SecretProviderCredentials
@@ -143,8 +143,7 @@ export class SecretProviders extends Context.Service<
 			VaultsModel.SecretProviderNotFound | VaultsModel.VaultsUnavailable
 		>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-vaults/SecretProviders") {}
+>()("@openbot-build/plugin-vaults/SecretProviders") {}
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make

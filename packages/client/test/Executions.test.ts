@@ -1,10 +1,5 @@
 import { assert, it } from "@effect/vitest"
-import {
-	AccountAuth,
-	BotAuth,
-	SessionAuth,
-	AppViewsApi,
-} from "@openbot-build/api"
+import { AppViewsApi, AuthApi } from "@openbot-build/api"
 import { Artifacts as ArtifactData, Execution } from "@openbot-build/domain"
 import { Chat } from "@openbot-build/core"
 import {
@@ -66,14 +61,16 @@ const layer = (handle: (path: string) => Effect.Effect<Response>) =>
 						),
 					),
 				),
-				HttpApiMiddleware.layerClient(BotAuth, ({ request, next }) =>
+				HttpApiMiddleware.layerClient(AuthApi.BotAuth, ({ request, next }) =>
 					next(request),
 				),
-				HttpApiMiddleware.layerClient(AccountAuth, ({ request, next }) =>
-					next(request),
+				HttpApiMiddleware.layerClient(
+					AuthApi.AccountAuth,
+					({ request, next }) => next(request),
 				),
-				HttpApiMiddleware.layerClient(SessionAuth, ({ request, next }) =>
-					next(request),
+				HttpApiMiddleware.layerClient(
+					AuthApi.SessionAuth,
+					({ request, next }) => next(request),
 				),
 			),
 		),

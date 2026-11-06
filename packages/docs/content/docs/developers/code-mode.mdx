@@ -138,11 +138,6 @@ Code, arguments and call results stay sealed in the database. Waiting for an
 approval releases the current Turn's wait through the shared decision log. The
 program keeps running as its own execution, and sends a notice when done.
 
-After an upgrade, old programs keep their IDs, saved results, and App call
-links. You can read them in the same history API. A program with no saved caller
-or checkpoint ends as interrupted. A write with no known result stays unknown.
-Old programs do not run again when you read them.
-
 ### Failure reasons
 
 | `reason`         | Meaning                                                         |

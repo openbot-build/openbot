@@ -1,10 +1,11 @@
+import { DeveloperUnavailable } from "@openbot-build/domain/Developers"
+import { Identity } from "@openbot-build/domain/Identity"
 import { TestCleanup } from "./TestCleanup.ts"
 import { TestCommands } from "./TestCommands.ts"
 import { ProofCommands } from "./ProofCommands.ts"
-import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
-import { DeveloperApi as Api, OpenBotApi } from "@openbot-build/api"
+import * as HttpErrors from "@openbot-build/server-execution/HttpErrors"
+import { OpenBotApi } from "@openbot-build/api"
 
-import { Identity } from "@openbot-build/domain"
 import { Effect, Layer, Option } from "effect"
 import * as HttpMiddleware from "@openbot-build/identity-contract/auth/SessionHttp"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -39,7 +40,7 @@ export const layerPublic = HttpApiBuilder.group(
 							Effect.map(Option.map(ownersOf)),
 							// The Auth service logs the cause of each failure.
 							Effect.catchTag("AuthUnavailable", () =>
-								Effect.fail(Api.DeveloperUnavailable.make({})),
+								Effect.fail(DeveloperUnavailable.make({})),
 							),
 						)
 						const receipt = yield* tests.receive(request.url, owner)

@@ -1,4 +1,4 @@
-import type { Paused } from "@openbot-build/server-execution/execution/Admission"
+import type { Paused } from "@openbot-build/server-execution/Admission"
 import { type Developers, CodeRuns, Execution } from "@openbot-build/domain"
 import * as AppSecrets from "@openbot-build/apps-contract/vaults/AppSecrets"
 import {
@@ -15,15 +15,15 @@ import {
 	String as Str,
 } from "effect"
 import { AppCommands } from "@openbot-build/apps-contract/apps/AppCommands"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
+import { Records } from "@openbot-build/server-kernel/Records"
+import * as Recovery from "@openbot-build/server-execution/Recovery"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import { Observation } from "@openbot-build/server-execution/Observation"
 import {
 	Store,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import * as VaultCode from "@openbot-build/apps-contract/vaults/CodeMode"
 import { CodeCommands } from "@openbot-build/apps-contract/code/CodeCommands"
 import { programStep } from "./CodeCommands.ts"
@@ -74,8 +74,7 @@ export interface Service {
 }
 
 export class CodeProgram extends Context.Service<CodeProgram, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-code/CodeProgram",
+	"@openbot-build/plugin-code/CodeProgram",
 ) {}
 
 const make = Effect.gen(function* () {

@@ -10,9 +10,7 @@
 		"src"
 	],
 	"exports": {
-		".": "./dist/index.js",
-		"./HttpMounts": "./dist/HttpMounts.js",
-		"./Triggers": "./dist/Triggers.js"
+		".": "./dist/index.js"
 	},
 	"scripts": {
 		"build": "tsdown",

@@ -1,11 +1,19 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { Bot } from "@openbot-build/domain/Bots"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
 import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
-import { BotsApi, UserTokensApi } from "@openbot-build/api"
-import { Effect, String as Str } from "effect"
+import { Effect, String as Str, Layer } from "effect"
 const { message, view } = Messages
 type Send = Messages.Send
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"Bot names lose outer spaces, and a direct Chat has no title",
 		() =>
@@ -24,7 +32,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						role: "Writes text",
 						instructions: "Write short text.",
 					}),
-					Caller.json(BotsApi.Bot, 201),
+					Caller.json(Bot, 201),
 				)
 				assert.strictEqual(created.name, "Writer")
 				const botPath = "/v1/bots/" + created.id
@@ -47,7 +55,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						expected: created.revision,
 						name: " Editor ",
 					}),
-					Caller.json(BotsApi.Bot, 200),
+					Caller.json(Bot, 200),
 				)
 				assert.strictEqual(second.name, "Editor")
 
@@ -56,14 +64,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					account(alice.session, "/v1/user/tokens", "POST", {
 						name: "Names",
 					}),
-					Caller.json(UserTokensApi.CreatedToken),
+					Caller.json(CreatedToken),
 				)
 				const keyedRename = yield* Effect.flatMap(
 					keyed(secret, botPath, "PATCH", {
 						expected: second.revision,
 						name: "  Planner  ",
 					}),
-					Caller.json(BotsApi.Bot, 200),
+					Caller.json(Bot, 200),
 				)
 				assert.strictEqual(keyedRename.name, "Planner")
 

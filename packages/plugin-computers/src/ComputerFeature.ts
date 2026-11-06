@@ -1,6 +1,9 @@
 import { Context, Effect, Layer, Record as Rec, Scope } from "effect"
 import type { Gate } from "@openbot-build/conversation-contract/capabilities/Gate"
-import { BotFeatures } from "@openbot-build/conversation-contract/chats/BotFeatures"
+import {
+	BotFeatures,
+	wait,
+} from "@openbot-build/conversation-contract/chats/BotFeatures"
 import * as ComputerTools from "./ComputerTools.ts"
 
 /** The id that Turn journals keep. Never change it. */
@@ -23,6 +26,7 @@ export const contribute = Effect.gen(function* () {
 		build: "normal",
 		review: false,
 		restores: Rec.values(ComputerTools.names),
+		missing: wait(),
 		settings: Effect.succeed(null),
 		prepare: () =>
 			ComputerTools.make.pipe(

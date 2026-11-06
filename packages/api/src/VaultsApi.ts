@@ -1,30 +1,9 @@
-import { BotId } from "@openbot-build/domain"
+import { BotId } from "@openbot-build/domain/BotId"
 import {
 	VaultId,
 	VaultItemId,
 	SecretProviderId,
 	Vault,
-	VaultItem,
-	VaultAccess,
-	VaultNotFound,
-	VaultItemNotFound,
-	SecretProviderNotFound,
-	SecretProviderFailed,
-	SecretProviderInUse,
-	VaultConflict,
-	VaultInvalid,
-	VaultsUnavailable,
-} from "@openbot-build/domain/Vaults"
-export {
-	VaultId,
-	VaultItemId,
-	SecretProviderId,
-	VaultOwner,
-	Vault,
-	VaultItemName,
-	VaultFieldName,
-	VaultItemSource,
-	VaultExit,
 	VaultItem,
 	VaultAccess,
 	VaultNotFound,
@@ -60,19 +39,6 @@ import {
 	CreateVaultItemRequest,
 	UpdateVaultItemRequest,
 } from "@openbot-build/domain/Vaults"
-export {
-	SecretProviderCredentials,
-	SecretProviderKind,
-	SecretProviderCredentialsView,
-	SecretProvider,
-	CreateSecretProviderRequest,
-	UpdateSecretProviderRequest,
-	CreateVaultRequest,
-	UpdateVaultRequest,
-	CreateVaultItemRequest,
-	UpdateVaultItemRequest,
-} from "@openbot-build/domain/Vaults"
-
 export const VaultErrors = [
 	...AuthorizationErrors,
 	VaultNotFound.pipe(HttpApiSchema.status(404)),

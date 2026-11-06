@@ -1,3 +1,6 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
@@ -26,30 +29,28 @@ import {
 	Machine,
 	Provider,
 	ComputerCallFailed,
-} from "@openbot-build/plugin-computers/Computer"
+} from "@openbot-build/apps-contract/computers/Computer"
 import { ComputerProviders } from "@openbot-build/plugin-computers/ComputerProviders"
-import { Drivers } from "@openbot-build/plugin-computers/Drivers"
+import { Drivers } from "@openbot-build/apps-contract/computers/Drivers"
 import * as Lifecycle from "@openbot-build/plugin-computers/Lifecycle"
 import * as LifecycleWorkflow from "@openbot-build/plugin-computers/LifecycleWorkflow"
 import * as Maintenance from "@openbot-build/plugin-computers/Maintenance"
 import * as MaintenanceWorkflow from "@openbot-build/plugin-computers/MaintenanceWorkflow"
-import { Connectors } from "@openbot-build/plugin-computers/connector/Connectors"
+import { Connectors } from "@openbot-build/plugin-computers/Connectors"
 import * as Db from "@openbot-build/server-database/Database"
-import { DatabasePostgres as Database } from "@openbot-build/openbot"
 import {
 	computerProviders,
 	computers,
 	computerUsage,
 	executions,
 } from "@openbot-build/server-database/Schema"
-import * as Calls from "@openbot-build/server-execution/execution/Calls"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
+import * as Calls from "@openbot-build/server-execution/Calls"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Postgres from "./PostgresTest.ts"
+import * as Observation from "@openbot-build/server-execution/Observation"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Records from "@openbot-build/server-kernel/Records"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 
 class Allowed extends Context.Service<Allowed, Ref.Ref<boolean>>()(
 	"@openbot-build/server-testing/test/ComputerLifecycle.test/Allowed",
@@ -57,11 +58,11 @@ class Allowed extends Context.Service<Allowed, Ref.Ref<boolean>>()(
 class Sends extends Context.Service<Sends, Ref.Ref<ReadonlyArray<string>>>()(
 	"@openbot-build/server-testing/test/ComputerLifecycle.test/Sends",
 ) {}
-const database = Layer.effectDiscard(Database.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(Postgres.start, (db) =>
-				Database.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),

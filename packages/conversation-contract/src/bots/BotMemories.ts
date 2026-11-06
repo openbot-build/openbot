@@ -1,7 +1,7 @@
-import { Bots as BotsApi } from "@openbot-build/domain"
+import type { BotId } from "@openbot-build/domain/BotId"
 
 /** One memory pool: the Bot and its organization. */
 export interface Home {
 	readonly organizationId: string
-	readonly bot: BotsApi.BotId
+	readonly bot: BotId
 }

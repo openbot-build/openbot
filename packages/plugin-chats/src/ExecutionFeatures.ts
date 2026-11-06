@@ -1,5 +1,5 @@
 import type * as WorkflowTools from "@openbot-build/apps-contract/apps/WorkflowTools"
-import type { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
+import type { Definition } from "@openbot-build/tools-contract/ToolDefinitions"
 import { Bot, Chat } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
 import {
@@ -15,8 +15,8 @@ import * as Approvals from "@openbot-build/conversation-contract/capabilities/Ap
 import * as Gate from "@openbot-build/conversation-contract/capabilities/Gate"
 import type { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
-import * as Registration from "@openbot-build/tools-contract/plugins/Registration"
-import type { Fence } from "@openbot-build/server-execution/execution/Store"
+import * as Registration from "@openbot-build/tools-contract/Registration"
+import type { Fence } from "@openbot-build/server-execution/Store"
 import * as ChatFeatures from "./ChatFeatures.ts"
 
 /** The input to give back one saved tool. A host tool keeps the scope of its own registration. */
@@ -44,7 +44,8 @@ export interface Service {
 	/**
 	 * Holds the pinned features of a Turn for the phase scope, and builds their
 	 * tools for this fence with one Gate. A pinned feature with a new version
-	 * fails with a conflict.
+	 * fails with a conflict. An absent feature follows the `missing` policy of
+	 * its pin, and fails with `FeatureMissing` when its wait ends.
 	 */
 	readonly open: (
 		fence: Fence,
@@ -52,7 +53,7 @@ export interface Service {
 		pins: ReadonlyArray<BotFeatures.Pin>,
 	) => Effect.Effect<
 		typeof ChatFeatures.ChatFeatures.Service,
-		Execution.Conflict,
+		Execution.Conflict | BotFeatures.FeatureMissing,
 		Scope.Scope
 	>
 	readonly restoreTool: (
@@ -74,8 +75,7 @@ export interface Service {
 export class ExecutionFeatures extends Context.Service<
 	ExecutionFeatures,
 	Service
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-chats/ExecutionFeatures") {}
+>()("@openbot-build/plugin-chats/ExecutionFeatures") {}
 
 const make = Effect.gen(function* () {
 	const features = yield* BotFeatures.BotFeatures
@@ -106,6 +106,13 @@ const make = Effect.gen(function* () {
 						}),
 						Effect.andThen(Execution.Conflict.make({ id: fence.id })),
 					),
+				),
+				Effect.tapError((error) =>
+					error._tag === "BotFeatureMissing"
+						? Effect.logWarning(
+								"A Turn waited for bot features that are not on the server.",
+							).pipe(Effect.annotateLogs({ features: error.ids }))
+						: Effect.void,
 				),
 			)
 			const gate = yield* gates.durable(fence, frame)

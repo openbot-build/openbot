@@ -30,33 +30,31 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 是同一个程序的 Effect 形式，供你自己运行。请把 `NodeServices.layer` 和
 `NodeCrypto.layer` 交给它。
 
-`EnvironmentConfiguration.load`
-给出同样的设置：`host`、`port`、`databaseUrl`、`secretKeys`、`clusterSecret`、`clusterHost`
-和 `outboundAllow`。你也可以在代码中直接写出这些值。
+`Launch.settings`
+读取同样的设置：`host`、`port`、`databaseUrl`、`secretKeys`、`clusterSecret`、`clusterHost`、`outboundAllow`
+和 `pluginsFile`。你也可以在代码中直接写出这些值。
 
 这个程序仍然需要一个平台。在用户使用之前，先运行一次设置程序。请看[平台](/zh-cn/platform#设置)。
 
 ## 包导出了什么
 
-| 导出                                                         | 是什么                                                                                    |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `Host.layer(options)`                                        | 带有自己的 Node.js HTTP 服务器的 OpenBot。`openbot-server` 运行它。                       |
-| `Host.layerApp(options)`                                     | OpenBot 的路由和服务，用于你已有的 HTTP 服务器。                                          |
-| `Host.Options`、`Host.AppOptions`                            | `Host.layer` 和 `Host.layerApp` 的选项。请看[选项](#选项)。                               |
-| `Host.Outside`、`Host.RouteServices`、`Host.StartupServices` | 外部服务、你的路由可以使用的服务，以及启动时的工作可以使用的服务。                        |
-| `Launch.main(make)`、`Launch.server(make)`                   | 像 `openbot-server` 一样运行 `make` 给出的 Layer。                                        |
-| `Preset`                                                     | OpenBot 的插件的 ID、一开始关闭的 ID（`offByDefault`），以及必须处于活动状态的插件的 ID。 |
-| `Wallets`                                                    | 额度操作的服务。你的路由可以使用它。                                                      |
-| `HostTools`                                                  | 你的程序交给每个 Chat 的工具。请看[添加工具](#添加工具)。                                 |
-| `DatabasePostgres`                                           | 数据库 Layer 和 `migrate` 程序。                                                          |
-| `EnvironmentConfiguration`                                   | 从环境变量读取实例设置。                                                                  |
-| `Auth`、`AppHost`、`AppTools`、`Configuration`               | 用于高级配置的服务类型。                                                                  |
+这个包导出四个命名空间和几个程序（`openbot-server`、`openbot-migrate`、`openbot-setup`
+和 `openbot-inspect`）。它不导出其他内容。
 
-包 `@openbot-build/server-development` 含有开发服务器。见
-[运行开发服务器](#运行开发服务器)。包 `@openbot-build/server-testing`
-以 TypeScript 源码的形式提供测试辅助工具。请看[在代码中测试服务器](/zh-cn/developers/testing#在代码中测试服务器)。子路径
-`@openbot-build/openbot/Parts`
-把主机的内部部件交给这两个包。它不是稳定的 API，任何版本都可能改变它。
+| 导出                                                         | 是什么                                                                                                   |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `Host.layer(options)`                                        | 带有自己的 Node.js HTTP 服务器的 OpenBot。`openbot-server` 运行它。                                      |
+| `Host.layerApp(options)`                                     | OpenBot 的路由和服务，用于你已有的 HTTP 服务器。                                                         |
+| `Host.Options`、`Host.AppOptions`                            | `Host.layer` 和 `Host.layerApp` 的选项。请看[选项](#选项)。                                              |
+| `Host.routes(work)`、`Host.startup(work)`                    | 你自己的路由和启动时的工作，以及它们需要的插件服务。请看[你自己的路由](#你自己的路由)。                  |
+| `Host.Outside`、`Host.RouteServices`、`Host.StartupServices` | 外部服务，以及你的路由和启动时的工作可以使用的宿主服务。                                                 |
+| `Launch.main(make)`、`Launch.server(make)`                   | 像 `openbot-server` 一样运行 `make` 给出的 Layer。                                                       |
+| `Launch.settings`、`Launch.Settings`                         | 从环境变量和机密文件读取服务器的设置，以及这些设置的类型。                                               |
+| `Launch.StartFailed`                                         | 启动失败时的错误。请看[插件宿主](#插件宿主)。                                                            |
+| `Preset`                                                     | OpenBot 的插件表（`plugins`）、它给加载器的条目（`entries`），以及必须处于活动状态的插件（`required`）。 |
+| `Wallets`                                                    | 额度操作的服务（`Wallets.Wallets`）。你的路由可以使用它。                                                |
+
+开发服务器（`@openbot-build/server-development`）和测试辅助工具（`@openbot-build/server-testing`）只基于这些导出构建。请看[运行开发服务器](#运行开发服务器)和[在代码中测试服务器](/zh-cn/developers/testing#在代码中测试服务器)。
 
 ---
 
@@ -89,34 +87,24 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 `Host.layer` 的 `auth` 选项给出一份登录配置。服务器启动时，会把 `auth`
 的公开源、登录密钥和提供方写入平台设置。之后它和没有 `auth`
 时一样工作，所以之后对平台设置的修改也会立即生效。当 `auth`
-处于开发模式时，服务器使用本地测试账户。测试和开发服务器使用这个选项。还有两个选项和
-`auth` 一起使用：`platformAdmins` 给出新平台的平台管理员，`fileStorage`
-给出文件的对象存储。每个服务器都会把应用的服务交给你的程序，所以测试可以使用它们。
+处于开发模式时，服务器使用本地测试账户，并且把它的 App
+Index 和公共 Index 分开。测试和开发服务器使用这个选项。还有两个选项和 `auth`
+一起使用：`platformAdmins` 给出新平台的平台管理员，`fileStorage`
+给出文件的对象存储。
 
 ### 应用选项
 
-| 选项                         | 作用                                                                                                                       |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `builtinModels`              | 在代码中给出、每个组织都能使用的模型。请看[模型](/zh-cn/models#内置模型)。                                                 |
-| `builtinModels.defaultModel` | 当新 Chat 的 Bot 没有指定模型时，这个 Chat 使用的模型。它是 `builtinModels` 中的一个。只有模拟的平台设置它。               |
-| `routes`                     | 一个带有你自己 HTTP 路由的 Layer。                                                                                         |
-| `indexSources`               | App Index 搜索的更多来源，与 OpenBot Index 并列。                                                                          |
-| `indexWork`                  | App Index 后台任务的时间设置：`{ intervalMs, retryMs }`。                                                                  |
-| `startup`                    | 一个 Layer，带有服务器启动时运行的工作。                                                                                   |
-| `mailTransport`              | 一个带有你自己邮件服务的 Layer。默认用 SMTP 发送邮件。                                                                     |
-| `hostTools`                  | 你的程序交给每个 Chat 的工具。请看[添加工具](#添加工具)。                                                                  |
-| `outside`                    | 一个带有外部服务的 Layer。它的错误和它需要的服务会进入服务器 Layer 的类型。请看[OpenBot 需要的服务](#openbot-需要的服务)。 |
+| 选项        | 作用                                                                                                                                           |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entries`   | 插件加载器的条目。默认是 `Preset.entries`。测试可以在这里加入自己的插件。                                                                      |
+| `plugins`   | 条目可以按模块名使用的更多插件。预设中的插件优先。                                                                                             |
+| `hostTools` | 你的程序交给每个 Chat 的工具。请看[添加工具](#添加工具)。                                                                                      |
+| `outside`   | 一个带有外部服务的 Layer，用来代替真实的服务。它的错误和它需要的服务会进入服务器 Layer 的类型。请看[OpenBot 需要的服务](#openbot-需要的服务)。 |
+| `work`      | 你自己的路由和启动时的工作。每一项都用 `Host.routes` 或 `Host.startup` 创建。请看[你自己的路由](#你自己的路由)。                               |
 
-有些值以前是选项。现在它们是数据库中的设置，所以每个实例都共享它们：
-
-| 旧选项                | 设置                                                         |
-| --------------------- | ------------------------------------------------------------ |
-| `appRestrictions`     | [平台设置](/zh-cn/platform#平台设置)中的 `appRestrictions`。 |
-| `appReadRules`        | [组织设置](/zh-cn/organization#设置)中的 `appReadRules`。    |
-| `bots.helperModel`    | 组织设置中的 `rulesModel` 和 `botMemoryModel`。              |
-| `bots.requestTimeout` | 组织设置中的 `requestTimeoutMs`。                            |
-| `bots.memory`         | 组织设置中的 `botMemory`。                                   |
-| `appEncryptionKey`    | 实例选项 `secretKeys`。                                      |
+每个实例共享的值是数据库中的设置，不是选项。App
+Index 后台任务的时间设置是插件文件中 `apps`
+插件的配置：`{ intervalMs, retryMs }`。请看[插件](/zh-cn/plugins)。
 
 ---
 
@@ -125,34 +113,35 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 `Host.layer` 和 `Host.layerApp`
 会构建 OpenBot 需要的服务，但不构建平台服务。你的程序可以通过两个选项，用自己的服务代替默认的服务。这样测试可以交给它们假的服务，你的程序也可以交给它们自己的服务。
 
-| 服务                       | 是什么                                                                                                                           | 默认                                                                                 |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| 共享服务                   | 数据库连接池、密钥和共享设置。                                                                                                   | 由 `databaseUrl` 和 `secretKeys` 构建。                                              |
-| 外部服务（`Host.Outside`） | Computer 提供方的驱动、Live 后端、密码管理器的读取器、App 的网络和检查、域名的 DNS 检查、App Index 的公共网络，以及 App 的发现。 | 真实的服务，使用进程的网络和出站保护的地址规则。选项 `outside`。                     |
-| 宿主工具（`HostTools`）    | 你的程序交给每个 Chat 的工具。                                                                                                   | `HostTools.none`。选项 `hostTools`。                                                 |
-| 平台服务                   | 文件、路径、随机数、摘要和 HTTP 客户端。                                                                                         | 没有。请交给它 `NodeServices.layer`、`NodeCrypto.layer` 和 `FetchHttpClient.layer`。 |
+| 服务                        | 是什么                                                                                                                                    | 默认                                                                                 |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 共享服务                    | 数据库连接池、密钥和共享设置。                                                                                                            | 由 `databaseUrl` 和 `secretKeys` 构建。                                              |
+| 外部服务（`Host.Outside`）  | Computer 提供方的驱动、Live 后端、密码管理器的读取器、App 的网络和检查、域名的 DNS 检查、App Index 的公共网络、App 的发现，以及邮件发送。 | 真实的服务，使用进程的网络和出站保护的地址规则。邮件用 SMTP 发送。选项 `outside`。   |
+| 内置模型（`BuiltinModels`） | 在代码中给出、每个组织都能使用的模型。请看[模型](/zh-cn/models#内置模型)。它也是外部服务。                                                | 没有。在 `outside` Layer 中给出 `Layer.succeed(BuiltinModels, models)`。             |
+| 宿主工具（`HostTools`）     | 你的程序交给每个 Chat 的工具。                                                                                                            | `HostTools.none`。选项 `hostTools`。                                                 |
+| 平台服务                    | 文件、路径、随机数、摘要和 HTTP 客户端。                                                                                                  | 没有。请交给它 `NodeServices.layer`、`NodeCrypto.layer` 和 `FetchHttpClient.layer`。 |
+
+`outside`
+Layer 可以只给出一部分外部服务。对于它没有给出的每个服务，宿主保留真实的服务。`outside`
+Layer 可以使用共享服务，例如设置和数据库连接池。
 
 `Launch.main` 提供平台服务。下面的程序和 `Launch.main(Host.layer)`
 做的事情相同，只是写出了宿主工具：
 
 ```ts
-import { Host, HostTools, Launch } from "@openbot-build/openbot"
+import { Host, Launch } from "@openbot-build/openbot"
+import * as HostTools from "@openbot-build/tools-contract/HostTools"
 
 Launch.main((settings) =>
 	Host.layer({ ...settings, hostTools: HostTools.none }),
 )
 ```
 
-选项
-`chats`、`discovery`、`computerDrivers`、`liveBackends`、`vaultReaders`、`appProbe`、`appNetwork`、`domainControl`
-和 `indexPublicNetwork` 已经不再存在。请改为在 `outside`
-Layer 中交给对应的服务。
-
 ---
 
 ## Chats
 
-模型来自数据库中的模型提供方和 `builtinModels`。请看[模型](/zh-cn/models)。
+模型来自数据库中的模型提供方和 `BuiltinModels` 服务。请看[模型](/zh-cn/models)。
 [Bot 记忆](/zh-cn/developers/memory)遵循[组织设置](/zh-cn/organization#设置)中的
 `botMemory`。
 
@@ -165,7 +154,8 @@ Layer 中交给对应的服务。
 接收 Chat 的 ID，并给出它的 Turn 使用的处理器。每个 Turn 在开始时构建它们，在结束时关闭它们。
 
 ```ts
-import { Host, HostTools, Launch } from "@openbot-build/openbot"
+import { Host, Launch } from "@openbot-build/openbot"
+import * as HostTools from "@openbot-build/tools-contract/HostTools"
 import { DateTime, Effect, Schema } from "effect"
 import { Tool, Toolkit } from "effect/ai"
 
@@ -196,21 +186,43 @@ Launch.main((settings) =>
 
 ## 你自己的路由
 
-`routes` 向同一个服务器添加 HTTP 路由。它是一个 Layer。这个 Layer 可以用 `Auth`
-服务检查登录 cookie，也可以用 `Wallets` 服务进行额度操作。`Host.RouteServices`
-列出它可以使用的每个服务。
+`Host.routes`
+向同一个服务器添加 HTTP 路由。它接受一个名字、路由需要的插件服务的键（`inject`），以及一个带有路由的 Layer。这个 Layer 可以使用
+`inject` 中的服务，以及 `Host.RouteServices`
+中的宿主服务：路由器、数据库连接池、设置和速率限制。例如，注入 `Auth`
+来检查登录 cookie，注入 `Wallets.Wallets` 来进行额度操作。
 
 ```ts
+import { Host, Launch, Wallets } from "@openbot-build/openbot"
+import { Effect, Layer } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/http"
 
-const routes = HttpRouter.add(
-	"GET",
-	"/status",
-	HttpServerResponse.text("ready"),
-)
+const origin = Host.routes({
+	name: "origin",
+	inject: [Wallets.Wallets],
+	layer: Layer.unwrap(
+		Effect.map(Wallets.Wallets, (wallets) =>
+			HttpRouter.add(
+				"GET",
+				"/origin",
+				Effect.map(wallets.publicOrigin, (text) =>
+					HttpServerResponse.text(text),
+				).pipe(Effect.orDie),
+			),
+		),
+	),
+})
 
-Host.layer({ ...settings, routes })
+Launch.main((settings) => Host.layer({ ...settings, work: [origin] }))
 ```
+
+这些路由是宿主的一个 fork。fork 是插件宿主中独立启动和停止的一部分。当 `inject`
+中的每个键都出现时，它挂载这些路由。当提供其中某个键的插件重新启动时，这个 fork 会移除这些路由，再用新的服务重新挂载它们。所以这些路由总是使用正在运行的服务。如果某个键一直没有出现，例如插件文件关闭了它的插件，服务器就不会启动。
+
+`Host.startup`
+添加服务器启动时运行的工作，例如为一个 App 建立索引。它接受同样的三个值。它的 Layer 可以使用
+`inject` 中的服务和 `Host.StartupServices`
+中的服务。它和路由存在同样长的时间；当提供其中某个键的插件重新启动时，它会再次运行。
 
 不要使用 `/auth/` 或 `/v1/` 下的路径。它们属于 OpenBot。
 
@@ -228,33 +240,36 @@ OpenBot 用一个单独的路由器来服务这些路由。这个 Layer 里的�
 `/health` 外的每个路由都返回 `503` 和 `SetupRequired`。`Host.layerApp`
 没有这个检查。请把同样的检查作为路由器中间件加入你的服务器。`Host.layer`
 如何做到这一点，请读
-`packages/openbot/src/app/Serving.ts`。把登录密钥放在平台设置中，不要放在你自己的环境变量里。每个实例都必须使用同一个登录密钥。
+`packages/openbot/src/Serving.ts`。把登录密钥放在平台设置中，不要放在你自己的环境变量里。每个实例都必须使用同一个登录密钥。
 
 ## 插件宿主
 
 `Host.layer` 和 `Host.layerApp`
 在插件宿主上运行 OpenBot。每个功能都是一个插件。插件宿主见[执行设计](/zh-cn/architecture)。
 
-每个插件都处于活动状态后，这个 Layer 才就绪。启动失败会像以前一样停止进程：Layer 带着错误终止，例如
-`RequiredPluginMissing` 或
-`PluginsInactive`。错误列出没有处于活动状态的插件。插件失败的完整原因在错误记录中。
+每个插件和 `work`
+的每个 fork 都处于活动状态后，这个 Layer 才就绪。启动失败时，Layer 以
+`Launch.StartFailed` 失败。它的 `reason` 是
+`RequiredPluginMissing`、`PluginsInactive`、`PluginsFileInvalid` 或
+`PluginsFileUnreadable`。它的 `message` 列出相关的插件或问题，它的 `cause`
+保存完整的错误。插件失败的完整原因在错误记录中。`Launch.main`
+记录这个失败并停止进程。
 
-这些 Layer 交给你的程序的服务，是启动时各插件的服务。插件之后重新启动时，你手中的副本不会改变。
-
-因为有这个副本，`Host.layer` 和 `Host.layerApp`
-需要每个提供服务的插件都打开。限制插件不提供服务，所以它们可以关闭。当
-`pluginsFile` 关闭一个插件时，Layer 以 `CaptureMissing` 终止。`openbot-server`
-程序运行同样的服务器但没有这个副本，所以插件文件可以在那里关闭插件。参见[插件](/zh-cn/plugins)。
+这些 Layer 提供宿主的服务，例如数据库连接池和设置，但不提供任何插件的服务。需要某个插件服务的工作是
+`work`
+中的一个 fork，并且写出它需要的键。所以插件文件可以关闭任何不是必需的插件，在
+`Host.layer` 中也一样。请同时关闭需要它的插件：例如，没有 `bots` 时，也要关闭
+`chats` 和每个注入 `bots`
+服务的其他插件。如果一个插件等待的服务没有任何插件提供，启动就会停止。参见[插件](/zh-cn/plugins)。
 
 ---
 
 ## 迁移数据库
 
-`DatabasePostgres.migrate`
-准备表结构和初始数据门禁。它只能将空数据库标记为就绪。完整升级使用维护命令，需要
-`OPENBOT_DATABASE_URL` 和
-`OPENBOT_SECRET_KEYS`。运行前停止所有实例。`Host.layer` 和 `Host.layerApp`
-在启动服务前检查表结构和已完成的数据版本。它们在服务器的整个生命周期内持有共享锁。备份和恢复步骤见
+`openbot-migrate` 程序运行 `server-database`
+的所有迁移，然后检查表结构。它只需要
+`OPENBOT_DATABASE_URL`。运行前停止所有实例。`Host.layer` 和 `Host.layerApp`
+在启动服务前检查表结构。这个版本需要新数据库：当数据库中有旧版本的数据时，迁移会以错误停止。见
 [部署](/zh-cn/deploy#准备数据库)。
 
 ```sh
@@ -276,8 +291,8 @@ NodeRuntime.runMain(Development.launch)
 `Development.launch` 读取与 `Launch.main` 相同的设置，以及
 `OPENBOT_DEV_PUBLIC_ORIGIN`。设置了 `OPENBOT_DEV_S3_*`
 变量时，它会把这个本地对象存储用于文件，并创建存储桶。`Development.layer`
-是没有这些步骤的服务器。它需要平台服务，例如
-`NodeServices.layer`、`NodeCrypto.layer` 和
+是没有这些步骤的服务器。它是带有模拟外部服务、模拟模型，以及模拟 App 的路由和启动工作的
+`Host.layer`。它需要平台服务，例如 `NodeServices.layer`、`NodeCrypto.layer` 和
 `FetchHttpClient.layer`，`Development.launch`
 会提供它们。它自己写入平台设置，所以它不需要设置程序。`Development.developmentSecret`
 用第一个机密密钥生成登录密钥，所以重启后它保持不变。`pnpm dev` 从包

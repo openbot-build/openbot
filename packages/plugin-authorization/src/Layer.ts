@@ -1,7 +1,7 @@
+import { AccountCaller } from "@openbot-build/domain/Identity"
 import { Authorization as HttpAuthorization } from "@openbot-build/api"
 import { Authorization } from "@openbot-build/domain"
 
-import { AccountCaller } from "@openbot-build/domain"
 import { Authorizer } from "@nmnmcc/ability"
 import * as AbilityHttpApi from "@nmnmcc/ability/HttpApi"
 import { Effect, Layer, Schema } from "effect"

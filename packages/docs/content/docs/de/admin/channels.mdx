@@ -75,15 +75,6 @@ Schließen des Ereignisstroms bricht die Löschung nicht ab. Ein ausdrücklicher
 Abbruch lässt den Channel ausgeschaltet. Eine spätere Änderung kann ihn
 einschalten.
 
-Nach einem Daten-Upgrade kann ein alter Channel `needsAuthorization: true`
-zeigen. Einstellungen, Geheimnisse, Links und Verlauf bleiben erhalten. Auch
-`enabled` bleibt gleich. Der Channel nimmt aber keine Eingaben an und startet
-keine Sende- oder Beobachtungsaufgaben. Ein Administrator muss eine Änderung
-speichern oder das Geheimnis wechseln. Das setzt einen neuen Aufrufer mit
-aktuellen Rechten und löscht `needsAuthorization`. Alte Arbeit mit unbekanntem
-Ergebnis wartet weiter auf eine Entscheidung. Neue Einstellungen spielen sie
-nicht erneut ab.
-
 ### Slack
 
 `credentials`:
@@ -127,5 +118,3 @@ Member-Rechte, wenn ein Channel nach einer Rechteänderung stoppt.
 Eingaben, Antworten und Karten haben Ausführungsdatensätze. Ein unbekanntes
 Sendeergebnis wartet auf eine Entscheidung über die Ausführungs-API. Prüfe die
 Plattform vor einem neuen Versuch. Ein Neustart trifft diese Entscheidung nicht.
-Alte Channel-Queue-Daten müssen vor dem Start des neuen Servers die
-Datenumwandlung im Wartungsfenster durchlaufen.

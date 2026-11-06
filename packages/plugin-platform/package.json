@@ -12,8 +12,6 @@
 	"exports": {
 		".": "./dist/index.js",
 		"./Administration": "./dist/Administration.js",
-		"./HttpHandlers": "./dist/HttpHandlers.js",
-		"./HttpMounts": "./dist/HttpMounts.js",
 		"./PlatformAdminsPostgres": "./dist/PlatformAdminsPostgres.js",
 		"./Setup": "./dist/Setup.js",
 		"./SetupFile": "./dist/SetupFile.js"
@@ -40,6 +38,7 @@
 	"devDependencies": {
 		"@effect/platform-node": "4.1.2",
 		"@effect/vitest": "4.1.2",
+		"@nmnmcc/ability": "3.2.0",
 		"vitest": "5.0.5"
 	},
 	"repository": {

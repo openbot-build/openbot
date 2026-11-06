@@ -1,11 +1,11 @@
 /** The apps plugin: App connections, the App Index, App tools of Bots, and the tools of App developers. */
+import { IndexStore } from "@openbot-build/protocol"
 import { PgClient } from "@effect/sql-pg"
 import { Authorization } from "@openbot-build/domain"
-import { App, Discovery, Index, Network } from "@openbot-build/protocol"
+import { App, Discovery, Network } from "@openbot-build/protocol"
 import { Layer } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
 import { SqlClient } from "effect/sql"
-import { AppApprovals } from "@openbot-build/apps-contract/apps/AppApprovals"
 import { AppCommands } from "@openbot-build/apps-contract/apps/AppCommands"
 import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import { IndexWork } from "@openbot-build/apps-contract/apps/IndexWork"
@@ -20,22 +20,21 @@ import { InputCommands } from "@openbot-build/conversation-contract/chats/InputC
 import { OpenWork } from "@openbot-build/conversation-contract/chats/OpenWork"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import { Auth } from "@openbot-build/identity-contract/auth/Auth"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
-import { Runner } from "@openbot-build/server-execution/execution/Runner"
-import { RunScope } from "@openbot-build/server-execution/execution/RunScope"
-import { Store } from "@openbot-build/server-execution/execution/Store"
-import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
-import { ImportedRecords } from "@openbot-build/server-execution/imported/ImportedRecords"
-import { Transport as ResourceTransport } from "@openbot-build/server-execution/resources/Transport"
-import { DomainControl } from "@openbot-build/server-kernel/apps/DomainControl"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import { Observation } from "@openbot-build/server-execution/Observation"
+import { Runner } from "@openbot-build/server-execution/Runner"
+import { RunScope } from "@openbot-build/server-execution/RunScope"
+import { Store } from "@openbot-build/server-execution/Store"
+import { Workflows } from "@openbot-build/server-execution/Workflows"
+import { Transport as ResourceTransport } from "@openbot-build/server-execution/Transport"
+import { DomainControl } from "@openbot-build/server-kernel/DomainControl"
+import { InstanceSettings } from "@openbot-build/server-kernel/InstanceSettings"
+import { Records } from "@openbot-build/server-kernel/Records"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import * as Feature from "@openbot-build/server-plugin/Feature"
 import * as ActionPolicy from "./ActionPolicy.ts"
-import * as AppApprovalsLayer from "./AppApprovals.ts"
 import * as AppCommandsLayer from "./AppCommands.ts"
 import * as AppFeature from "./AppFeature.ts"
 import * as AppHost from "./AppHost.ts"
@@ -69,9 +68,10 @@ import * as HttpMounts from "./HttpMounts.ts"
 import * as AppIndex from "./AppIndex.ts"
 import * as IndexRequestWorkflow from "./IndexRequestWorkflow.ts"
 import * as IndexWorkflow from "./IndexWorkflow.ts"
+import * as IndexTiming from "./IndexWork.ts"
 import * as Layers from "./Layers.ts"
 import * as Lifecycle from "./Lifecycle.ts"
-import * as Probe from "./Probe.ts"
+import { Probe } from "@openbot-build/apps-contract/apps/Probe"
 import * as ProofCommands from "./ProofCommands.ts"
 import * as ProofWorkflow from "./ProofWorkflow.ts"
 import * as ResetCommands from "./ResetCommands.ts"
@@ -85,7 +85,6 @@ import * as Views from "./Views.ts"
 /** The services of Apps, the App Index and the developer tools. */
 const apps = [
 	ActionPolicy.ActionPolicy,
-	AppApprovals,
 	AppCommands,
 	AppHost.AppHost,
 	AppIndex.PublicIndex,
@@ -108,7 +107,7 @@ const apps = [
 	Experience.Experience,
 	Governance.Governance,
 	GrantCleanup.GrantCleanup,
-	Index.IndexStore,
+	IndexStore.IndexStore,
 	IndexWork,
 	Lifecycle.Lifecycle,
 	ProofCommands.ProofCommands,
@@ -118,13 +117,14 @@ const apps = [
 	Views.Views,
 ] as const
 
-export default Feature.make("@openbot-build/plugin-apps")
+export default Feature.make("@openbot-build/plugin-apps", {
+	config: { schema: IndexTiming.Config, key: IndexTiming.Timing },
+})
 	.stage({
 		inject: [
 			Authorization.Auth,
 			Auth,
 			Delegations,
-			ImportedRecords,
 			InputCommands,
 			ModelRegistry,
 			OpenWork,
@@ -135,9 +135,10 @@ export default Feature.make("@openbot-build/plugin-apps")
 			Digest.Digest,
 			Discovery.Discovery,
 			DomainControl,
+			InstanceSettings,
 			Observation,
 			PgClient.PgClient,
-			Probe.Probe,
+			Probe,
 			Network.PublicNetwork,
 			Records,
 			ResourceTransport,
@@ -152,9 +153,7 @@ export default Feature.make("@openbot-build/plugin-apps")
 			Experience.layer,
 			DeveloperLayers.layer,
 		).pipe(
-			Layer.provideMerge(
-				Layer.merge(AppCommandsLayer.layer, AppApprovalsLayer.layer),
-			),
+			Layer.provideMerge(AppCommandsLayer.layer),
 			Layer.provideMerge(ResetCommands.layer),
 			Layer.provideMerge(Layers.layerApps),
 			Layer.provideMerge(Layers.layerIndex),

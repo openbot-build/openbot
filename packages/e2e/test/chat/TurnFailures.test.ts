@@ -1,6 +1,8 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
 import { Execution } from "@openbot-build/domain"
-import { HostTools } from "@openbot-build/openbot"
+import * as HostTools from "@openbot-build/tools-contract/HostTools"
 import {
 	BrowserHost,
 	Caller,
@@ -8,7 +10,7 @@ import {
 	Messages,
 	Wait,
 } from "@openbot-build/server-testing"
-import { Array as Arr, Deferred, Effect, Option, Stream } from "effect"
+import { Array as Arr, Deferred, Effect, Option, Stream, Layer } from "effect"
 import { LanguageModel, type Prompt } from "effect/ai"
 
 // The test uses real storage and waits for the execution's saved final state.
@@ -106,5 +108,13 @@ it.live(
 			assert.strictEqual(cancelled.response?.id, pending.turn)
 			assert.strictEqual(cancelled.response?.status, "cancelled")
 			assert.deepStrictEqual(yield* read, saved)
-		}).pipe(Effect.provide(BrowserHost.layerPlatform)),
+		}).pipe(
+			Effect.provide(
+				Layer.mergeAll(
+					NodeServices.layer,
+					NodeCrypto.layer,
+					FetchHttpClient.layer,
+				),
+			),
+		),
 )

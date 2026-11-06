@@ -1,4 +1,7 @@
-import { BotsApi } from "@openbot-build/api"
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { BotId } from "@openbot-build/domain/BotId"
+import { Bot } from "@openbot-build/domain/Bots"
 import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
 import { assert, expect, layer } from "@effect/vitest"
 import {
@@ -11,6 +14,7 @@ import {
 	Schema,
 	Stream,
 	String as Str,
+	Layer,
 } from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
 
@@ -97,7 +101,12 @@ const call = (
 	)
 
 // The host is a real server with a real database and real time.
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"a normal Turn and a review Turn give the model the same tools and instructions as before",
 		() =>
@@ -171,7 +180,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					)
 				const main = yield* host
 					.defaultBot(member.session)
-					.pipe(Effect.flatMap(Schema.decodeEffect(BotsApi.BotId)))
+					.pipe(Effect.flatMap(Schema.decodeEffect(BotId)))
 
 				// A normal Turn in the direct Chat of the default Bot.
 				const first = yield* Messages.message(send, main, "say hello")
@@ -180,7 +189,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 
 				// A Bot that the default Bot owns needs a tool. The owner reviews the request in a review Chat.
 				const owned = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					send("/v1/bots", "POST", {
 						name: "Helper",
 						role: "Confirms changes",

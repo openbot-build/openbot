@@ -1,11 +1,8 @@
+import { CapabilityRequestId } from "@openbot-build/domain/CapabilityRequestId"
+import type { Caller } from "@openbot-build/domain/Identity"
 import * as ChatHost from "../chats/ChatHost.ts"
-import {
-	Caller,
-	Authorization,
-	Execution,
-	Requests as RequestDomain,
-} from "@openbot-build/domain"
-import { and, eq, or, sql } from "drizzle-orm"
+import { Execution, Requests as RequestDomain } from "@openbot-build/domain"
+import { and, eq, sql } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
 import * as Db from "@openbot-build/server-database/Database"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
@@ -13,10 +10,7 @@ import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
 import { botRecords } from "@openbot-build/server-database/Schema"
 import { deciderKey } from "./Rules.ts"
 import { executions } from "@openbot-build/server-database/ExecutionSchema"
-import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
-import * as Imported from "@openbot-build/server-execution/imported/Executions"
-import { ImportedRecords } from "@openbot-build/server-execution/imported/ImportedRecords"
-import { Store, storage } from "@openbot-build/server-execution/execution/Store"
+import { Store, storage } from "@openbot-build/server-execution/Store"
 import { RequestCommands, workflowName } from "./RequestCommands.ts"
 import { Requests } from "./Requests.ts"
 
@@ -26,7 +20,6 @@ export const make = Effect.gen(function* () {
 	const commands = yield* RequestCommands
 	const db = yield* Db.make
 	const checks = yield* Check.make
-	const imported = yield* ImportedRecords
 	const store = yield* Store
 	const visible = (caller: Caller, id: string) =>
 		requests.find(caller.organizationId, id).pipe(
@@ -35,7 +28,7 @@ export const make = Effect.gen(function* () {
 					? Effect.succeed(found.value)
 					: Effect.fail(
 							RequestDomain.RequestNotFound.make({
-								request: RequestDomain.CapabilityRequestId.make(id),
+								request: CapabilityRequestId.make(id),
 							}),
 						),
 			),
@@ -51,22 +44,8 @@ export const make = Effect.gen(function* () {
 			.where(
 				and(
 					eq(executions.organizationId, caller.organizationId),
-					or(
-						and(
-							eq(executions.workflow, workflowName),
-							eq(executions.userId, ChatHost.ownerOf(stored.chain)),
-						),
-						and(
-							eq(executions.workflow, Imported.workflowName),
-							eq(
-								executions.namespace,
-								ownerKey({
-									organizationId: caller.organizationId,
-									userId: ChatHost.ownerOf(stored.chain),
-								}),
-							),
-						),
-					),
+					eq(executions.workflow, workflowName),
+					eq(executions.userId, ChatHost.ownerOf(stored.chain)),
 					eq(executions.resourceKind, "Request"),
 					eq(executions.resourceId, id),
 				),
@@ -88,25 +67,7 @@ export const make = Effect.gen(function* () {
 	) {
 		const key = yield* execution(caller, id)
 		const saved = yield* store.load(key)
-		if (saved.workflow === Imported.workflowName) {
-			yield* imported.read(key, caller)
-			yield* checks
-				.check(caller, {
-					action: "resolve",
-					resource: Authorization.Request.make({
-						organizationId: caller.organizationId,
-						ownerUserId: caller.userId,
-						id: RequestDomain.CapabilityRequestId.make(id),
-					}),
-				})
-				.pipe(
-					Effect.catchTags({
-						Forbidden: () => Effect.fail(Execution.Forbidden.make({})),
-						Pending: () => Effect.fail(Execution.Forbidden.make({})),
-					}),
-					storage,
-				)
-		} else yield* commands.authorize(key, caller, "read")
+		yield* commands.authorize(key, caller, "read")
 		return {
 			...(yield* visible(caller, id)).request,
 			executionId: key.id,
@@ -119,13 +80,6 @@ export const make = Effect.gen(function* () {
 		payload: RequestDomain.PersonDecision,
 	) {
 		const key = yield* execution(caller, id)
-		if ((yield* store.load(key)).workflow === Imported.workflowName) {
-			yield* view(caller, id)
-			return yield* RequestDomain.RequestConflict.make({
-				message:
-					"This request belongs to old work. Send new Chat input to ask again.",
-			})
-		}
 		return yield* commands.decide(key, caller, {
 			commandKey: payload.commandKey,
 			decisionId: `request:${payload.expected}`,

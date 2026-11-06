@@ -12,15 +12,15 @@ import { ChannelQueue } from "../src/ChannelQueue.ts"
 import { ChannelRegistry } from "../src/ChannelRegistry.ts"
 import { ChannelWatch } from "../src/ChannelWatch.ts"
 import * as ChannelWatchWork from "../src/ChannelWatchWork.ts"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import { Observation } from "@openbot-build/server-execution/Observation"
 import {
 	type MemberExecution,
 	Store,
-} from "@openbot-build/server-execution/execution/Store"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
+} from "@openbot-build/server-execution/Store"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
+import { Records } from "@openbot-build/server-kernel/Records"
 
 const actor = { kind: "member", organizationId: "org", userId: "user" } as const
 const key = { namespace: "org", id: Execution.Id.make("channel-work") }
@@ -54,7 +54,6 @@ const services = Layer.mergeAll(
 			Effect.succeedSome({
 				id: "channel",
 				enabled: true,
-				needsAuthorization: false,
 				actor: "user",
 			} as never),
 	}),

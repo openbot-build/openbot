@@ -1,12 +1,12 @@
+import { Identity } from "@openbot-build/domain/Identity"
 import * as AppExecution from "./AssistanceResult.ts"
 
-import { Identity } from "@openbot-build/domain"
 import { Array as Arr, Effect, Schema, type JsonSchema } from "effect"
 import { Tool } from "effect/ai"
 import { Connections } from "./Connections.ts"
 import type { Entry } from "./AppTools.ts"
 import type { Error as IndexError, PublicIndex } from "./AppIndex.ts"
-import type * as Report from "@openbot-build/server-kernel/errors/Report"
+import type * as Report from "@openbot-build/server-kernel/Report"
 
 /** The names of the assistance tools. A name gets a suffix when another tool already uses it. */
 export const names = {

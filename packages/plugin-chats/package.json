@@ -13,13 +13,13 @@
 		".": "./dist/index.js",
 		"./ChatViews": "./dist/ChatViews.js",
 		"./ExecutionFeatures": "./dist/ExecutionFeatures.js",
-		"./HttpMounts": "./dist/HttpMounts.js",
 		"./InputCommands": "./dist/InputCommands.js",
+		"./LiveConnections": "./dist/LiveConnections.js",
 		"./ModelSteps": "./dist/ModelSteps.js",
 		"./ToolCommands": "./dist/ToolCommands.js",
 		"./ToolControls": "./dist/ToolControls.js",
-		"./ToolNoticeWorkflow": "./dist/ToolNoticeWorkflow.js",
 		"./ToolNotices": "./dist/ToolNotices.js",
+		"./ToolNoticeWorkflow": "./dist/ToolNoticeWorkflow.js",
 		"./ToolSession": "./dist/ToolSession.js",
 		"./ToolSteps": "./dist/ToolSteps.js",
 		"./ToolWorkflow": "./dist/ToolWorkflow.js",
@@ -29,9 +29,7 @@
 		"./TurnSession": "./dist/TurnSession.js",
 		"./TurnTools": "./dist/TurnTools.js",
 		"./TurnWorkflow": "./dist/TurnWorkflow.js",
-		"./WorkAdmission": "./dist/WorkAdmission.js",
-		"./live/LiveConnections": "./dist/live/LiveConnections.js",
-		"./ResponseMapping": "./dist/ResponseMapping.js"
+		"./WorkAdmission": "./dist/WorkAdmission.js"
 	},
 	"scripts": {
 		"build": "tsdown",

@@ -156,8 +156,8 @@ curl -b cookies.txt \
   https://api.example.com/v1/chats
 ```
 
-- 没有这个请求头时，OpenBot 使用你唯一的活跃组织。
-- 如果你有多个活跃组织，又没有发送这个请求头，OpenBot 返回 `400` 和
+- 没有这个请求头时，OpenBot 使用你唯一的非个人活跃组织。只有在你没有其他活跃组织时，个人组织才会被计入。
+- 如果这样仍有多个组织，又没有发送这个请求头，OpenBot 返回 `400` 和
   `OrganizationRequired`。
 
 用户令牌只属于一个组织。它会忽略这个请求头。
@@ -183,7 +183,7 @@ curl -b cookies.txt \
 curl -b cookies.txt \
   -H "Origin: http://localhost" \
   -H "Content-Type: application/json" \
-  -d '{"input":"Hello"}' \
+  -d '{"commandKey":"hello-1","input":"Hello"}' \
   http://localhost/v1/bots/$BOT/messages
 ```
 
@@ -256,7 +256,7 @@ curl -b cookies.txt https://api.example.com/v1/user/tokens
 
 ### 撤销令牌
 
-使用列表中令牌的 UUID `id`。旧 v4 和新 v7
+使用列表中令牌的 UUID `id`。UUID v4 和 v7
 ID 都可使用。API 会在访问存储前拒绝非 UUID 格式的 ID。
 
 ```sh

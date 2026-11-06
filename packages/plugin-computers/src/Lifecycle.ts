@@ -1,21 +1,23 @@
 import {
+	ExecutionIdentity,
+	type Caller,
+	executionCallers,
+} from "@openbot-build/domain/Identity"
+import {
 	type MemberExecution,
 	Store,
 	storage,
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import {
 	type Developers,
 	Authorization,
 	Computers as ComputerData,
 	Execution,
-	ExecutionIdentity,
-	type Caller,
-	executionCallers,
 } from "@openbot-build/domain"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import { and, eq, isNull } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -31,18 +33,18 @@ import { SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import { computerKey } from "@openbot-build/identity-contract/audit/Resources"
+import { computerKey } from "@openbot-build/domain/AuditResources"
 import * as Db from "@openbot-build/server-database/Database"
 import {
 	computers,
 	computerUsage,
 	computerAccess,
 } from "@openbot-build/server-database/Schema"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
-import type { Access as ExecutionAccess } from "@openbot-build/server-execution/execution/Engine"
-import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
-import { type End } from "@openbot-build/server-execution/execution/Program"
-import * as Send from "@openbot-build/server-execution/execution/Send"
+import { Observation } from "@openbot-build/server-execution/Observation"
+import type { Access as ExecutionAccess } from "@openbot-build/server-execution/Engine"
+import { Workflows } from "@openbot-build/server-execution/Workflows"
+import { type End } from "@openbot-build/server-execution/Program"
+import * as Send from "@openbot-build/server-execution/Send"
 import * as Access from "./Access.ts"
 import * as Activity from "./Activity.ts"
 import { ComputerProviders } from "./ComputerProviders.ts"
@@ -158,8 +160,7 @@ export interface Service {
 }
 
 export class Lifecycle extends Context.Service<Lifecycle, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-computers/Lifecycle",
+	"@openbot-build/plugin-computers/Lifecycle",
 ) {}
 
 export const make = Effect.gen(function* () {

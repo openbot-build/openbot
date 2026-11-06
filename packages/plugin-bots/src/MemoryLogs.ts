@@ -1,8 +1,9 @@
+import { BotId } from "@openbot-build/domain/BotId"
 import { PgClient } from "@effect/sql-pg"
 import { BotMemory, Bots } from "@openbot-build/domain"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import type { Keys } from "@openbot-build/conversation-contract/bots/BotRecords"
 
 const unavailable = Failures.replace(
@@ -39,14 +40,14 @@ export interface Service {
 	readonly changes: {
 		put: (
 			keys: Keys,
-			value: { readonly bot: Bots.BotId; readonly entry: BotMemory.LogEntry },
+			value: { readonly bot: BotId; readonly entry: BotMemory.LogEntry },
 		) => Effect.Effect<void, Bots.BotStorageUnavailable>
 		list: (
 			organizationId: string,
 			filter: { readonly owner: string },
 		) => Effect.Effect<
 			readonly {
-				readonly bot: Bots.BotId
+				readonly bot: BotId
 				readonly entry: BotMemory.LogEntry
 			}[],
 			Bots.BotStorageUnavailable
@@ -55,8 +56,7 @@ export interface Service {
 }
 
 export class MemoryLogs extends Context.Service<MemoryLogs, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-bots/MemoryLogs",
+	"@openbot-build/plugin-bots/MemoryLogs",
 ) {}
 
 const make = Effect.gen(function* () {
@@ -104,7 +104,7 @@ const make = Effect.gen(function* () {
 		enrichments: collection("memory_enrichment", BotMemory.Enrichment),
 		changes: collection(
 			"memory_log",
-			Schema.Struct({ bot: Bots.BotId, entry: BotMemory.LogEntry }),
+			Schema.Struct({ bot: BotId, entry: BotMemory.LogEntry }),
 		),
 	})
 })

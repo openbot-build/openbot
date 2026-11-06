@@ -1,5 +1,5 @@
+import { Computer } from "@openbot-build/domain/Computers"
 import { assert } from "@effect/vitest"
-import { ComputersApi } from "@openbot-build/api"
 import { Execution } from "@openbot-build/domain"
 import { Effect, Option, Stream } from "effect"
 import { Sse } from "effect/encoding"
@@ -57,6 +57,6 @@ export const changed = (
 	Effect.gen(function* () {
 		const { saved } = yield* finished(send, credential, call)
 		return yield* send(credential, `/v1/computers/${saved.resource.id}`).pipe(
-			Effect.flatMap(Caller.json(ComputersApi.Computer)),
+			Effect.flatMap(Caller.json(Computer)),
 		)
 	})

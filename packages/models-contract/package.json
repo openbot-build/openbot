@@ -10,14 +10,15 @@
 		"src"
 	],
 	"exports": {
-		"./models/LiveBackends": "./dist/models/LiveBackends.js",
-		"./models/ModelCalls": "./dist/models/ModelCalls.js",
-		"./models/ModelFailure": "./dist/models/ModelFailure.js",
-		"./models/ModelProviders": "./dist/models/ModelProviders.js",
-		"./models/ModelRegistry": "./dist/models/ModelRegistry.js",
-		"./models/Models": "./dist/models/Models.js",
-		"./models/ProviderOAuth": "./dist/models/ProviderOAuth.js",
-		"./models/ProviderUseHttp": "./dist/models/ProviderUseHttp.js"
+		"./BuiltinModels": "./dist/BuiltinModels.js",
+		"./LiveBackends": "./dist/LiveBackends.js",
+		"./ModelCalls": "./dist/ModelCalls.js",
+		"./ModelFailure": "./dist/ModelFailure.js",
+		"./ModelProviders": "./dist/ModelProviders.js",
+		"./ModelRegistry": "./dist/ModelRegistry.js",
+		"./Models": "./dist/Models.js",
+		"./ProviderOAuth": "./dist/ProviderOAuth.js",
+		"./ProviderUseHttp": "./dist/ProviderUseHttp.js"
 	},
 	"scripts": {
 		"build": "tsdown",

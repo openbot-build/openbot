@@ -1,3 +1,5 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import {
@@ -9,37 +11,21 @@ import {
 	Schedule,
 	String as Str,
 } from "effect"
-import * as BrowserHost from "./BrowserHost.ts"
-import { DatabasePostgres } from "@openbot-build/openbot"
 import * as Setup from "@openbot-build/plugin-platform/Setup"
 import * as PlatformAdminsPostgres from "@openbot-build/plugin-platform/PlatformAdminsPostgres"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as PostgresTest from "./PostgresTest.ts"
-import * as TestHost from "./TestHost.ts"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import * as ErrorRecords from "@openbot-build/server-kernel/Records"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as SettingsPostgres from "@openbot-build/server-kernel/SettingsPostgres"
 
 const publicOrigin = "https://api.example.com"
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 	it.effect(
 		"every instance sees a settings change at once, and setup runs only once",
 		() =>
 			Effect.gen(function* () {
-				const database = yield* PostgresTest.start
-				const options = {
-					databaseUrl: Redacted.make(database.url),
-					clusterSecret: Redacted.make(
-						"test-cluster-secret-with-at-least-32-characters",
-					),
-					secretKeys: Redacted.make("test:" + Str.repeat(32)("11")),
-				}
-				// The migration has its own database pool. It closes after the migration.
-				yield* DatabasePostgres.migrate.pipe(
-					Effect.provide(
-						DatabasePostgres.layer(options).pipe(
-							Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
-						),
-					),
-				)
+				const database = yield* TestDatabase.migrated
 				/**
 				 * Starts one OpenBot instance on the shared database. A new memo map
 				 * builds every layer again, as in a new process.
@@ -47,7 +33,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const instance = Effect.gen(function* () {
 					return yield* Layer.buildWithMemoMap(
 						PlatformAdminsPostgres.layer.pipe(
-							Layer.provideMerge(TestHost.layerShared(options)),
+							Layer.provideMerge(SettingsPostgres.layer),
+							Layer.provideMerge(ErrorRecords.layer),
+							Layer.provideMerge(
+								Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
+							),
+							Layer.provideMerge(
+								PgClient.layer({ url: Redacted.make(database.url) }),
+							),
 							// Setup makes a new sign-in secret with the SecureRandom service.
 							Layer.provideMerge(
 								Layer.merge(NodeServices.layer, NodeCrypto.layer),

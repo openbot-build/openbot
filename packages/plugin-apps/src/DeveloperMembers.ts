@@ -1,3 +1,8 @@
+import { transactionFailures } from "@openbot-build/server-execution/Store"
+import {
+	Json,
+	decodeRow,
+} from "@openbot-build/apps-contract/apps/DeveloperRows"
 import { Developers } from "@openbot-build/domain"
 
 import { PgClient } from "@effect/sql-pg"
@@ -12,7 +17,8 @@ import {
 } from "@openbot-build/server-database/Schema"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
+import type { InstanceSettings } from "@openbot-build/server-kernel/InstanceSettings"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Db from "@openbot-build/server-database/Database"
 
@@ -55,12 +61,11 @@ export class DeveloperMembers extends Context.Service<
 			id: string,
 		) => Effect.Effect<void, Developers.Failure>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/DeveloperMembers") {}
+>()("@openbot-build/plugin-apps/DeveloperMembers") {}
 
 const InvitationRow = Schema.Struct({
 	...Developers.Invitation.fields,
-	scope: Rows.Json(Developers.ManagementScope),
+	scope: Json(Developers.ManagementScope),
 })
 const MemberRow = Schema.Struct({
 	id: Schema.String,
@@ -73,11 +78,14 @@ const isUuid = Schema.is(Schema.String.check(Schema.isUUID()))
 export const make: Effect.Effect<
 	typeof DeveloperMembers.Service,
 	never,
-	PgClient.PgClient | DeveloperAccess | SecureRandom.SecureRandom
+	| PgClient.PgClient
+	| DeveloperAccess
+	| SecureRandom.SecureRandom
+	| InstanceSettings
 > = Effect.gen(function* () {
 	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
-	const namespace = yield* IndexNamespace
+	const namespace = yield* instanceNamespace
 	const access = yield* DeveloperAccess
 	const crypto = yield* SecureRandom.SecureRandom
 	const newId = crypto.uuidV7().pipe(Effect.orDie)
@@ -119,11 +127,11 @@ export const make: Effect.Effect<
 					),
 				)
 				.where(invitationWhere(id))
-			const row = (yield* Rows.stored(
+			const row = (yield* transactionFailures(
 				lock ? query.for("update", { of: developerInvitations }) : query,
 			))[0]
 			if (row === undefined) return yield* Developers.DeveloperNotFound.make({})
-			const value = yield* Rows.decodeRow(InvitationRow)({
+			const value = yield* decodeRow(InvitationRow)({
 				...row.invitation,
 				scope: row.scope,
 			})
@@ -137,14 +145,14 @@ export const make: Effect.Effect<
 			readonly acceptedBy?: string
 		},
 	) =>
-		Rows.stored(
+		transactionFailures(
 			db.update(developerInvitations).set(change).where(invitationWhere(id)),
 		)
 	const memberWhere = (id: string) =>
 		and(eq(developerMembers.namespace, namespace), eq(developerMembers.id, id))
 	const toMember = (row: typeof developerMembers.$inferSelect) =>
 		Effect.gen(function* () {
-			const member = yield* Rows.decodeRow(MemberRow)(row)
+			const member = yield* decodeRow(MemberRow)(row)
 			return {
 				...member,
 				identity: yield* Rows.identityOf(row.owner),
@@ -155,7 +163,7 @@ export const make: Effect.Effect<
 		id: string,
 	) {
 		if (!isUuid(id)) return yield* Developers.DeveloperNotFound.make({})
-		const row = (yield* Rows.stored(
+		const row = (yield* transactionFailures(
 			db.select().from(developerMembers).where(memberWhere(id)).for("update"),
 		))[0]
 		if (row === undefined) return yield* Developers.DeveloperNotFound.make({})
@@ -182,7 +190,7 @@ export const make: Effect.Effect<
 	return DeveloperMembers.of({
 		list: Effect.fn("DeveloperMembers.list")(function* (owner, proofId) {
 			const proof = yield* admin(owner, proofId)
-			const members = yield* Rows.stored(
+			const members = yield* transactionFailures(
 				db
 					.select()
 					.from(developerMembers)
@@ -194,7 +202,7 @@ export const make: Effect.Effect<
 					)
 					.orderBy(developerMembers.id),
 			)
-			const invitations = yield* Rows.stored(
+			const invitations = yield* transactionFailures(
 				db
 					.select()
 					.from(developerInvitations)
@@ -209,7 +217,7 @@ export const make: Effect.Effect<
 			return {
 				members: yield* Effect.forEach(members, toMember),
 				invitations: yield* Effect.forEach(invitations, (row) =>
-					Rows.decodeRow(Developers.Invitation)({
+					decodeRow(Developers.Invitation)({
 						...row,
 						scope: proof.value.scope,
 					}),
@@ -229,7 +237,7 @@ export const make: Effect.Effect<
 					expiresAt: (yield* Clock.currentTimeMillis) + 7 * 86400000,
 					status: "Pending",
 				}
-				yield* Rows.stored(
+				yield* transactionFailures(
 					db.insert(developerInvitations).values({
 						namespace,
 						id: value.id,
@@ -256,7 +264,7 @@ export const make: Effect.Effect<
 						role: record.value.role,
 					}
 					// The table allows one membership for each proof and account.
-					const inserted = yield* Rows.stored(
+					const inserted = yield* transactionFailures(
 						db
 							.insert(developerMembers)
 							.values({
@@ -298,7 +306,7 @@ export const make: Effect.Effect<
 				Effect.gen(function* () {
 					const record = yield* lockMember(id)
 					yield* admin(owner, record.value.proofId)
-					yield* Rows.stored(
+					yield* transactionFailures(
 						db.update(developerMembers).set({ role }).where(memberWhere(id)),
 					)
 					return { ...record.value, role } satisfies Developers.Member
@@ -309,7 +317,9 @@ export const make: Effect.Effect<
 				Effect.gen(function* () {
 					const record = yield* lockMember(id)
 					if (record.owner !== owner) yield* admin(owner, record.value.proofId)
-					yield* Rows.stored(db.delete(developerMembers).where(memberWhere(id)))
+					yield* transactionFailures(
+						db.delete(developerMembers).where(memberWhere(id)),
+					)
 					yield* Rows.postNotice(db, namespace, record.owner, {
 						id: yield* newId,
 						cardUrl: null,

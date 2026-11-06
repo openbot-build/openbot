@@ -43,29 +43,3 @@ export class NotFound extends Schema.TaggedError<
 	NotFound,
 	{ readonly brand: unique symbol }
 >()("ToolCallNotFound", { id: Id }) {}
-
-/** Old tool records have no saved deadline or model Item. Do not invent either. */
-export const Imported = Schema.TaggedStruct("Imported", {
-	id: Id,
-	executionId: Execution.Id,
-	parentExecutionId: Execution.Id,
-	chat: Chat.Id,
-	turn: Turn.Id,
-	callId: Schema.String,
-	tool: Schema.String,
-	kind: Schema.Literals(["tool", "session"]),
-	status: Execution.Status,
-	startedAt: Schema.Finite,
-	endedAt: Schema.NullOr(Schema.Finite),
-	failure: Schema.NullOr(Execution.Failure),
-})
-export type Imported = typeof Imported.Type
-export const Summary = Schema.Union([Record, Imported])
-export type Summary = typeof Summary.Type
-export const History = Schema.Struct({
-	...Imported.fields,
-	output: Schema.NullOr(Schema.Json),
-})
-export type History = typeof History.Type
-export const Result = Schema.Union([View, History])
-export type Result = typeof Result.Type

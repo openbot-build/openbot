@@ -14,17 +14,16 @@ import { BotFeatures } from "@openbot-build/conversation-contract/chats/BotFeatu
 import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
-import { Runner } from "@openbot-build/server-execution/execution/Runner"
-import { RunScope } from "@openbot-build/server-execution/execution/RunScope"
-import { Store } from "@openbot-build/server-execution/execution/Store"
-import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
-import { ImportedRecords } from "@openbot-build/server-execution/imported/ImportedRecords"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import { Observation } from "@openbot-build/server-execution/Observation"
+import { Runner } from "@openbot-build/server-execution/Runner"
+import { RunScope } from "@openbot-build/server-execution/RunScope"
+import { Store } from "@openbot-build/server-execution/Store"
+import { Workflows } from "@openbot-build/server-execution/Workflows"
+import { Records } from "@openbot-build/server-kernel/Records"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import * as Feature from "@openbot-build/server-plugin/Feature"
 import * as ChannelConfig from "./ChannelConfig.ts"
 import * as ChannelConfigWorkflow from "./ChannelConfigWorkflow.ts"
@@ -76,7 +75,6 @@ export default Feature.make("@openbot-build/plugin-channels")
 		inject: [
 			...HttpMounts.inject,
 			BotFeatures,
-			ImportedRecords,
 			InputCommands,
 			ModelRegistry,
 			Organization,

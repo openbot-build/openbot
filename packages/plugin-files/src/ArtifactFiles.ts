@@ -9,12 +9,11 @@ import { Clock, Effect, Layer, Option, Stream } from "effect"
 import { HttpClient } from "effect/http"
 import * as Db from "@openbot-build/server-database/Database"
 import { artifactFiles, files } from "@openbot-build/server-database/Schema"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { accepts } from "./Files.ts"
 import * as Objects from "./Objects.ts"
 import * as S3 from "./S3.ts"
-import { quotaOf } from "@openbot-build/server-kernel/settings/Documents"
-import { transactionFailures } from "@openbot-build/server-execution/execution/Store"
+import { transactionFailures } from "@openbot-build/server-execution/Store"
 
 /** Storage work uses the same limits and quota as member uploads. */
 const make = Effect.gen(function* () {
@@ -88,7 +87,7 @@ const make = Effect.gen(function* () {
 									),
 								)
 							const used = Number(rows[0]?.bytes ?? 0)
-							const quota = quotaOf(config)
+							const quota = config.quotaBytes
 							if (quota !== null && used + input.bytes > quota)
 								return yield* FileData.FileQuotaExceeded.make({
 									message: "The file does not fit in the owner's file quota.",

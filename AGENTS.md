@@ -69,8 +69,8 @@
 - Put code in the package of the feature it belongs to, such as
   `packages/plugin-chats` for Chats. Packages use each other only through their
   public entry points.
-- Only the plugin kit (`server-plugin`), the plugins, the host, the development
-  server (`server-development`), and the test helpers (`server-testing`) import
+- Only the plugin kit (`server-plugin`), the plugins, the host
+  (`packages/openbot`), and the test helpers (`server-testing`) import
   `@graftland/*`. A plugin package does not import another plugin package. A
   plugin does not publish a service of the kernel.
 - Importing a module must not start any I/O.

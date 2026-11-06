@@ -29,7 +29,7 @@ Um mit einem Bot zu sprechen, schicke ihm eine Nachricht:
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"input":"Plan three days in Rome."}' \
+  -d '{"commandKey":"rome-1","input":"Plan three days in Rome."}' \
   https://api.example.com/v1/bots/$BOT/messages
 ```
 
@@ -71,10 +71,6 @@ zurück. Sende `null`, um deinen Standard-Bot zu entfernen.
 
 Du kannst deinen Standard-Bot trotzdem archivieren. Danach schlägt ein Trigger
 ohne Bot fehl, bis du einen anderen Standard-Bot wählst.
-
-Ältere Versionen von OpenBot haben für jedes Member einen Main Bot erstellt.
-Beim Update wird jeder Main Bot ein normaler Bot und der Standard-Bot seines
-Members. Sein Gedächtnis und seine Grants bleiben.
 
 ### Keine Grenzen, die ein Bot kennt
 

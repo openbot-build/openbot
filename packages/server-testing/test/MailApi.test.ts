@@ -1,10 +1,10 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { PlatformSettings } from "@openbot-build/domain/Settings"
+import { Mail } from "@openbot-build/domain"
+import { Platform } from "@openbot-build/domain/Authorization"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
 import { assert, layer } from "@effect/vitest"
-import {
-	Authorization,
-	Mail,
-	Settings as SettingsApi,
-	UserTokensApi,
-} from "@openbot-build/api"
 import {
 	Array as Arr,
 	Effect,
@@ -19,9 +19,9 @@ import {
 	type Connection,
 	type Message,
 } from "@openbot-build/identity-contract/mail/Transport"
-import * as BrowserHost from "./BrowserHost.ts"
-import * as Caller from "./Caller.ts"
-import * as Policies from "./Policies.ts"
+import * as BrowserHost from "../src/BrowserHost.ts"
+import * as Caller from "../src/Caller.ts"
+import * as Policies from "../src/Policies.ts"
 
 const publicOrigin = "https://api.example.com"
 const fields = {
@@ -34,7 +34,12 @@ const fields = {
 	invitationUrl: "https://app.example.com/invitations",
 }
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"only platform admins can change SMTP settings and send test mail",
 		() =>
@@ -67,7 +72,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const root = yield* host.login("root")
 				const alice = yield* host.login("alice")
 				const settings = yield* Caller.read(
-					SettingsApi.PlatformSettings,
+					PlatformSettings,
 					account(root.session, "/v1/platform/settings"),
 				)
 				assert.strictEqual(settings.mail, null)
@@ -102,10 +107,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						mail: { ...fields, password: "long test password" },
 					},
 				)
-				const configured = yield* Caller.json(
-					SettingsApi.PlatformSettings,
-					200,
-				)(response)
+				const configured = yield* Caller.json(PlatformSettings, 200)(response)
 				assert.deepStrictEqual(configured.mail?.password, {
 					set: true,
 					hint: null,
@@ -136,13 +138,13 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				})
 
 				const readOnlyPolicy = yield* Policies.json(function* (_) {
-					yield* _.allow("read", Authorization.Platform)
+					yield* _.allow("read", Platform)
 				})
 				const writePolicy = yield* Policies.json(function* (_) {
-					yield* _.allow("*", Authorization.Platform)
+					yield* _.allow("*", Platform)
 				})
 				const readOnly = yield* Caller.read(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					account(root.session, "/v1/user/tokens", "POST", {
 						name: "Read mail settings",
 						policy: readOnlyPolicy,
@@ -155,14 +157,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					403,
 				)
 				const writer = yield* Caller.read(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					account(root.session, "/v1/user/tokens", "POST", {
 						name: "Write mail settings",
 						policy: writePolicy,
 					}),
 				)
 				const changed = yield* Caller.read(
-					SettingsApi.PlatformSettings,
+					PlatformSettings,
 					keyed(writer.secret, "/v1/platform/settings", "PATCH", {
 						expectedVersion: configured.version,
 						mail: { ...fields, fromName: "OpenBot Team" },
@@ -183,7 +185,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					"OpenBot Team",
 				)
 				const nonAdmin = yield* Caller.read(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					account(alice.session, "/v1/user/tokens", "POST", {
 						name: "Not a platform admin",
 						policy: writePolicy,
@@ -212,7 +214,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					{ status: "failed" },
 				)
 				const cleared = yield* Caller.read(
-					SettingsApi.PlatformSettings,
+					PlatformSettings,
 					keyed(writer.secret, "/v1/platform/settings", "PATCH", {
 						expectedVersion: changed.version,
 						mail: null,

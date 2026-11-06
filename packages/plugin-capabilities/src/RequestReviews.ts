@@ -1,9 +1,6 @@
-import {
-	type Bots as BotsType,
-	type ChatModelInvalid,
-	Execution,
-	type ExecutionIdentity,
-} from "@openbot-build/domain"
+import type { ChatModelInvalid } from "@openbot-build/domain/Chats"
+import type { ExecutionIdentity } from "@openbot-build/domain/Identity"
+import { type Bots as BotsType, Execution } from "@openbot-build/domain"
 import {
 	type ChatStore,
 	type Config,
@@ -11,11 +8,11 @@ import {
 	ChatStoreRepository,
 	Store as CoreStore,
 } from "@openbot-build/core"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import { type SqlError, SqlClient } from "effect/sql"
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
 import * as ChatModels from "@openbot-build/conversation-contract/chats/ChatModels"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
 import {
 	Array as Arr,
 	Clock,
@@ -40,13 +37,13 @@ import { inExecution } from "@openbot-build/conversation-contract/chats/ChatEnco
 import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import * as Db from "@openbot-build/server-database/Database"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
+import { Observation } from "@openbot-build/server-execution/Observation"
 import {
 	Store,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
-import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
+} from "@openbot-build/server-execution/Store"
+import * as Todos from "@openbot-build/conversation-contract/work/Todos"
 import { RequestCommands } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
 import { type Stored } from "@openbot-build/conversation-contract/capabilities/Requests"
 import { chatOf } from "./Requests.ts"
@@ -105,8 +102,7 @@ export interface Service {
 }
 
 export class RequestReviews extends Context.Service<RequestReviews, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-capabilities/RequestReviews",
+	"@openbot-build/plugin-capabilities/RequestReviews",
 ) {}
 
 const make = Effect.gen(function* () {

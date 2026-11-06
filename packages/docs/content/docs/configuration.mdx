@@ -66,8 +66,9 @@ client is separate from the App network guard.
 `postgres://openbot:secret@db.example.com:5432/openbot`. The server, the
 migration program, and the setup program all read it.
 
-When the server starts, it checks that all tables exist. If they do not exist,
-it stops. Run the migration program first. See [Deploy](/deploy).
+When the server starts, it checks that the newest migration ran and that all
+tables exist. If not, it stops. Run the migration program first. See
+[Deploy](/deploy).
 
 ### TLS
 
@@ -232,36 +233,6 @@ of them:
 - The **organization settings** at `/v1/organization/settings`. Each
   organization has its own. See [Organization](/organization#settings).
 
-Older versions of OpenBot read more environment variables. OpenBot ignores them
-now. This table shows where each value went:
-
-| Old variable                    | New place                                                                                                                  |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `OPENBOT_PUBLIC_ORIGIN`         | `publicOrigin` in the platform settings. Setup writes it with `publicOrigin`.                                              |
-| `OPENBOT_OIDC_ISSUER`           | `identityProvider.issuer` in the platform settings. Setup writes it with `identityProvider.issuer`.                        |
-| `OPENBOT_OIDC_CLIENT_ID`        | `identityProvider.clientId` in the platform settings. Setup writes it with `identityProvider.clientId`.                    |
-| `OPENBOT_OIDC_CLIENT_SECRET`    | `identityProvider.clientSecret` in the platform settings, encrypted. Setup writes it with `identityProvider.clientSecret`. |
-| `BETTER_AUTH_SECRET`            | The sign-in secret. Setup makes a random one and stores it encrypted. You never set it.                                    |
-| `OPENBOT_APP_ENCRYPTION_KEY`    | `OPENBOT_SECRET_KEYS`.                                                                                                     |
-| `OPENBOT_OWNER_EMAILS`          | Platform admins. Setup adds them with `adminEmails`. Change them with `/v1/platform/admins`.                               |
-| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | Verified domains of each organization, with `joinByDomain` in its settings. See [SSO](/sso#verified-domains).              |
-| `OPENBOT_MODEL_ENDPOINT`        | Model providers of an organization or of the platform. See [Models](/models).                                              |
-| `OPENBOT_MODEL_API_KEY`         | Model providers, encrypted.                                                                                                |
-| `OPENBOT_MODEL_ID`              | A model that a model provider links, and the `model` of each Bot.                                                          |
-| `OPENBOT_DEV_MODE`              | The development entry point decides. See [Development](#development).                                                      |
-
-Some values were options in code before. They are settings now, too:
-
-| Old option                                  | New place                                                          |
-| ------------------------------------------- | ------------------------------------------------------------------ |
-| `appRestrictions`                           | `appRestrictions` in the platform settings.                        |
-| `appReadRules`                              | `appReadRules` in the organization settings.                       |
-| `bots.helperModel`                          | `rulesModel` and `botMemoryModel` in the organization settings.    |
-| `bots.requestTimeout`                       | `requestTimeoutMs` in the organization settings.                   |
-| `bots.memory`                               | `botMemory` in the organization settings.                          |
-| `sessions.memory.defaults`                  | Nothing. The learned memory of each Session is gone.               |
-| `allowedEmailDomains`, `defaultRoles` (API) | Verified domains, and `defaultRoles` in the organization settings. |
-
 ### How a change reaches every instance
 
 Each settings read uses the committed database row. A change works like this:
@@ -323,12 +294,6 @@ random key named `dev`.
 | --------------------------- | --------- | -------------------------------------------- |
 | `OPENBOT_SECRET_KEYS`       |           | `dev:<random key>`. `dev:setup` fills it in. |
 | `OPENBOT_DEV_DATABASE_NAME` | `openbot` | The name of the development database.        |
-
-<Callout type="info">
-	If your `.env.development` is from an older version, delete it and run `devenv
-	shell -- pnpm dev:setup` again. You can also reset the development database.
-	See [Contributing](/contributing#start-the-development-server).
-</Callout>
 
 devenv then sets these values for you. devenv picks each port: it starts at the
 base port and takes the next free one. It gives the values with a port only to

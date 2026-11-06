@@ -2,13 +2,13 @@ import { assert, it } from "@effect/vitest"
 import { NodeCrypto } from "@effect/platform-node"
 import { Authorization, Settings as Model } from "@openbot-build/domain"
 import { Effect, Redacted, Schema, String as Str } from "effect"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import { PlatformDocument } from "@openbot-build/server-kernel/settings/Documents"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 import {
-	bindings,
-	changeMail,
-} from "@openbot-build/server-kernel/settings/Platform"
-import * as Views from "@openbot-build/server-kernel/settings/Views"
+	PlatformDocument,
+	platformDefaults,
+} from "@openbot-build/server-kernel/Documents"
+import { bindings, changeMail } from "@openbot-build/server-kernel/Platform"
+import * as Views from "@openbot-build/server-kernel/Views"
 
 const fields = {
 	host: "smtp.example.com",
@@ -20,6 +20,7 @@ const fields = {
 	invitationUrl: "https://app.example.com/invitations",
 }
 const document: PlatformDocument = {
+	...platformDefaults,
 	publicOrigin: "https://app.example.com",
 	authSecret: "sealed",
 	identityProvider: null,
@@ -69,7 +70,7 @@ it.effect("mail settings reject bad addresses and insecure links", () =>
 	}),
 )
 
-it.effect("old settings keep mail off without a data change", () =>
+it.effect("default settings keep mail off", () =>
 	Effect.gen(function* () {
 		const encoded = yield* Schema.encodeEffect(PlatformDocument)(document)
 		const decoded = yield* Schema.decodeEffect(PlatformDocument)(encoded)

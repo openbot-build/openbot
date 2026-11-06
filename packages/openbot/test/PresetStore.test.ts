@@ -5,15 +5,16 @@ import {
 	Effect,
 	Exit,
 	Option,
+	Record as Rec,
 	Result,
 	Schema,
 	Stream,
 } from "effect"
-import * as PluginsFile from "../src/app/PluginsFile.ts"
-import * as Preset from "../src/app/Preset.ts"
-import * as PresetPlugins from "../src/app/PresetPlugins.ts"
+import * as PluginsFile from "../src/PluginsFile.ts"
+import * as Preset from "../src/Preset.ts"
+import * as PresetPlugins from "../src/PresetPlugins.ts"
 
-const all = PluginsFile.presetEntries
+const all = Preset.entries
 
 it.effect("the check names each required plugin that is missing", () =>
 	Effect.gen(function* () {
@@ -25,7 +26,7 @@ it.effect("the check names each required plugin that is missing", () =>
 		assert.deepStrictEqual(
 			exit,
 			Exit.fail(
-				PresetPlugins.RequiredPluginMissing.make({ ids: ["auth", "audit"] }),
+				PresetPlugins.RequiredPluginMissing.make({ ids: ["audit", "auth"] }),
 			),
 		)
 		assert.deepStrictEqual(
@@ -52,7 +53,7 @@ it.effect("a turned off required plugin counts as missing", () =>
 
 it.effect("the store refuses an edit that turns off a required plugin", () =>
 	Effect.gen(function* () {
-		const store = yield* PresetPlugins.store(all, PluginsFile.presetKnown)
+		const store = yield* PresetPlugins.store(all, PresetPlugins.known)
 		const refused = yield* Effect.exit(
 			store.apply(Tree.Op.Update({ id: "auth", patch: { disabled: true } })),
 		)
@@ -88,13 +89,13 @@ const refusedWith = <A>(refused: Effect.Effect<A, Loader.EditError>) =>
 
 it.effect("the store refuses an edit that breaks a rule of the entries", () =>
 	Effect.gen(function* () {
-		const store = yield* PresetPlugins.store(all, PluginsFile.presetKnown)
+		const store = yield* PresetPlugins.store(all, PresetPlugins.known)
 		assert.deepStrictEqual(
 			yield* refusedWith(
 				store.apply(
 					Tree.Op.Update({
 						id: "auth",
-						patch: { name: Preset.nameOf("triggers") },
+						patch: { name: Preset.plugins["triggers"].name },
 					}),
 				),
 			),
@@ -141,10 +142,10 @@ it.live("the store of a plugins file never reads it again", () =>
 		const entries = Result.getOrThrow(
 			Result.flatMap(
 				PluginsFile.parse("- id: triggers\n  disabled: true\n"),
-				(raw) => PluginsFile.merge(PluginsFile.presetKnown, raw),
+				(raw) => PluginsFile.merge(PresetPlugins.known, raw),
 			),
 		)
-		const store = yield* PresetPlugins.store(entries, PluginsFile.presetKnown)
+		const store = yield* PresetPlugins.store(entries, PresetPlugins.known)
 		assert.deepStrictEqual(store.initial, entries)
 		assert.deepStrictEqual(yield* store.refresh, Option.none())
 		const outside = yield* Stream.runHead(store.external).pipe(
@@ -164,3 +165,28 @@ it.live("the store of a plugins file never reads it again", () =>
 		)
 	}),
 )
+
+it("the preset derives its entries and its required plugins from one table", () => {
+	assert.deepStrictEqual(
+		Arr.map(Preset.entries, (entry) => entry.id),
+		Rec.keys(Preset.plugins),
+	)
+	assert.deepStrictEqual(
+		Arr.map(Preset.entries, (entry) => entry.name),
+		Arr.map(Rec.values(Preset.plugins), (plugin) => plugin.name),
+	)
+	// The loader finds a plugin by the module name of its entry.
+	assert.isTrue(
+		Arr.every(Preset.entries, (entry) =>
+			Rec.has(PresetPlugins.plugins, entry.name),
+		),
+	)
+	assert.deepStrictEqual(Preset.required, [
+		"audit",
+		"platform",
+		"organization",
+		"access",
+		"auth",
+		"authorization",
+	])
+})

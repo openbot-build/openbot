@@ -1,10 +1,13 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { SessionInfo } from "@openbot-build/domain/Accounts"
+import { Action, State } from "@openbot-build/domain/AppAuthorizations"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { Execution } from "@openbot-build/domain"
 import { assert, layer } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import {
-	AppAuthorizationApi,
 	AppExperienceApi,
-	AuthApi,
 	ConnectionsApi,
 	ExecutionsApi,
 	RequestsApi,
@@ -30,13 +33,11 @@ import {
 	HttpServer,
 } from "effect/http"
 import * as Development from "@openbot-build/server-development/Development"
-import { DatabasePostgres as Database } from "@openbot-build/openbot"
 import {
 	Caller,
 	DevelopmentLogin,
 	DevelopmentTesting,
 	Messages,
-	PostgresTest as Postgres,
 	Wait,
 } from "@openbot-build/server-testing"
 
@@ -78,7 +79,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 		"development Apps show protocol, requirement, expiry and cleanup failures through the standard APIs",
 		() =>
 			Effect.gen(function* () {
-				const database = yield* Postgres.start
+				const database = yield* TestDatabase.start
 				const options = {
 					host: "127.0.0.1",
 					port: 0,
@@ -97,8 +98,9 @@ layer(platform, { excludeTestServices: true })((it) => {
 				}
 				// The migration has its own database pool. It closes after the migration.
 				yield* Effect.scoped(
-					Effect.flatMap(Layer.build(Database.layer(options)), (services) =>
-						Effect.provideContext(Database.migrate, services),
+					Effect.flatMap(
+						Layer.build(PgClient.layer({ url: options.databaseUrl })),
+						(services) => Effect.provideContext(Migrations.migrate, services),
 					),
 				)
 				const services = yield* Layer.build(Development.layer(options))
@@ -201,7 +203,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 				assert.strictEqual((yield* verify(path))._tag, "Verified")
 				const account = yield* Effect.flatMap(
 					request("/auth/session", "GET"),
-					Caller.json(AuthApi.SessionInfo),
+					Caller.json(SessionInfo),
 				)
 				const executions = Effect.provideContext(
 					DevelopmentTesting.executionCount(yield* Caller.memberOf(account)),
@@ -269,7 +271,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 				const action = (id: Execution.Id) =>
 					Effect.flatMap(
 						request(`/v1/app-authorization-actions/${id}`, "GET"),
-						Caller.json(AppAuthorizationApi.Action),
+						Caller.json(Action),
 					)
 				const wait = (id: Execution.Id) =>
 					poll(action(id), (value) =>
@@ -311,7 +313,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 					assert.strictEqual(completed.status, 303, yield* completed.text)
 					const flow = yield* Effect.flatMap(
 						request(`/v1/app-authorizations/${started.flowId}`, "GET"),
-						Caller.json(AppAuthorizationApi.State),
+						Caller.json(State),
 					)
 					const id = Option.getOrThrow(Option.fromNullishOr(flow.executionId))
 					assert.equal((yield* wait(id)).result?._tag, "Authorized")

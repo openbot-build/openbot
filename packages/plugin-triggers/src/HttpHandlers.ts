@@ -1,21 +1,24 @@
-import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
-import { Redacted } from "effect"
+import type { AuditAction } from "@openbot-build/domain/Organizations"
 import {
-	OpenBotApi,
-	type OrganizationApi,
-	TriggersApi,
-} from "@openbot-build/api"
+	type Trigger,
+	TriggerStorageUnavailable,
+	TriggerInvalid,
+	TriggerHookDenied,
+} from "@openbot-build/domain/Triggers"
+import { type Caller, Identity } from "@openbot-build/domain/Identity"
+import * as HttpErrors from "@openbot-build/server-execution/HttpErrors"
+import { Redacted } from "effect"
+import { OpenBotApi } from "@openbot-build/api"
 
-import { type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option, type Schema, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as DefaultBot from "@openbot-build/conversation-contract/bots/DefaultBot"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import { triggerKey } from "@openbot-build/identity-contract/audit/Resources"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { triggerKey } from "@openbot-build/domain/AuditResources"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import * as Fire from "./Fire.ts"
 import { Triggers } from "./Triggers.ts"
 
@@ -28,8 +31,8 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "triggers", (handlers) =>
 		const defaultBot = yield* DefaultBot.make
 		const record = (
 			caller: Caller,
-			action: OrganizationApi.AuditAction,
-			trigger: TriggersApi.Trigger,
+			action: AuditAction,
+			trigger: Trigger,
 			details: Schema.JsonObject,
 		) =>
 			audit
@@ -46,7 +49,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "triggers", (handlers) =>
 				.pipe(
 					Failures.replace(
 						"OpenBot could not write the audit entry of a trigger.",
-						() => TriggersApi.TriggerStorageUnavailable.make({}),
+						() => TriggerStorageUnavailable.make({}),
 					),
 				)
 		/** The tasks of a trigger work for the caller, so the caller must be able to give work to its Bot. */
@@ -58,18 +61,15 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "triggers", (handlers) =>
 				Effect.catchTags({
 					BotNotFound: (error) =>
 						Effect.fail(
-							TriggersApi.TriggerInvalid.make({
+							TriggerInvalid.make({
 								message: `There is no Bot ${error.bot}.`,
 							}),
 						),
-					BotConflict: () =>
-						Effect.fail(TriggersApi.TriggerStorageUnavailable.make({})),
+					BotConflict: () => Effect.fail(TriggerStorageUnavailable.make({})),
 					BotInvalid: (error) =>
-						Effect.fail(
-							TriggersApi.TriggerInvalid.make({ message: error.message }),
-						),
+						Effect.fail(TriggerInvalid.make({ message: error.message })),
 					BotStorageUnavailable: () =>
-						Effect.fail(TriggersApi.TriggerStorageUnavailable.make({})),
+						Effect.fail(TriggerStorageUnavailable.make({})),
 				}),
 			)
 		return handlers
@@ -137,7 +137,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "triggers", (handlers) =>
 					yield* botFor(caller, current.bot)
 					// Read the origin first, so a failure does not hide a new secret.
 					const publicOrigin = yield* Platform.publicOriginOr(settings, () =>
-						TriggersApi.TriggerStorageUnavailable.make({}),
+						TriggerStorageUnavailable.make({}),
 					)
 					const { trigger, secret } = yield* triggers.setWebhook(
 						caller,
@@ -178,7 +178,7 @@ export const layerHooks = HttpApiBuilder.group(
 			const safe = yield* HttpErrors.make
 			return handlers.handle("fireTrigger", ({ params, headers, payload }) =>
 				Effect.gen(function* () {
-					const denied = TriggersApi.TriggerHookDenied.make({})
+					const denied = TriggerHookDenied.make({})
 					const match = /^Bearer\s+(\S+)$/i.exec(headers.authorization)
 					if (match === null) return yield* denied
 					const found = yield* triggers.verifyHook(params.triggerId, match[1]!)

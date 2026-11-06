@@ -18,8 +18,7 @@ Seine Lernarbeit erscheint nicht als Chat. Diese Seite zeigt, wie Bot Memory
 lernt, wer was sieht und wie du es mit der API liest und änderst.
 
 Bot Memory ist das einzige Memory. Ein Chat behält seinen Verlauf, aber keine
-eigene Liste von Fakten. Ältere Versionen von OpenBot hatten auch gelerntes
-Memory für jede Session. Dieses Memory gibt es nicht mehr.
+eigene Liste von Fakten.
 
 ---
 
@@ -68,11 +67,14 @@ OpenBot setzt die `for:`-Tags. Einen Eintrag ohne `for:`-Tag sieht niemand.
 
 Bei einem Fakt mit mehreren Quell-Items speichert OpenBot beim Lernen die
 Zugriffsregel jedes Items. Diese Daten bleiben privat. Das öffentliche Format
-eines Eintrags bleibt gleich. Bei einer Beobachtung prüft OpenBot jeden
-Quelleintrag und danach auch dessen Quellen. Eine fehlende Quelle, ein Kreis in
-den Quellverweisen oder ein fehlender Zugriffsnachweis verbirgt das Ergebnis.
-Dieselbe Prüfung gilt beim Lesen, bei Änderungsprotokollen, beim Bearbeiten und
-für das Memory in Beichten und Ergänzungen der Eingabe.
+eines Eintrags bleibt gleich. Jeder Fakt muss diese Daten haben. Trifft ein
+Lesen oder Ändern des Memorys auf einen gespeicherten Fakt ohne diese Daten,
+bricht der Server es ab und antwortet mit `503` (`BotStorageUnavailable`). Er
+löscht den Fakt nicht. Bei einer Beobachtung prüft OpenBot jeden Quelleintrag
+und danach auch dessen Quellen. Eine fehlende Quelle, ein Kreis in den
+Quellverweisen oder eine Quellregel, die der Leser nicht erfüllt, verbirgt das
+Ergebnis. Dieselbe Prüfung gilt beim Lesen, bei Änderungsprotokollen, beim
+Bearbeiten und für das Memory in Beichten und Ergänzungen der Eingabe.
 
 Der Server prüft Tags, Quellverweise und Zugriffsregeln, ohne den Inhalt des
 Eintrags zu öffnen. Danach entschlüsselt er nur die Inhalte für die Antwort.
@@ -263,8 +265,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `GET /v1/bots/:botId/memory/log` listet die Änderungen von Einträgen, die du
 sehen darfst: `version`, die Zeit, was die Änderung gemacht hat (`memory_bot`
-oder `person`), und die ids. Änderungen aus älteren Versionen von OpenBot können
-auch `promotion` sagen.
+oder `person`), und die ids.
 
 Um Memory zu entfernen, ohne es zu lesen, sende einen Tag von OpenBot an
 `POST /v1/bots/:botId/memory/purge`: einen Tag mit `from:`, `chat:`, `org:` oder
@@ -277,14 +278,10 @@ Wenn du
 bleibt das Memory, das der Bot daraus gelernt hat. Entferne `chat:<id>` mit
 einem Purge, um auch das zu entfernen.
 
-Für altes und neues Memory gilt dieselbe Regel zum Zugriff auf die Quellen. Wenn
-OpenBot den Zugriff auf jede Quelle eines alten Eintrags nicht belegen kann,
-bleibt der Eintrag verborgen. Auch beim Lernen bleiben dieser Eintrag und die
-Schlüsse daraus aus der Eingabe. Er wird erst wieder sichtbar, wenn er aus
-Quellen mit prüfbarem Zugriff neu aufgebaut wird. OpenBot baut diese Einträge
-bei einem Upgrade nicht neu auf. Es erweitert den Leserkreis alter Erinnerungen
-nicht. Ein privater angehefteter Eintrag aus `Remember` behält seine eigene
-Zugriffsregel.
+OpenBot zeigt einen gelernten Eintrag nur, wenn es den Zugriff auf jede Quelle
+des Eintrags belegen kann. Sonst bleibt der Eintrag verborgen. Auch beim Lernen
+bleiben dieser Eintrag und die Schlüsse daraus aus der Eingabe. Ein privater
+angehefteter Eintrag aus `Remember` behält seine eigene Zugriffsregel.
 
 ---
 
@@ -297,8 +294,7 @@ Zwei Routen zeigen, was in einem deiner Chats passiert ist:
   sie Personen zeigst.
 - `GET /v1/chats/:chatId/enrichments` listet, wie der Memory-Bot die Eingabe
   jedes Turns neu geschrieben hat: den neuen `text`, die Worte der Person in
-  `original` und die Einträge, die er genutzt hat. Ältere Einträge haben kein
-  `original`.
+  `original` und die Einträge, die er genutzt hat.
 
 Beide brauchen `read` auf dem Chat. So kann nur die Person sie lesen, der der
 Chat gehört.

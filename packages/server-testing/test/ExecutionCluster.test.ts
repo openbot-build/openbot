@@ -1,7 +1,10 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { type WorkIdentity, ServiceId } from "@openbot-build/domain/Identity"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
-import { Execution, ServiceId, type WorkIdentity } from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Effect,
@@ -12,10 +15,8 @@ import {
 	Option,
 } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as PostgresTest from "./PostgresTest.ts"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 
 layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 	excludeTestServices: true,
@@ -25,12 +26,12 @@ layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 			`another process takes over ${kind} work from a saved step`,
 			() =>
 				Effect.gen(function* () {
-					const database = yield* PostgresTest.start
+					const database = yield* TestDatabase.start
 					const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 					const firstRunner = 1
 					const secondRunner = 2
 					const run = Effect.gen(function* () {
-						yield* DatabasePostgres.migrate
+						yield* Migrations.migrate
 						const sql = yield* PgClient.PgClient
 						yield* sql`create table execution_test_steps (
 				execution_id text not null, step text not null, count integer not null, runner integer not null,
@@ -656,8 +657,8 @@ layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 									Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 								),
 								Layer.provideMerge(
-									DatabasePostgres.layer({
-										databaseUrl: Redacted.make(database.url),
+									PgClient.layer({
+										url: Redacted.make(database.url),
 									}),
 								),
 							),
@@ -670,10 +671,10 @@ layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 		"a new owner finishes cancellation while the old Activity closes",
 		() =>
 			Effect.gen(function* () {
-				const database = yield* PostgresTest.start
+				const database = yield* TestDatabase.start
 				const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 				const run = Effect.gen(function* () {
-					yield* DatabasePostgres.migrate
+					yield* Migrations.migrate
 					const sql = yield* PgClient.PgClient
 					const store = yield* Store.Store
 					yield* sql`create table execution_test_steps (
@@ -790,8 +791,8 @@ layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 								Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 							),
 							Layer.provideMerge(
-								DatabasePostgres.layer({
-									databaseUrl: Redacted.make(database.url),
+								PgClient.layer({
+									url: Redacted.make(database.url),
 								}),
 							),
 						),

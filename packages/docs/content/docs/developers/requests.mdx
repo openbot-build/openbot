@@ -247,14 +247,3 @@ App resources, resource templates and prompts are reads, so they need no
 decision. An App's own notes never decide which tools are safe. Only the
 organization can mark tools as reads, with `appReadRules` in its
 [settings](/organization#settings).
-
-## Requests from an older version
-
-Each request view has `executionId` and `executionStatus`. After a data upgrade,
-an old pending request can still have `status: "pending"` while its execution
-has `executionStatus: "interrupted"`. Its saved action remains available for
-review under the current access rules.
-
-The old record has no proof of its original token. It cannot grant rights or run
-the old action. Answering it returns `409` with `RequestConflict`. Send new Chat
-input to ask for the action again with the current caller's rights.

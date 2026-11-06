@@ -93,10 +93,10 @@ nutzt `NodeCrypto.layer`.
 
 Speichere für ein Neuladen den Befehlsschlüssel, das Ziel und die ganze Eingabe,
 bevor du `command.send` aufrufst. Gib beim erneuten Vorbereiten den alten
-Schlüssel als `commandKey` mit. Ein gültiger Nachrichtenbeleg enthält für neue
-Befehle `inputId`. Gleiche sie mit `ChatView.queuedInputs[].id` oder einer
-gespeicherten `ChatItem.id` ab, bevor du eine lokale wartende Kopie ersetzt.
-Ältere gespeicherte Befehle können das Feld weglassen. Siehe
+Schlüssel als `commandKey` mit. Ein gültiger Nachrichtenbeleg enthält `inputId`.
+Gleiche sie mit `ChatView.queuedInputs[].id` oder einer gespeicherten
+`ChatItem.id` ab, bevor du eine lokale wartende Kopie ersetzt. Eine Nachricht an
+einen Aufgaben-Chat kann das Feld weglassen. Siehe
 [Die Antwort](/de/developers/chats#die-antwort).
 
 | Option           | Pflicht | Was sie tut                                                                                                                 |
@@ -119,10 +119,11 @@ abläuft oder jemand es widerruft.
 Datensatz-IDs haben Markentypen (branded types). Eine Marke trennt die IDs
 verschiedener Arten von Datensätzen. So kann eine `ConnectionId` nicht als
 `AppViewId` dienen. Nutze die ID aus einer API-Antwort für weitere Aufrufe. Lies
-eine ID von außerhalb des Programms mit ihrem Schema aus `@openbot-build/api`,
-etwa `ConnectionsApi.ConnectionId`. Modell- und Anbieter-IDs nutzen `Model.Id`
-und `Provider.Id` aus `@openbot-build/core`. In JSON und URLs bleiben diese
-Werte Zeichenketten.
+eine ID von außerhalb des Programms mit ihrem Schema aus
+`@openbot-build/domain`, etwa `ConnectionId.ConnectionId`. Eine Client-App
+importiert dieselben Schemas aus `@openbot-build/client/Domain`. Modell- und
+Anbieter-IDs nutzen `Model.Id` und `Provider.Id` aus `@openbot-build/core`. In
+JSON und URLs bleiben diese Werte Zeichenketten.
 
 Jede Operation liegt unter `client.api.<group>.<operation>`. Die Namen sind
 dieselben wie in der [API-Referenz](/api/). Jeder Aufruf nimmt ein Objekt mit
@@ -237,7 +238,20 @@ lies die aktuelle Anbieterversion. Siehe
 Ein Befehlsbeleg enthält `executionId`, `commandKey` und `sequence`. Er
 bestätigt das Speichern des Befehls, nicht das Ende einer externen Handlung.
 Lies `GET /v1/executions/:executionId` für `status` und `failure`. Ein Fehler
-enthält nur `category` und `errorId`.
+enthält nur `category` und `errorId`. Die Kategorie sagt, was du als Nächstes
+tust:
+
+| Kategorie         | Was du tust                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| `invalid`         | Ändere die Eingabe. Versuche es dann wieder.                                                |
+| `forbidden`       | Der Aufrufer darf das nicht. Versuche es nicht wieder.                                      |
+| `not_found`       | Eine Ressource gibt es nicht.                                                               |
+| `conflict`        | Der Zustand hat sich geändert. Lies ihn neu, bevor du es wieder versuchst.                  |
+| `limited`         | Ein Limit oder ein Budget stoppte die Arbeit. Versuche es erst wieder, wenn es sich ändert. |
+| `unavailable`     | OpenBot konnte die Arbeit jetzt nicht tun. Versuche es später wieder.                       |
+| `external`        | Ein externer Dienst scheiterte.                                                             |
+| `outcome_unknown` | Die externe Handlung ist vielleicht geschehen, vielleicht nicht.                            |
+| `interrupted`     | Die Arbeit stoppte vor ihrem Ende.                                                          |
 
 Lies gespeicherte Ereignisse mit
 `GET /v1/executions/:executionId/events?afterSequence=0`. Die Seite enthält

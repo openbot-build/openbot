@@ -11,7 +11,7 @@ import {
 } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { exportJWK, generateKeyPair, SignJWT, type JWTPayload } from "jose"
-import * as OAuth from "@openbot-build/model-providers/providers/chatgpt/OAuth"
+import * as OAuth from "@openbot-build/model-providers/ChatGptOAuth"
 
 const issuer = "https://auth.openai.com"
 const clientId = "oaiapp_test"

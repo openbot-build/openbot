@@ -1,4 +1,5 @@
-import { Delegations as Domain, Execution } from "@openbot-build/domain"
+import { DelegationId } from "@openbot-build/domain/DelegationId"
+import { Execution } from "@openbot-build/domain"
 import { Effect, Option, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { SqlClient } from "effect/sql"
@@ -14,11 +15,10 @@ import {
 	Store,
 	storage,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import { triggerKey } from "@openbot-build/identity-contract/audit/Resources"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import { delegationTimeLimitOf } from "@openbot-build/server-kernel/settings/Documents"
+import { triggerKey } from "@openbot-build/domain/AuditResources"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import { Triggers } from "./Triggers.ts"
 
 export const dataNote =
@@ -50,9 +50,7 @@ export const make = Effect.gen(function* () {
 		function* (input: Input) {
 			const found = yield* triggers.read(input.organizationId, input.id)
 			if (Option.isNone(found)) return yield* Execution.Forbidden.make({})
-			const { caller: authority, trigger } = found.value
-			if (Option.isNone(authority)) return yield* Execution.Forbidden.make({})
-			const caller = authority.value
+			const { caller, trigger } = found.value
 			if (!trigger.enabled || trigger.revision !== input.revision)
 				return yield* Execution.Forbidden.make({})
 			const allowed = yield* bots.access(caller, trigger.bot, "delegate")
@@ -80,7 +78,6 @@ export const make = Effect.gen(function* () {
 						if (
 							Option.isNone(current) ||
 							!current.value.trigger.enabled ||
-							Option.isNone(current.value.caller) ||
 							current.value.trigger.revision !== trigger.revision
 						)
 							return yield* Execution.Forbidden.make({})
@@ -113,13 +110,12 @@ export const make = Effect.gen(function* () {
 									(yield* Schema.encodeEffect(
 										Schema.fromJsonString(Schema.Json),
 									)(input.data))
-						const id = Domain.DelegationId.make(
+						const id = DelegationId.make(
 							"dlg_" + (yield* crypto.uuidV7().pipe(Effect.orDie)),
 						)
 						const limits = {
-							timeMs: delegationTimeLimitOf(
-								(yield* settings.organization(input.organizationId)).document,
-							),
+							timeMs: (yield* settings.organization(input.organizationId))
+								.document.delegationTimeLimitMs,
 						}
 						const key = yield* create({
 							workflow: DelegationSource.workflowName,
@@ -196,7 +192,7 @@ export const make = Effect.gen(function* () {
 			const execution = yield* store.get({ namespace, id: receipt.executionId })
 			return {
 				...receipt,
-				delegation: Domain.DelegationId.make(execution.resource.id),
+				delegation: DelegationId.make(execution.resource.id),
 			}
 		},
 		Effect.scoped,

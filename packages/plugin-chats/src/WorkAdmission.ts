@@ -1,5 +1,6 @@
+import { Caller } from "@openbot-build/domain/Identity"
 import { Chat } from "@openbot-build/core"
-import { Caller, Execution, Delegations as Domain } from "@openbot-build/domain"
+import { Execution, Delegations as Domain } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -12,6 +13,8 @@ import {
 	Struct,
 } from "effect"
 import * as DelegationUsage from "@openbot-build/conversation-contract/bots/DelegationUsage"
+import * as InputCommands from "@openbot-build/conversation-contract/chats/InputCommands"
+import * as RequestCommands from "@openbot-build/conversation-contract/capabilities/RequestCommands"
 import {
 	Delegations,
 	noUsage,
@@ -19,18 +22,11 @@ import {
 import { Requests } from "@openbot-build/conversation-contract/capabilities/Requests"
 import * as Db from "@openbot-build/server-database/Database"
 import { executions } from "@openbot-build/server-database/ExecutionSchema"
-import * as Admission from "@openbot-build/server-execution/execution/Admission"
-import {
-	Store,
-	storage,
-	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+import * as Admission from "@openbot-build/server-execution/Admission"
+import { Store, storage, type Key } from "@openbot-build/server-execution/Store"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import * as ToolOrigins from "@openbot-build/conversation-contract/chats/ToolOrigins"
 import { WorkAdmission } from "@openbot-build/conversation-contract/chats/WorkAdmission"
-export { WorkAdmission } from "@openbot-build/conversation-contract/chats/WorkAdmission"
-export type { Service } from "@openbot-build/conversation-contract/chats/WorkAdmission"
-
 const TurnReference = Schema.Struct({
 	chat: Chat.Id,
 	host: Schema.optionalKey(ChatHost.ChatHostState),
@@ -88,7 +84,7 @@ export const make = Effect.gen(function* () {
 						.where(
 							and(
 								eq(executions.organizationId, organizationId),
-								eq(executions.workflow, "openbot.capability-request"),
+								eq(executions.workflow, RequestCommands.workflowName),
 								eq(executions.resourceKind, "Request"),
 								eq(executions.resourceId, host.review),
 							),
@@ -160,7 +156,7 @@ export const make = Effect.gen(function* () {
 			const upcoming = call ?? intent
 			const modelHost =
 				upcoming !== undefined &&
-				execution.workflow === "openbot.chat-turn" &&
+				execution.workflow === InputCommands.workflowName &&
 				Schema.is(Schema.Struct({ purpose: Schema.Literal("turn") }))(
 					upcoming.input,
 				)
@@ -205,8 +201,7 @@ export const make = Effect.gen(function* () {
 				const saved = found.value
 				if (saved.delegation.status !== "paused") {
 					const limits = saved.delegation.limits
-					if (saved.delegation.status !== "running" || limits === undefined)
-						continue
+					if (saved.delegation.status !== "running") continue
 					const nextModel =
 						modelHost?.kind === "task" &&
 						modelHost.ownerExecutionId === owner.id &&

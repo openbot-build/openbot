@@ -1,8 +1,12 @@
+import type {
+	ToConnector,
+	FromConnector,
+	ConnectorSessionId,
+} from "@openbot-build/domain/Computers"
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- The Effect ChildProcess handle does not say which signal stopped a command, and its kill waits for the end. Exit needs the signal name, and Signal must not wait.
 import { spawn } from "node:child_process"
 import { constants } from "node:os"
 import type * as NodePty from "@lydell/node-pty"
-import type { ComputersApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Cause,
@@ -22,15 +26,12 @@ import {
 
 /** The messages from OpenBot that are about command sessions. */
 export type SessionMessage = Extract<
-	ComputersApi.ToConnector,
+	ToConnector,
 	{ readonly _tag: "Start" | "Input" | "Resize" | "Signal" | "Close" }
 >
 
 type Start = Extract<SessionMessage, { readonly _tag: "Start" }>
-type Outgoing = Extract<
-	ComputersApi.FromConnector,
-	{ readonly _tag: "Output" | "Exit" }
->
+type Outgoing = Extract<FromConnector, { readonly _tag: "Output" | "Exit" }>
 
 export interface Options {
 	/** Where commands run when the session gives no folder. */
@@ -274,7 +275,7 @@ export const make = <E>(
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
 		const running = yield* Ref.make(
-			HashMap.empty<ComputersApi.ConnectorSessionId, Process>(),
+			HashMap.empty<ConnectorSessionId, Process>(),
 		)
 		// Node gives output in callbacks. The callbacks put messages in this queue,
 		// and one fiber sends them in order. The queue has no fixed size, because an
@@ -346,7 +347,7 @@ export const make = <E>(
 			),
 		)
 
-		const sinkFor = (session: ComputersApi.ConnectorSessionId): Sink => {
+		const sinkFor = (session: ConnectorSessionId): Sink => {
 			let seq = 0
 			return {
 				output: (bytes) => {
@@ -423,7 +424,7 @@ export const make = <E>(
 		})
 
 		const withSession = (
-			session: ComputersApi.ConnectorSessionId,
+			session: ConnectorSessionId,
 			use: (child: Process) => void,
 		): Effect.Effect<void> =>
 			Ref.get(running).pipe(

@@ -1,14 +1,23 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
+import { Bot } from "@openbot-build/domain/Bots"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
-import { BotsApi, ChannelsApi, UserTokensApi } from "@openbot-build/api"
-import { Effect, String as Str } from "effect"
+import { ChannelsApi } from "@openbot-build/api"
+import { Effect, String as Str, Layer } from "effect"
 import {
 	BrowserHost,
 	Caller,
 	ChannelScenarios,
 } from "@openbot-build/server-testing"
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"a Channel keeps the original token caller in its sealed configuration",
 		() =>
@@ -22,14 +31,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					publicOrigin: "https://channel-authority.example.com",
 				})
 				const token = yield* Caller.read(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					session(alice.session, "/v1/user/tokens", "POST", {
 						name: "Channel token",
 					}),
 				)
 				const keyed = Caller.withToken(yield* host.address)
 				const bot = yield* Caller.read(
-					BotsApi.Bot,
+					Bot,
 					session(alice.session, "/v1/bots", "POST", {
 						name: "Team",
 						role: "Helps people",

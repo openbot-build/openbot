@@ -9,9 +9,6 @@ import { Restriction } from "./AppIndex.ts"
 import { CeilingInput, CeilingSchema } from "./Authorization.ts"
 import { RoleId } from "./Roles.ts"
 import { PlanApproval } from "./PlanApproval.ts"
-export { Version } from "./Version.ts"
-export { SecretInput, SecretOutput, SecretState } from "./Secret.ts"
-export { SettingsUnavailable } from "./SettingsErrors.ts"
 
 /** True when the host is this computer. Every name under .localhost is (RFC 6761). */
 export const isLoopbackHost = (hostname: string): boolean =>

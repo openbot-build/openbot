@@ -1,22 +1,27 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { ChatTodos } from "@openbot-build/domain/Todos"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
+import { BotId } from "@openbot-build/domain/BotId"
 import {
 	BrowserHost,
 	Caller,
-	Policies,
-	Messages,
 	Chats,
+	Messages,
+	Policies,
 } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
-import {
-	ChatCommandReceipt,
-	ChatView,
-	ChatTodos,
-	UserTokensApi,
-} from "@openbot-build/api"
-import { Authorization, BotId } from "@openbot-build/domain"
-import { Array as Arr, Effect, HashSet } from "effect"
+import { ChatsApi } from "@openbot-build/api"
+import { Authorization } from "@openbot-build/domain"
+import { Array as Arr, Effect, HashSet, Layer } from "effect"
 
 const publicOrigin = "https://chat-commands.example.com"
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"Chat writes need no member runtime and keep revisions and current rights",
 		() =>
@@ -36,7 +41,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const address = yield* host.address
 				const cookie = Caller.withCookie({ address, publicOrigin })
 				const initial = yield* cookie(member.session, `/v1/chats/${chat}`).pipe(
-					Effect.flatMap(Caller.json(ChatView)),
+					Effect.flatMap(Caller.json(ChatsApi.ChatView)),
 				)
 				assert.strictEqual(initial.turn, null)
 				const changed = yield* cookie(
@@ -47,7 +52,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						expected: initial.chat.revision,
 						mode: "plan",
 					},
-				).pipe(Effect.flatMap(Caller.json(ChatView)))
+				).pipe(Effect.flatMap(Caller.json(ChatsApi.ChatView)))
 				assert.strictEqual(changed.chat.settings.mode, "plan")
 				assert.strictEqual(changed.turn, null)
 				assert.strictEqual(changed.executionId, null)
@@ -69,7 +74,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						revision: changed.chat.revision,
 						items,
 					},
-				).pipe(Effect.flatMap(Caller.json(ChatView)))
+				).pipe(Effect.flatMap(Caller.json(ChatsApi.ChatView)))
 				assert.strictEqual(withTodos.chat.settings.mode, "plan")
 				assert.deepStrictEqual(
 					yield* cookie(member.session, `/v1/chats/${chat}/todos`).pipe(
@@ -91,7 +96,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 							when: ($) => $.eq("id", chat),
 						})
 					}),
-				}).pipe(Effect.flatMap(Caller.json(UserTokensApi.CreatedToken, 201)))
+				}).pipe(Effect.flatMap(Caller.json(CreatedToken, 201)))
 				const keyed = Caller.withToken(address)
 				assert.strictEqual(
 					(yield* keyed(token.secret, `/v1/chats/${chat}`, "PATCH", {
@@ -106,7 +111,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					publicOrigin,
 				})
 				const saved = yield* after(member.session, `/v1/chats/${chat}`).pipe(
-					Effect.flatMap(Caller.json(ChatView)),
+					Effect.flatMap(Caller.json(ChatsApi.ChatView)),
 				)
 				assert.deepStrictEqual(saved, withTodos)
 				// Clearing a Chat model follows the Bot for each new Turn. The chosen
@@ -120,7 +125,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						model: null,
 						mode: "build",
 					},
-				).pipe(Effect.flatMap(Caller.json(ChatView)))
+				).pipe(Effect.flatMap(Caller.json(ChatsApi.ChatView)))
 				assert.strictEqual(reset.chat.settings.model, undefined)
 				const send: Messages.Send = (path, method, payload) =>
 					after(member.session, path, method, payload)
@@ -135,7 +140,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const retry = yield* send(`/v1/bots/${bot}/messages`, "POST", {
 					input: "Use the Bot model.",
 					commandKey: receipt.commandKey,
-				}).pipe(Effect.flatMap(Caller.json(ChatCommandReceipt, 202)))
+				}).pipe(Effect.flatMap(Caller.json(ChatsApi.ChatCommandReceipt, 202)))
 				assert.deepStrictEqual(retry, receipt)
 				assert.strictEqual(
 					(yield* send(`/v1/bots/${bot}/messages`, "POST", {

@@ -1,24 +1,25 @@
+import { ModelRegistry as ModelRegistryModel } from "@openbot-build/models-contract/ModelRegistry"
 import { Execution } from "@openbot-build/domain"
 import {
 	ModelProviders,
 	organizationOwner,
 	platformOwner,
 	type Stored,
-} from "@openbot-build/models-contract/models/ModelProviders"
-import { Models } from "@openbot-build/models-contract/models/Models"
-import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
+} from "@openbot-build/models-contract/ModelProviders"
+import { Models } from "@openbot-build/models-contract/Models"
+import { ProviderOAuth } from "@openbot-build/models-contract/ProviderOAuth"
 import * as ModelRegistry from "@openbot-build/plugin-models/ModelRegistry"
-import * as LiveBackends from "@openbot-build/models-contract/models/LiveBackends"
+import * as LiveBackends from "@openbot-build/models-contract/LiveBackends"
 import {
 	Billing,
 	SpendingBlocked,
 	type Call,
 	type Tokens,
-} from "@openbot-build/server-billing/billing/Billing"
-import { attribute } from "@openbot-build/server-billing/billing/MeteredModel"
-import { TokenThrottle } from "@openbot-build/server-billing/billing/TokenThrottle"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import { organizationDefaults } from "@openbot-build/server-kernel/settings/Documents"
+} from "@openbot-build/server-billing/Billing"
+import { attribute } from "@openbot-build/server-billing/MeteredModel"
+import { TokenThrottle } from "@openbot-build/server-billing/TokenThrottle"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import { organizationDefaults } from "@openbot-build/server-kernel/Documents"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { assert, it } from "@effect/vitest"
 import { Config, ContextWindow, Model, Provider } from "@openbot-build/core"
@@ -35,7 +36,7 @@ import {
 } from "effect"
 import { LanguageModel, Prompt, Tool, Toolkit } from "effect/ai"
 import { HttpClient, HttpClientResponse } from "effect/http"
-import * as ChatGptProvider from "@openbot-build/model-providers/providers/chatgpt/ChatGptProvider"
+import * as ChatGptProvider from "@openbot-build/model-providers/ChatGptProvider"
 
 const selection = Config.Selection.make({
 	provider: Provider.Id.make("prov_chatgpt"),
@@ -551,7 +552,7 @@ it.effect(
 					]),
 				)
 				yield* Effect.gen(function* () {
-					const models = yield* ModelRegistry.ModelRegistry
+					const models = yield* ModelRegistryModel
 					const chat = yield* models.resolve("org", selection)
 					const rules = yield* models.rulesModel("org")
 					assert.strictEqual(rules._tag, "Language")

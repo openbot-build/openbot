@@ -1,9 +1,12 @@
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { Authorization, type Settings as Limits } from "@openbot-build/domain"
 import { Effect, Layer } from "effect"
-import { organizationDefaults } from "@openbot-build/server-kernel/settings/Documents"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as TokenThrottle from "@openbot-build/server-billing/billing/TokenThrottle"
+import {
+	organizationDefaults,
+	platformDefaults,
+} from "@openbot-build/server-kernel/Documents"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import * as TokenThrottle from "@openbot-build/server-billing/TokenThrottle"
 
 export const none: Limits.TokenRateLimits = {
 	organization: null,
@@ -20,6 +23,7 @@ export const settings = (
 	Layer.mock(Settings, {
 		platform: Effect.succeedSome({
 			document: {
+				...platformDefaults,
 				publicOrigin: "https://openbot.example.com",
 				authSecret: "unused",
 				identityProvider: null,

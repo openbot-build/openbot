@@ -244,7 +244,7 @@ export const developerIndexRequests = table(
 	{
 		namespace: namespace(),
 		id: uuid().notNull(),
-		executionId: text("execution_id"),
+		executionId: text("execution_id").notNull(),
 		owner: text().notNull(),
 		cardUrl: text("card_url").notNull(),
 		generation: text().notNull(),
@@ -294,70 +294,10 @@ export const developerNotices = table(
 		),
 	],
 )
-export const appInvocations = table(
-	"openbot_app_invocations",
-	{
-		owner: text().notNull(),
-		id: text().notNull(),
-		chat: text().notNull(),
-		status: text().notNull(),
-		body: text().notNull(),
-	},
-	(t) => [
-		primaryKey({ columns: [t.owner, t.id] }),
-		index("openbot_app_invocations_chat").on(t.owner, t.chat),
-	],
-)
-/**
- * The tool calls of each Chat that went on in the background. `body` is the
- * Operation record. A running Operation says often that its server still runs it,
- * so a sweep can end the Operations of a server that stopped.
- */
-export const operations = table(
-	"openbot_operations",
-	{
-		namespace: text().notNull(),
-		id: text().notNull(),
-		chat: text().notNull(),
-		status: text().notNull(),
-		body: text().notNull(),
-		/** The last time that the server of a running Operation said that it still runs it. */
-		heartbeatAt: time("heartbeat_at").notNull(),
-		startedAt: time("started_at").notNull(),
-	},
-	(t) => [
-		primaryKey({ columns: [t.namespace, t.id] }),
-		index("openbot_operations_chat").on(t.namespace, t.chat, t.startedAt),
-		index("openbot_operations_running")
-			.on(t.heartbeatAt)
-			.where(sql`${t.status} = 'Running'`),
-	],
-)
-/**
- * The Code Mode programs of each owner. The body is sealed. It holds the program,
- * its seed and clock, and the record of every App call, so a run can start again
- * and get the same results without sending a call twice.
- */
-export const codeRuns = table(
-	"openbot_code_runs",
-	{
-		owner: text().notNull(),
-		id: text().notNull(),
-		chat: text().notNull(),
-		callId: text("call_id").notNull(),
-		status: text().notNull(),
-		/** While a host runs the program, other hosts leave it alone until this time. */
-		leaseUntil: time("lease_until"),
-		body: text().notNull(),
-	},
-	(t) => [
-		primaryKey({ columns: [t.owner, t.id] }),
-		index("openbot_code_runs_chat").on(t.owner, t.chat),
-	],
-)
 export const appAuthorizations = table("openbot_app_authorizations", {
-	actor: text(),
-	executionId: text("execution_id"),
+	/** The sealed caller that started this sign-in. */
+	actor: text().notNull(),
+	executionId: text("execution_id").notNull(),
 	id: text().primaryKey(),
 	owner: text().notNull(),
 	connectionId: text("connection_id").notNull(),
@@ -978,7 +918,7 @@ export const channels = table(
 		linkPath: text("link_path"),
 		credentials: text().notNull(),
 		hints: text().notNull(),
-		executionId: text("execution_id"),
+		executionId: text("execution_id").notNull(),
 		version: integer().notNull(),
 		createdAt: time("created_at").notNull(),
 		updatedAt: time("updated_at").notNull(),
@@ -1151,23 +1091,6 @@ export const computerPairings = table(
 	],
 )
 
-/**
- * A call to a connector, so any instance can reach the instance that holds the
- * connection. `call` and `reply` are JSON text.
- */
-/** Old in-flight calls stay here until the data migration records their unknown outcome. */
-export const legacyComputerCalls = table(
-	"openbot_computer_calls",
-	{
-		id: text().primaryKey(),
-		computerId: text("computer_id").notNull(),
-		call: text().notNull(),
-		reply: text(),
-		createdAt: time("created_at").notNull(),
-	},
-	(t) => [index("openbot_computer_calls_created").on(t.createdAt)],
-)
-
 /** A time when a Computer ran. `ended_at` is null while it runs. */
 export const computerUsage = table(
 	"openbot_computer_usage",
@@ -1322,8 +1245,9 @@ export const channelConversations = table(
 )
 
 /**
- * Events from platforms that wait to be handled. The key drops an event that the platform
- * sends again. A worker takes the oldest open event of each chat, so a chat keeps its order.
+ * Events from platforms. The key drops an event that the platform sends again. Each event
+ * has its own execution, and it names the execution of the event before it in the same
+ * chat, so a chat keeps its order. `done_at` is set when the execution ends.
  */
 export const channelInbox = table(
 	"openbot_channel_inbox",
@@ -1332,14 +1256,8 @@ export const channelInbox = table(
 		channelId: text("channel_id").notNull(),
 		eventId: text("event_id").notNull(),
 		position: bigserial({ mode: "number" }).notNull(),
-		executionId: text("execution_id"),
+		executionId: text("execution_id").notNull(),
 		conversationKey: text("conversation_key").notNull(),
-		event: text().notNull(),
-		receivedAt: time("received_at").notNull(),
-		attempts: integer().notNull().default(0),
-		nextAt: time("next_at").notNull(),
-		claim: text(),
-		leaseUntil: time("lease_until").notNull().default(0),
 		doneAt: time("done_at"),
 	},
 	(t) => [
@@ -1348,37 +1266,29 @@ export const channelInbox = table(
 			columns: [t.organizationId, t.channelId],
 			foreignColumns: [channels.organizationId, channels.id],
 		}).onDelete("cascade"),
-		index("openbot_channel_inbox_open")
-			.on(t.channelId, t.conversationKey, t.receivedAt)
-			.where(sql`${t.doneAt} IS NULL`),
+		index("openbot_channel_inbox_conversation").on(
+			t.channelId,
+			t.conversationKey,
+			t.position,
+		),
 	],
 )
 
 /**
- * Messages that the bot must send or change: the answers of Turns and the cards of requests.
- * `ref` is the message on the platform after the first send.
+ * Messages that the bot sends or changes: request cards and notices. Each version has its
+ * own execution. `ref` is the message on the platform after the first send.
  */
 export const channelDeliveries = table(
 	"openbot_channel_deliveries",
 	{
 		id: text().primaryKey(),
-		executionId: text("execution_id"),
+		executionId: text("execution_id").notNull(),
 		organizationId: text("organization_id").notNull(),
 		channelId: text("channel_id").notNull(),
-		/** `reply` for the answer of a Turn, `request` for a request card, `notice` otherwise. */
+		/** `request` for a request card, `notice` otherwise. */
 		kind: text().notNull(),
-		target: text().notNull(),
-		chat: text(),
-		turn: text(),
 		request: text(),
-		body: text().notNull(),
 		ref: text(),
-		/** `live` while a Turn still writes, `pending` while it waits to go out, then `done`. */
-		state: text().notNull(),
-		attempts: integer().notNull().default(0),
-		nextAt: time("next_at").notNull(),
-		claim: text(),
-		leaseUntil: time("lease_until").notNull().default(0),
 		updatedAt: time("updated_at").notNull(),
 	},
 	(t) => [
@@ -1386,14 +1296,10 @@ export const channelDeliveries = table(
 			columns: [t.organizationId, t.channelId],
 			foreignColumns: [channels.organizationId, channels.id],
 		}).onDelete("cascade"),
-		uniqueIndex("openbot_channel_deliveries_turn").on(t.chat, t.turn),
 		uniqueIndex("openbot_channel_deliveries_request").on(
 			t.channelId,
 			t.request,
 		),
-		index("openbot_channel_deliveries_due")
-			.on(t.nextAt)
-			.where(sql`${t.state} = 'pending'`),
 	],
 )
 
@@ -1408,14 +1314,12 @@ export const usageEvents = table(
 		id: text().primaryKey(),
 		executionId: text("execution_id"),
 		status: text().notNull().default("confirmed"),
-		startedAt: time("started_at"),
-		/** The old hold marker. The data migration uses it to keep known estimates. */
-		reservationKnown: boolean("reservation_known").notNull().default(false),
+		startedAt: time("started_at").notNull(),
 		reservedMicros: bigint("reserved_micros", { mode: "number" })
 			.notNull()
 			.default(0),
 		/** The saved estimate stays after the active hold is released. */
-		estimatedMicros: bigint("estimated_micros", { mode: "number" }),
+		estimatedMicros: bigint("estimated_micros", { mode: "number" }).notNull(),
 		estimatedTokens: bigint("estimated_tokens", { mode: "number" })
 			.notNull()
 			.default(0),
@@ -1621,8 +1525,6 @@ export const fileRefs = table(
 )
 
 export * from "./ResourceSchema.ts"
-
-export * from "./UpgradeSchema.ts"
 
 /** Platform account access, kept apart from the sign-in SDK tables. */
 export const accountStates = table("openbot_account_states", {

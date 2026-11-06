@@ -1,3 +1,4 @@
+import { BotId } from "@openbot-build/domain/BotId"
 import { Execution } from "@openbot-build/domain"
 import { errors as executionErrors } from "./ExecutionsApi.ts"
 import { Schema } from "effect"
@@ -8,7 +9,6 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import { BotId } from "./BotsApi.ts"
 import { BotAuth } from "./AuthApi.ts"
 import {
 	Authorize,
@@ -64,73 +64,6 @@ import {
 	WriteStdinRequest,
 } from "@openbot-build/domain/Computers"
 // Explicit names keep namespace exports in the generated declaration files.
-export {
-	ApprovePairingRequest,
-	Computer,
-	ComputerAccess,
-	ComputerConflict,
-	ComputerExecutionFailed,
-	ComputerFeatures,
-	ComputerId,
-	ComputerInvalid,
-	ComputerNotFound,
-	ComputerNotReady,
-	ComputerOwner,
-	ComputerPairing,
-	ComputerPathNotFound,
-	ComputerProvider,
-	ComputerProviderCredentials,
-	ComputerProviderCredentialsView,
-	ComputerProviderFailed,
-	ComputerProviderId,
-	ComputerProviderInUse,
-	ComputerProviderKind,
-	ComputerProviderNotFound,
-	ComputerSessionNotFound,
-	ComputerSource,
-	ComputerState,
-	ComputerUnsupported,
-	ComputerUsage,
-	ComputersUnavailable,
-	ConnectorCall,
-	ConnectorDenied,
-	ConnectorHello,
-	ConnectorReply,
-	ConnectorSessionId,
-	ConnectorToken,
-	CreateComputerProviderRequest,
-	CreateComputerRequest,
-	DesktopAction,
-	DesktopStream,
-	ExecRequest,
-	FileContent,
-	FileEncoding,
-	FileEntry,
-	FromConnector,
-	MaxOutputBytes,
-	OpenPort,
-	Pairing,
-	PairingCode,
-	PairingId,
-	PairingInvalid,
-	PairingStatus,
-	Path,
-	Port,
-	ResizeRequest,
-	Screenshot,
-	SessionOutput,
-	SessionSignal,
-	StartPairingRequest,
-	ToConnector,
-	UpdateComputerProviderRequest,
-	UpdateComputerRequest,
-	WriteStdinRequest,
-	YieldTime,
-	connectorProtocolVersion,
-	maxOutputBytesDefault,
-	yieldTimeDefault,
-} from "@openbot-build/domain/Computers"
-
 export const ComputerErrors = [
 	...AuthorizationErrors,
 	ComputerNotFound.pipe(HttpApiSchema.status(404)),

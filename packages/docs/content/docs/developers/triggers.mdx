@@ -133,12 +133,6 @@ with [requests](/developers/requests). The requests go to the actor.
 
 ---
 
-After a data upgrade, a trigger can have `needsAuthorization: true`. Its prompt,
-schedule, next time and enabled setting stay, but neither a timer nor a webhook
-can start work. Save a change with current rights to set a new caller and clear
-this state. The new timer uses the next time after that change. Old work stays
-in its saved state; it does not run again as the new caller.
-
 ## Permissions
 
 | Action on `Trigger` | What it allows                                                     |

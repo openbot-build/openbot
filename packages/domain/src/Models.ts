@@ -64,9 +64,6 @@ export type Availability = typeof Availability.Type
 
 export const ProviderOwner = Schema.Literals(["platform", "organization"])
 export type ProviderOwner = typeof ProviderOwner.Type
-/** The platform or an organization owns a model, in the same way as a provider. */
-export const ModelOwner = ProviderOwner
-export type ModelOwner = ProviderOwner
 
 /**
  * A model, such as `gpt-5`. It does not belong to a provider. A provider
@@ -75,7 +72,7 @@ export type ModelOwner = ProviderOwner
 export const Model = Schema.Struct({
 	/** The ID is unique for its owner. A provider sends it as the model name unless the link sets `upstream`. */
 	id: CoreModel.Id,
-	owner: ModelOwner,
+	owner: ProviderOwner,
 	type: ModelType,
 	name: Schema.String,
 	reasoningEfforts: Schema.Array(Schema.String),
@@ -129,7 +126,7 @@ export type UpdatePlatformModelRequest = typeof UpdatePlatformModelRequest.Type
 export const ProviderModel = Schema.Struct({
 	/** The ID of the model. A provider links at most one model with each ID. */
 	model: ModelId,
-	modelOwner: ModelOwner,
+	modelOwner: ProviderOwner,
 	/** The model name that the provider gets. Leave it out to send the model ID. */
 	upstream: Schema.optionalKey(ModelName),
 	reasoningEfforts: Schema.optionalKey(Options),
@@ -239,7 +236,7 @@ export const ModelCatalog = Schema.Struct({
 		Schema.Struct({
 			provider: Provider.Id,
 			id: CoreModel.Id,
-			owner: ModelOwner,
+			owner: ProviderOwner,
 			type: ModelType,
 			name: Schema.String,
 			reasoningEfforts: Schema.Array(Schema.String),

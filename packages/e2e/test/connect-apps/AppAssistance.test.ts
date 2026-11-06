@@ -1,9 +1,16 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { AppExecution } from "@openbot-build/api"
 import { Apps, BrowserHost } from "@openbot-build/server-testing"
-import { Effect, Schema, String as Str } from "effect"
+import { Effect, Schema, String as Str, Layer } from "effect"
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"App assistance shows public candidates and the account's access needs without sending private context or granting access",
 		() =>

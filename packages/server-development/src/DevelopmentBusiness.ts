@@ -49,8 +49,7 @@ export class Business extends Context.Service<
 		) => Effect.Effect<Schema.JsonObject, Schema.SchemaError>
 		readonly executions: (owner: string) => Effect.Effect<number>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/server-development/DevelopmentBusiness/Business") {}
+>()("@openbot-build/server-development/DevelopmentBusiness/Business") {}
 
 /** Simulated App handlers that keep state. Model responses never make up their results. */
 export const layer = Layer.effect(

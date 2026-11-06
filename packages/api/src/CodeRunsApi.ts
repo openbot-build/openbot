@@ -6,20 +6,6 @@ import { Required, own } from "./Authorization.ts"
 import { chatParams } from "./ChatsApi.ts"
 
 // tsdown drops star exports from the built API namespace. List the names here.
-export {
-	CodeRunId,
-	maxCodeLength,
-	Code,
-	CallOutcome,
-	CodeCall,
-	FailureReason,
-	CodeResult,
-	CodeRunStatus,
-	CodeRun,
-	RequestCode,
-	Output,
-	ExecutionView,
-} from "@openbot-build/domain/CodeRuns"
 import { CodeRunId, ExecutionView } from "@openbot-build/domain/CodeRuns"
 
 export const CodeRunsApi = HttpApiGroup.make("codeRuns").add(

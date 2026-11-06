@@ -1,4 +1,5 @@
-import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
+import { ModelRegistry as ModelRegistryModel } from "@openbot-build/models-contract/ModelRegistry"
+import { ProviderOAuth } from "@openbot-build/models-contract/ProviderOAuth"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { assert, it } from "@effect/vitest"
 import {
@@ -14,25 +15,19 @@ import { Decision, DecisionModel } from "effect/ai"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { Config, Model, Provider } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
-import {
-	Billing,
-	type Tokens,
-} from "@openbot-build/server-billing/billing/Billing"
-import { TokenThrottle } from "@openbot-build/server-billing/billing/TokenThrottle"
+import { Billing, type Tokens } from "@openbot-build/server-billing/Billing"
+import { TokenThrottle } from "@openbot-build/server-billing/TokenThrottle"
 import * as ModelRegistry from "@openbot-build/plugin-models/ModelRegistry"
-import * as LiveBackends from "@openbot-build/models-contract/models/LiveBackends"
+import * as LiveBackends from "@openbot-build/models-contract/LiveBackends"
 import {
 	ModelProviders,
 	organizationOwner,
 	type Stored,
-} from "@openbot-build/models-contract/models/ModelProviders"
-import {
-	Models,
-	type StoredModel,
-} from "@openbot-build/models-contract/models/Models"
-import * as TypeSafeProvider from "@openbot-build/model-providers/providers/typesafe/TypeSafeProvider"
-import { organizationDefaults } from "@openbot-build/server-kernel/settings/Documents"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+} from "@openbot-build/models-contract/ModelProviders"
+import { Models, type StoredModel } from "@openbot-build/models-contract/Models"
+import * as TypeSafeProvider from "@openbot-build/model-providers/TypeSafeProvider"
+import { organizationDefaults } from "@openbot-build/server-kernel/Documents"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 
 const SentBody = Schema.Struct({
 	model: Schema.String,
@@ -182,7 +177,7 @@ const registryWith = (input: {
 	readonly opened?: Ref.Ref<number>
 	readonly recorded?: Ref.Ref<ReadonlyArray<Tokens>>
 }) =>
-	Layer.effect(ModelRegistry.ModelRegistry, ModelRegistry.make()).pipe(
+	Layer.effect(ModelRegistryModel, ModelRegistry.make()).pipe(
 		Layer.provide([
 			Layer.mock(ProviderOAuth, {}),
 			ErrorRecordsFixture.layer,
@@ -258,7 +253,7 @@ it.effect("the registry builds the decision model that a selection names", () =>
 		const opened = yield* Ref.make(0)
 		const recorded = yield* Ref.make<ReadonlyArray<Tokens>>([])
 		const label = yield* Effect.gen(function* () {
-			const registry = yield* ModelRegistry.ModelRegistry
+			const registry = yield* ModelRegistryModel
 			const model = yield* registry.decision(
 				organizationId,
 				selection("prov_ts"),
@@ -310,9 +305,8 @@ it.effect(
 					/openai-compat provider yet/,
 				],
 			] as const) {
-				const failed = yield* Effect.flatMap(
-					ModelRegistry.ModelRegistry,
-					(registry) => registry.decision(organizationId, selection("prov_ts")),
+				const failed = yield* Effect.flatMap(ModelRegistryModel, (registry) =>
+					registry.decision(organizationId, selection("prov_ts")),
 				).pipe(
 					Effect.flip,
 					Effect.provide(

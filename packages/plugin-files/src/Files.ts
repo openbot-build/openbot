@@ -1,7 +1,7 @@
+import type { Caller } from "@openbot-build/domain/Identity"
 import * as Objects from "./Objects.ts"
 import { FileTasks } from "./FileTasks.ts"
 import { Files as FilesApi } from "@openbot-build/domain"
-import { type Caller } from "@openbot-build/domain"
 import { and, desc, eq, inArray, notExists, sql } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -24,15 +24,12 @@ import { Digest, SecureRandom } from "effect/crypto"
 import { Prompt } from "effect/ai"
 import { Hex } from "effect/encoding"
 import { HttpClient, Multipart } from "effect/http"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
 import * as Db from "@openbot-build/server-database/Database"
 import { artifactFiles, files } from "@openbot-build/server-database/Schema"
-import {
-	type FilesDocument,
-	quotaOf,
-} from "@openbot-build/server-kernel/settings/Documents"
+import { type FilesDocument } from "@openbot-build/server-kernel/Documents"
 import { fileUrl } from "@openbot-build/apps-contract/files/Refs"
 import * as S3 from "./S3.ts"
 import {
@@ -40,9 +37,6 @@ import {
 	type Failure,
 	Files,
 } from "@openbot-build/apps-contract/files/Files"
-export { Files } from "@openbot-build/apps-contract/files/Files"
-export type { Content } from "@openbot-build/apps-contract/files/Files"
-
 /** A signed upload address works this long. */
 export const uploadLifetimeSeconds = 15 * 60
 
@@ -168,7 +162,7 @@ export const make = Effect.gen(function* () {
 		usedBytes: number,
 		bytes: number,
 	) => {
-		const quota = quotaOf(document)
+		const quota = document.quotaBytes
 		return quota !== null && usedBytes + bytes > quota
 			? Effect.fail(
 					FilesApi.FileQuotaExceeded.make({

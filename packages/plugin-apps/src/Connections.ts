@@ -1,13 +1,15 @@
 import {
+	type ExperienceInputInvalid,
+	ExperienceNotFound,
+	ExperienceStorageUnavailable,
+} from "@openbot-build/domain/ExperienceErrors"
+import { Identity } from "@openbot-build/domain/Identity"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
+import {
 	Authorization,
 	AppConnections as Api,
 	AppIndex,
 	AppDiscovery,
-	ConnectionId,
-	ExperienceInputInvalid,
-	ExperienceNotFound,
-	ExperienceStorageUnavailable,
-	Identity,
 } from "@openbot-build/domain"
 import type * as Models from "@openbot-build/apps-contract/apps/ConnectionModels"
 import { AppConnections, Discovery, Store } from "@openbot-build/protocol"
@@ -31,8 +33,8 @@ import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
 import * as DiscoveryService from "./Discovery.ts"
 import * as ManualConnection from "./ManualConnection.ts"
 import { Governance } from "./Governance.ts"
-import { Probe } from "./Probe.ts"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Probe } from "@openbot-build/apps-contract/apps/Probe"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import {
 	appConnections,
 	appDrafts,
@@ -44,7 +46,7 @@ import {
 	type StoredConnection,
 } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 
 export type Error =
 	| ExperienceInputInvalid
@@ -79,8 +81,7 @@ export class Connections extends Context.Service<
 			input: Models.Create,
 		) => Effect.Effect<Models.Connection, Error, Identity>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/Connections") {}
+>()("@openbot-build/plugin-apps/Connections") {}
 
 export const make: Effect.Effect<
 	typeof Connections.Service,

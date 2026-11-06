@@ -1,11 +1,11 @@
+import {
+	MemberSettings,
+	UpdateMemberSettingsRequest,
+} from "@openbot-build/domain/Settings"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { BotAuth } from "./AuthApi.ts"
 import { Authorize, GroupRequired, own } from "./Authorization.ts"
-import {
-	MemberSettings,
-	SettingsErrors,
-	UpdateMemberSettingsRequest,
-} from "./Settings.ts"
+import { SettingsErrors } from "./Settings.ts"
 
 /** The settings of the caller in its organization. Each member has their own. */
 export class MemberSettingsApi extends HttpApiGroup.make("memberSettings")

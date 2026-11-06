@@ -1,12 +1,19 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { BrowserHost, Caller, Wait } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
-import { ChatCommandReceipt } from "@openbot-build/api"
+import { ChatsApi } from "@openbot-build/api"
 import { Execution } from "@openbot-build/domain"
-import { Deferred, Effect, Option, Stream } from "effect"
+import { Deferred, Effect, Option, Stream, Layer } from "effect"
 import { LanguageModel } from "effect/ai"
 
 const publicOrigin = "https://chat-control.example.com"
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"a Chat delete waits for resource release and keeps its receipt through restart",
 		() =>
@@ -47,7 +54,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					)
 				yield* Effect.gen(function* () {
 					const input = yield* Caller.read(
-						ChatCommandReceipt,
+						ChatsApi.ChatCommandReceipt,
 						send("/v1/bots/" + bot + "/messages", "POST", {
 							commandKey: "start",
 							input: "Hello",

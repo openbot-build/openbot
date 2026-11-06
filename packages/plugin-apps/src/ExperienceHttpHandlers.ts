@@ -1,8 +1,8 @@
+import { Identity } from "@openbot-build/domain/Identity"
 import { ResetCommands } from "./ResetCommands.ts"
-import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
+import * as HttpErrors from "@openbot-build/server-execution/HttpErrors"
 import { OpenBotApi } from "@openbot-build/api"
 
-import { Identity } from "@openbot-build/domain"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Experience } from "./Experience.ts"

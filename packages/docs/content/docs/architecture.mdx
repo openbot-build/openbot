@@ -6,8 +6,7 @@ description: The shared design for stored work, state, and events.
 For developers. Start with the [developer manual](/developers) to choose API
 work, App publishing, or project changes.
 
-This page describes the shared execution design. Existing data moves through the
-checked migration during a maintenance window. The last section links the
+This page describes the shared execution design. The last section links the
 feature and release checks.
 
 ChatGPT uses a normal model provider with OAuth credentials. OAuth is browser
@@ -158,11 +157,16 @@ takeover and storage retries; `RunScope` owns phase resources and signals.
 
 Features give their Bot tools to a Turn through `BotFeatures`. Each feature has
 a fixed id, a version, and a merge order. The first phase of a Turn saves the
-list of features, with their versions and settings, in the workflow journal.
-Every later phase and every replay uses that list. A feature with a new version
-stops an old Turn with a conflict. A Turn waits, and holds nothing, while a
-feature in its list is absent. A new feature is used only by new Turns. Two
-features with the same id stop the server start.
+list of features, with their versions, settings, and missing policy, in the
+workflow journal. Every later phase and every replay uses that list. A feature
+with a new version stops an old Turn with a conflict. The missing policy says
+what a phase does when a feature in the list is absent, for example because an
+operator turned its plugin off. With `skip`, the phase goes on without the
+feature; limits use it. With `wait`, the phase waits and holds nothing, but not
+longer than the bound in the list (30 seconds for the tool features). Then the
+phase fails with `BotFeatureMissing` and the category `unavailable`. The list
+keeps the policy, so it works when the plugin is gone. A new feature is used
+only by new Turns. Two features with the same id stop the server start.
 
 Each work phase runs in an `Activity` named by its saved phase and generation.
 The engine stores only a safe phase result, such as an error ID or a pause
@@ -181,7 +185,11 @@ Execution ownership and source identity are separate. An owner waits for its
 attached children and their notices to end. A detached tool may outlive its
 Turn. Ending a child and creating its notice share one transaction, so an owner
 cannot miss work between two reads. Each cancel phase has its own number and
-stored signal. Repeating an old signal cannot cancel a later phase.
+stored signal. Repeating an old signal cannot cancel a later phase. A child
+whose workflow is not on the server gets no cancel command, so it cannot end.
+The owner waits 30 seconds for the plugin of that workflow to come back. Then it
+saves a failure with the category `unavailable` and goes on. The child keeps its
+state, for example `cancelling`, because its outside work may still go on.
 
 ## State and calls
 
@@ -204,8 +212,7 @@ rights. Hooks run at named steps and deduplicate their writes on replay. Plugins
 cannot change the execution lifecycle.
 
 Effect 4.1.2 tool results use `modelOutput` for text and files sent to the
-model. OpenBot saves and replays this field. The old patch field `content` is
-not read or moved to the new field.
+model. OpenBot saves and replays this field.
 
 Execution storage selects calls by ID, step, or latest attempt. Full call
 history stays available for audit. Recovery and retry code use these shared
@@ -338,9 +345,9 @@ events commit together. Duplicate results do not charge twice. Estimates are
 only for reservations and rate limits. Missing usage stays unknown, with its
 estimate and call ID. It is never recorded as successful zero usage. A call
 releases its hold when it ends. Takeover releases holds from old attempts. The
-estimate stays in a separate field; missing old estimates stay null. Unknown
-usage does not block new calls. Late confirmed usage still settles once. These
-estimates are not proved upper bounds on the provider's final charge.
+estimate stays in a separate field. Unknown usage does not block new calls. Late
+confirmed usage still settles once. These estimates are not proved upper bounds
+on the provider's final charge.
 
 Full failure causes are saved in sealed error records. HTTP, Channels, parent
 Bots, and workflow results carry only a safe category and error ID. Reusing a
@@ -379,77 +386,37 @@ readers and reconnecting readers fetch from their cursor. The end state can be
 read again. HTTP, SDKs, Channels, and parent Bots use this same path. Closing
 SSE or long polling closes observation only. Cancellation needs its own command.
 
-## Data move
-
-Stop old nodes and new input before the move. Back up the database and object
-references. Apply new Drizzle migrations, then convert data in batches with
-stored progress. Never change the baseline migration. Runtime storage Layers do
-not execute DDL, the SQL commands that change table structure.
-
-The grant-use data move also covers databases that already use stored
-executions. It reads current authorizations and pending grant calls in batches.
-Startup waits until the grant-use records are complete. Tokens stay in their
-encrypted records.
-
-Keep resource IDs, owners, history, approvals, connections, secrets, and pending
-work. Old encrypted records use dedicated migration codecs. Link unfinished work
-to new executions. Unknown outside results remain unknown. Work that cannot be
-rebuilt becomes interrupted with a reason. A broken record stops the move; it is
-not skipped. A developer invitation must have the same owner as its proof.
-
-Imported File and Index request history checks current rights on every read. An
-Index request also checks the current developer proof and its App access. A
-removed proof cannot grant access to old results. Imported records do not
-restart an outside action or gain the caller who reads them.
-
-Check counts, references, decryption, and states before new nodes may start. The
-conversion must resume after a stop and be safe to run again. Restore a backup
-only before traffic resumes. After outside actions resume, repair forward so
-rollback cannot repeat a write.
-
 ## Checks and release
 
 See the [execution design checks](/architecture-checks) for the capability map,
-source test cases, removed paths, and release evidence.
+source test cases, and release evidence.
 
-The feature baseline is 581 tests. New tests cover durable commands, generation
-checks, cancellation, late results, slow readers, access changes, and usage.
-Real two-process tests share PostgreSQL, kill the owner, and check recovery from
-saved steps. Member and service work use the same test path.
+Tests cover durable commands, generation checks, cancellation, late results,
+slow readers, access changes, and usage. Real two-process tests share
+PostgreSQL, kill the owner, and check recovery from saved steps. Member and
+service work use the same test path.
 
-The member runtime wrappers are removed: `BackendLayers`, `Backend`,
-`ManagedChats`, `Chats`, `Coordinator`, and the old `LiveSessions` map. Their
-reference counts, `keepOpen`, `current`, method proxies, and Chat heartbeat
-sweep are gone. The old memory job queue and helper model path are also gone.
 Turn, tool, approval, delegation, App, Code Mode, Channel, trigger, reminder,
 and memory workflows go to `Workflows` through the shared application Layers.
+App discovery returns descriptions with no action callbacks. Calls and programs
+run only through the common workflows. The in-memory runner in `core` works on
+its own.
 
-The old App `Operations` and `Invocations` services and the Code Mode lease
-runner are removed. App discovery returns descriptions with no action callbacks.
-Calls and programs run only through the common workflows. Server startup does
-not reset old App calls, scan old delegations, or write Chat runner heartbeats.
-The old PostgreSQL Operation listener, cancellation notices, and stale sweep are
-removed. The in-memory runner in `core` still works on its own. Old stored App
-and Code records keep their migration codecs; they are not execution paths.
+Each execution builds its own Gate and approvals. A reminder tool submits a
+durable command. Request workflows close one due request at a time. The request,
+saved tool call, and notification commit together. A failed write leaves no
+waiting request without its call.
 
-The old global Gate, tool approvals, work-tool layer, and Bot signal bus are
-also gone. Each execution builds its own Gate and approvals. A reminder tool
-submits a durable command. Request workflows close one due request at a time; no
-global request scan remains. The request, saved tool call, and notification
-commit together. A failed write leaves no waiting request without its call.
+Limit checks use saved usage and the delegation workflow. A failed usage or
+settings read stops the action; it does not use a guessed cost or a default time
+limit. A stopped approval check leaves the task paused for recovery.
 
-The old delegation Limits service is removed too. Limit checks use saved usage
-and the delegation workflow. A failed usage or settings read stops the action;
-it does not use an older cost or a default time limit. A stopped approval check
-leaves the task paused for recovery.
-
-Developer test runs and sign-in preparation now use the common workflow, saved
+Developer test runs and sign-in preparation use the common workflow, saved
 calls, and event log. Their command stores the original caller and a stable
 execution ID. Progress commits with a generation check. Cleanup waits for the
-run to close its connection. The old run FiberMap and its result callbacks are
-gone.
+run to close its connection.
 
-Connection checks, updates, manual changes, and revalidation now use common
+Connection checks, updates, manual changes, and revalidation use common
 execution commands. A saved read proposes a change. The final transaction checks
 the current caller, revision, and generation before applying it. Its checkpoint
 names the saved result, so results remain readable after a connection is
@@ -457,18 +424,12 @@ removed. A replaced grant moves to service cleanup in that same transaction.
 
 Authorization preparation, code exchange, refresh, revocation, removal, reset,
 and file maintenance use common execution records. Developer test cleanup uses
-saved calls, signals, and timers. It no longer has its own worker or local
-coordination path.
+saved calls, signals, and timers.
 
 Memory helper calls use shared PostgreSQL permits. A permit holds one place in
 the shared call limit. Model token limits use database buckets, which are shared
 counters. The current execution must still own its permit before sending, so
 node takeover does not reset the shared limit.
-
-The data converter saves progress and checks old records before the startup gate
-allows new servers to run. Tests cover encrypted data, interrupted work, repeat
-runs, and recovery after a partial move. Schema migration and data conversion
-are separate steps of the same maintenance command.
 
 Full-server and two-process tests cover owner loss, slow close, lost replies,
 database network loss, and late close after replacement. A physical lease with

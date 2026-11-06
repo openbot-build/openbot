@@ -1,7 +1,21 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { InputCommands as InputCommandsModel } from "@openbot-build/conversation-contract/chats/InputCommands"
+import { TurnAccess as TurnAccessModel } from "@openbot-build/conversation-contract/chats/TurnAccess"
+import { ToolCommands as ToolCommandsModel } from "@openbot-build/conversation-contract/chats/ToolCommands"
+import { ChannelId } from "@openbot-build/domain/Channels"
+import {
+	type ExecutionIdentity,
+	restrictExecution,
+} from "@openbot-build/domain/Identity"
+import { TokenId } from "@openbot-build/domain/TokenId"
+import { BotId } from "@openbot-build/domain/BotId"
+import { DelegationId } from "@openbot-build/domain/DelegationId"
+import { CapabilityRequestId } from "@openbot-build/domain/CapabilityRequestId"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { PgClient } from "@effect/sql-pg"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Records from "@openbot-build/server-kernel/Records"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -16,17 +30,7 @@ import {
 	Turn,
 	TurnState,
 } from "@openbot-build/core"
-import {
-	Authorization,
-	Execution,
-	TokenId,
-	BotId,
-	DelegationId,
-	CapabilityRequestId,
-	type ExecutionIdentity,
-	restrictExecution,
-} from "@openbot-build/domain"
-import { ChannelsApi } from "@openbot-build/api"
+import { Authorization, Execution } from "@openbot-build/domain"
 import { Policy } from "@nmnmcc/ability"
 import {
 	Array as Arr,
@@ -43,13 +47,12 @@ import {
 	String as Str,
 } from "effect"
 import { Prompt, Toolkit } from "effect/ai"
-import { DatabasePostgres } from "@openbot-build/openbot"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Calls from "@openbot-build/server-execution/execution/Calls"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
-import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Calls from "@openbot-build/server-execution/Calls"
+import * as Observation from "@openbot-build/server-execution/Observation"
+import { CallContext } from "@openbot-build/server-execution/CallContext"
 import * as ToolControls from "@openbot-build/plugin-chats/ToolControls"
 import * as ToolOrigins from "@openbot-build/conversation-contract/chats/ToolOrigins"
 import * as ToolCommands from "@openbot-build/plugin-chats/ToolCommands"
@@ -76,14 +79,13 @@ import * as AuthorizationLayer from "@openbot-build/plugin-authorization/Layer"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
 import * as BotFixture from "./BotFixture.ts"
-import * as Fixture from "./OrganizationFixture.ts"
-import * as PostgresTest from "./PostgresTest.ts"
+import * as Fixture from "../src/OrganizationFixture.ts"
 
-const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(PostgresTest.start, (db) =>
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),
@@ -119,7 +121,7 @@ const setup = Effect.fn(function* (
 		persistence: StoredChats.persistence(db, namespace),
 	})
 	const { chain, bot } = BotFixture.direct()
-	const channelId = ChannelsApi.ChannelId.make("channel-test")
+	const channelId = ChannelId.make("channel-test")
 	const view = yield* chats.create({
 		business: {
 			[ChatHost.chatHostId]: {
@@ -127,7 +129,13 @@ const setup = Effect.fn(function* (
 				bot: bot.id,
 				kind,
 				...(kind === "channel"
-					? { channel: { channel: channelId, conversation: "room" } }
+					? {
+							channel: {
+								channel: channelId,
+								conversation: "room",
+								group: true,
+							},
+						}
 					: {}),
 			},
 		},
@@ -270,8 +278,7 @@ const setup = Effect.fn(function* (
 				Effect.map(Ref.get(state), (state) =>
 					Option.some({
 						id: channelId,
-						executionId: null,
-						needsAuthorization: false,
+						executionId: Execution.Id.make("channel-configuration"),
 						kind: "custom",
 						name: "test",
 						bot: bot.id,
@@ -295,7 +302,7 @@ const setup = Effect.fn(function* (
 		Layer.provideMerge(dependencies),
 		Layer.provideMerge(policy),
 	)
-	const send = (commands: typeof InputCommands.InputCommands.Service) =>
+	const send = (commands: typeof InputCommandsModel.Service) =>
 		commands.submit(namespace, Execution.CommandKey.make("first"), {
 			chat: view.chat.id,
 			identity,
@@ -313,7 +320,7 @@ const addNotice = Effect.fn(function* (
 	label: string = "",
 ) {
 	const store = yield* Store.Store
-	const inputs = yield* InputCommands.InputCommands
+	const inputs = yield* InputCommandsModel
 	const notice = yield* store.submit(
 		namespace,
 		Execution.CommandKey.make(`notice-source:${chat}${label}`),
@@ -343,8 +350,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		Effect.gen(function* () {
 			const test = yield* setup("turn-access-token")
 			yield* Effect.gen(function* () {
-				const access = yield* TurnAccess.TurnAccess
-				const commands = yield* InputCommands.InputCommands
+				const access = yield* TurnAccessModel
+				const commands = yield* InputCommandsModel
 				const receipt = yield* test.send(commands)
 				const key = { namespace: test.namespace, id: receipt.executionId }
 				yield* access.authorize(key, test.identity.actor, "advance")
@@ -360,8 +367,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			Effect.gen(function* () {
 				const test = yield* setup(`model-policy-${kind}`, kind)
 				yield* Effect.gen(function* () {
-					const access = yield* TurnAccess.TurnAccess
-					const receipt = yield* test.send(yield* InputCommands.InputCommands)
+					const access = yield* TurnAccessModel
+					const receipt = yield* test.send(yield* InputCommandsModel)
 					const key = { namespace: test.namespace, id: receipt.executionId }
 					const selection = Config.Selection.make({
 						provider: Provider.Id.make("provider"),
@@ -397,8 +404,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			Effect.gen(function* () {
 				const test = yield* setup("turn-caller-limits")
 				yield* Effect.gen(function* () {
-					const access = yield* TurnAccess.TurnAccess
-					const inputs = yield* InputCommands.InputCommands
+					const access = yield* TurnAccessModel
+					const inputs = yield* InputCommandsModel
 					const member = { kind: "member" as const, ...test.identity.owner }
 					const identity = restrictExecution(
 						{ ...test.identity, actor: member },
@@ -440,7 +447,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		Effect.gen(function* () {
 			const test = yield* setup("turn-access-expiry")
 			yield* Effect.gen(function* () {
-				const access = yield* TurnAccess.TurnAccess
+				const access = yield* TurnAccessModel
 				yield* access.input(test.view.chat, test.identity)
 				yield* Ref.update(test.state, (state) => ({
 					...state,
@@ -461,7 +468,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					Layer.provide(
 						Layer.effect(
 							Workflows.Workflows,
-							Effect.map(TurnAccess.TurnAccess, (access) =>
+							Effect.map(TurnAccessModel, (access) =>
 								WorkflowsFixture.stub({
 									names: Effect.succeed(["openbot.chat-turn"]),
 									get: () =>
@@ -479,7 +486,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					Layer.provideMerge(test.accessLayer),
 				)
 				yield* Effect.gen(function* () {
-					const receipt = yield* test.send(yield* InputCommands.InputCommands)
+					const receipt = yield* test.send(yield* InputCommandsModel)
 					const store = yield* Store.Store
 					const parent = yield* store.takeOver({
 						namespace: test.namespace,
@@ -519,7 +526,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								}),
 							] as const),
 					})
-					const tools = yield* ToolCommands.ToolCommands
+					const tools = yield* ToolCommandsModel
 					const child = yield* tools.submit(
 						parent,
 						{ chat: current.chat.id, turn: turn.id, item, step: 0 },
@@ -620,7 +627,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			Effect.gen(function* () {
 				const test = yield* setup("turn-access-channel-" + change, "channel")
 				yield* Effect.gen(function* () {
-					const access = yield* TurnAccess.TurnAccess
+					const access = yield* TurnAccessModel
 					yield* access.input(test.view.chat, test.identity)
 					yield* Ref.update(test.state, (state) => ({
 						...state,
@@ -645,7 +652,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			Effect.gen(function* () {
 				const test = yield* setup("turn-access-channel-config-token", "channel")
 				yield* Effect.gen(function* () {
-					const access = yield* TurnAccess.TurnAccess
+					const access = yield* TurnAccessModel
 					const identity: ExecutionIdentity = {
 						...test.identity,
 						actor: {
@@ -675,8 +682,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			Effect.gen(function* () {
 				const test = yield* setup("turn-access-task", "channel")
 				yield* Effect.gen(function* () {
-					const access = yield* TurnAccess.TurnAccess
-					const receipt = yield* test.send(yield* InputCommands.InputCommands)
+					const access = yield* TurnAccessModel
+					const receipt = yield* test.send(yield* InputCommandsModel)
 					const execution = yield* (yield* Store.Store).get({
 						namespace: test.namespace,
 						id: receipt.executionId,
@@ -705,6 +712,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						parentExecutionId: receipt.executionId,
 					}
 					const delegation: StoredDelegation = {
+						executionId: receipt.executionId,
 						userId: test.identity.owner.userId,
 						author: "opaque",
 						chain,
@@ -719,6 +727,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							status: "running",
 							task: "test",
 							result: null,
+							limits: { timeMs: 60 * 60 * 1000 },
+							usage: { timeMs: 0, steps: 0, costMicros: 0 },
 							createdAt: 0,
 							updatedAt: 0,
 						},
@@ -755,7 +765,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							actor: { ...identity.actor, userId: "another-speaker" },
 						}),
 					)
-					const inputs = yield* InputCommands.InputCommands
+					const inputs = yield* InputCommandsModel
 					const childInput = yield* inputs.submit(
 						test.namespace,
 						Execution.CommandKey.make("child-input"),
@@ -851,8 +861,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			Effect.gen(function* () {
 				const test = yield* setup("turn-access-review-" + source)
 				yield* Effect.gen(function* () {
-					const access = yield* TurnAccess.TurnAccess
-					const receipt = yield* test.send(yield* InputCommands.InputCommands)
+					const access = yield* TurnAccessModel
+					const receipt = yield* test.send(yield* InputCommandsModel)
 					const execution = yield* (yield* Store.Store).get({
 						namespace: test.namespace,
 						id: receipt.executionId,
@@ -896,7 +906,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 									}),
 								] as const),
 						})
-						const tools = yield* ToolCommands.ToolCommands
+						const tools = yield* ToolCommandsModel
 						const child = yield* tools.submit(
 							parent,
 							{ chat: current.chat.id, turn: turn.id, item, step: 0 },
@@ -1018,7 +1028,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						.access(identity.actor, reviewer, "delegate")
 						.pipe(Effect.flip)
 					yield* access.input(review.chat, identity)
-					const started = yield* (yield* InputCommands.InputCommands).submit(
+					const started = yield* (yield* InputCommandsModel).submit(
 						test.namespace,
 						Execution.CommandKey.make("review"),
 						{
@@ -1120,7 +1130,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							Layer.provide(
 								Layer.effect(
 									Calls.Calls,
-									Effect.map(TurnAccess.TurnAccess, (access) =>
+									Effect.map(TurnAccessModel, (access) =>
 										Calls.Calls.of({
 											admission: () => Effect.void,
 											stopOnPause: (work) => work,
@@ -1150,7 +1160,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			Effect.gen(function* () {
 				const test = yield* setup("turn-access-failure")
 				yield* Effect.gen(function* () {
-					const access = yield* TurnAccess.TurnAccess
+					const access = yield* TurnAccessModel
 					yield* Ref.update(test.state, (state) => ({ ...state, fail: true }))
 					const failure = yield* access
 						.input(test.view.chat, test.identity)
@@ -1182,8 +1192,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		Effect.gen(function* () {
 			const test = yield* setup("turn-access-owner")
 			yield* Effect.gen(function* () {
-				const access = yield* TurnAccess.TurnAccess
-				const receipt = yield* test.send(yield* InputCommands.InputCommands)
+				const access = yield* TurnAccessModel
+				const receipt = yield* test.send(yield* InputCommandsModel)
 				const key = { namespace: test.namespace, id: receipt.executionId }
 				for (const action of ["read", "cancel", "decide", "advance"] as const) {
 					yield* denied(

@@ -66,7 +66,7 @@ Setup-Programm ausführst, antwortet jede Route außer `/health` mit `503` und
 Das Setup-Programm verbindet sich mit `OPENBOT_DATABASE_URL` und
 `OPENBOT_SECRET_KEYS` mit der Datenbank. Es schreibt die ersten Einstellungen
 der Platform und die ersten Admins der Platform. Im Image ist es
-`/app/dist/app/Setup.mjs`. Aus dem Code führst du
+`/app/dist/Setup.mjs`. Aus dem Code führst du
 `pnpm --filter @openbot-build/openbot setup` aus. Das Paket hat auch den Befehl
 `openbot-setup`.
 
@@ -89,7 +89,7 @@ Datenbank. Gemeinsame Produkteinstellungen sind keine Server-Startargumente.
 ```sh
 docker run --rm --env-file openbot.env \
   -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
-  /app/dist/app/Setup.mjs --config=/run/setup.json
+  /app/dist/Setup.mjs --config=/run/setup.json
 ```
 
 `--config` gibt den Dateipfad an. Nutze `--force` nur zur Rettung. Die Datei
@@ -106,9 +106,6 @@ Das optionale Feld `fileStorage` enthält S3-Werte: `endpoint`, `publicEndpoint`
 bleibt der bisherige Speicher erhalten. Ändere ihn später mit
 `PATCH /v1/platform/settings` unter `files.storage`. Geheimnisse bleiben in der
 privaten Datei. Setup speichert sie verschlüsselt in der Datenbank.
-
-Die alten einzelnen Setup-Flags und `OPENBOT_SETUP_*` werden nicht mehr gelesen.
-Trage diese Werte in die Datei ein.
 
 Das Setup erstellt auch ein zufälliges Anmelde-Geheimnis. Better Auth nutzt es,
 um die Anmelde-Cookies zu signieren. OpenBot speichert es verschlüsselt, und du
@@ -277,8 +274,8 @@ Request darf höchstens 100 Regeln haben.
 
 OpenBot kann Einladungen in eine Organisation und Einladungen für einen Bot per
 E-Mail senden. Ein Admin der Platform richtet dafür SMTP ein. SMTP ist das
-Protokoll, mit dem OpenBot die Nachricht an deinen Mailserver gibt. Neue und
-alte Installationen senden keine E-Mails, bis `mail` gesetzt ist.
+Protokoll, mit dem OpenBot die Nachricht an deinen Mailserver gibt. OpenBot
+sendet keine E-Mails, bis `mail` gesetzt ist.
 
 Lies zuerst die aktuelle `version`. Sende sie als `expectedVersion` mit diesen
 Einstellungen an `PATCH /v1/platform/settings`:

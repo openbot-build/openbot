@@ -1,3 +1,6 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { OpenBotApi } from "@openbot-build/api"
 import {
@@ -14,12 +17,12 @@ import {
 } from "effect"
 import { HttpApi } from "effect/http-api"
 import type { Fork } from "@graftland/graft"
-import { Composition, PresetPlugins } from "@openbot-build/openbot/Parts"
 import { Preset } from "@openbot-build/openbot"
+import * as Feature from "@openbot-build/server-plugin/Feature"
 import { BotFeatures } from "@openbot-build/conversation-contract/chats/BotFeatures"
-import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
-import { HttpHost } from "@openbot-build/server-kernel/errors/HttpHost"
-import * as TestHost from "./TestHost.ts"
+import { Workflows } from "@openbot-build/server-execution/Workflows"
+import { HttpHost } from "@openbot-build/server-kernel/HttpHost"
+import * as TestHost from "../src/TestHost.ts"
 
 /** What one assembly gives: its workflows, its bot features and its groups. */
 interface Parts {
@@ -81,7 +84,6 @@ const presetWorkflows: ReadonlyArray<string> = [
 	"openbot.developer-watch",
 	"openbot.file-cleanup",
 	"openbot.file-retention",
-	"openbot.imported-record",
 	"openbot.index-request",
 	"openbot.index-watch",
 	"openbot.memory-learning",
@@ -138,24 +140,24 @@ const outline = (
 		],
 	)
 
-const forkStates = Effect.gen(function* () {
-	const composition = yield* Composition.Composition
-	const trees = yield* Stream.runHead(composition.forks)
-	return outline(trees._tag === "Some" ? trees.value : [], 0)
-})
+const forkStates = (control: TestHost.Control) =>
+	Effect.map(Stream.runHead(control.forks), (trees) =>
+		outline(trees._tag === "Some" ? trees.value : [], 0),
+	)
 
 /** The host with the preset, on its own database and its own HTTP server. */
 const hostParts = Effect.gen(function* () {
-	const options = yield* TestHost.makeSettings
-	yield* TestHost.migrate(options)
+	const database = yield* TestDatabase.migrated
+	const control = yield* TestHost.control
 	return yield* inScope(
-		TestHost.layer(options),
+		TestHost.layer({ database, probes: [control] }),
 		Effect.gen(function* () {
-			const before = yield* forkStates
+			const forkStates_ = Effect.flatMap(control.value, forkStates)
+			const before = yield* forkStates_
 			const parts = yield* partsOf
 			// The tree must stay as it is: no fork restarts or goes away.
 			yield* Effect.sleep(Duration.seconds(2))
-			const after = yield* forkStates
+			const after = yield* forkStates_
 			const context = yield* Effect.context<never>()
 			const current = yield* Effect.flatMap(Workflows, (w) => w.current)
 			return {
@@ -174,7 +176,12 @@ const hostParts = Effect.gen(function* () {
 	)
 })
 
-layer(TestHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"the preset starts every plugin and gives the recorded parts",
 		() =>
@@ -215,7 +222,9 @@ layer(TestHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 
 				// No plugin publishes a key of the kernel.
-				const published = Arr.map(PresetPlugins.published, (key) => key.key)
+				const published = Arr.flatMap(Rec.values(Preset.plugins), (plugin) =>
+					Arr.map(Feature.published(plugin.plugin), (key) => key.key),
+				)
 				assert.deepStrictEqual(
 					Arr.filter(published, (key) => HashSet.has(host.kernelKeys, key)),
 					[],
@@ -225,34 +234,13 @@ layer(TestHost.layerPlatform, { excludeTestServices: true })((it) => {
 	)
 })
 
-layer(TestHost.layerPlatform, { excludeTestServices: true })((it) => {
-	it.effect("the preset has one entry for each id, in the same order", () =>
-		Effect.sync(() => {
-			assert.deepStrictEqual(Rec.keys(PresetPlugins.byId), [...Preset.ids])
-			// The loader finds a plugin by its module name.
-			assert.deepStrictEqual(
-				Arr.map(Preset.ids, (id) => PresetPlugins.byId[id].name),
-				Arr.map(Preset.ids, Preset.nameOf),
-			)
-			assert.deepStrictEqual(
-				Arr.map(PresetPlugins.entries, (entry) => entry.id),
-				[...Preset.ids],
-			)
-			assert.deepStrictEqual(
-				Arr.map(PresetPlugins.entries, (entry) => entry.name),
-				Arr.map(Preset.ids, Preset.nameOf),
-			)
-		}),
-	)
-})
-
 /**
  * The fork tree of the preset. A change here is a change in how the plugins
  * start, so check it with care.
  */
 const forkNames: ReadonlyArray<string> = [
-	"openbot/executions",
-	"openbot/loader",
+	"openbot.executions",
+	"openbot.loader",
 	"  group",
 	"    @openbot-build/plugin-access",
 	"      @openbot-build/plugin-access",
@@ -273,7 +261,6 @@ const forkNames: ReadonlyArray<string> = [
 	"      @openbot-build/plugin-authorization",
 	"    @openbot-build/plugin-billing",
 	"      @openbot-build/plugin-billing",
-	"        @openbot-build/plugin-billing#start",
 	"    @openbot-build/plugin-bots",
 	"      @openbot-build/plugin-bots",
 	"        @openbot-build/plugin-bots#bots",
@@ -299,9 +286,6 @@ const forkNames: ReadonlyArray<string> = [
 	"    @openbot-build/plugin-files",
 	"      @openbot-build/plugin-files",
 	"        @openbot-build/plugin-files#start",
-	"    @openbot-build/plugin-imported",
-	"      @openbot-build/plugin-imported",
-	"        @openbot-build/plugin-imported#start",
 	"    @openbot-build/plugin-mail",
 	"      @openbot-build/plugin-mail",
 	"    @openbot-build/plugin-models",
@@ -328,5 +312,8 @@ const forkNames: ReadonlyArray<string> = [
 	"      @openbot-build/plugin-work",
 	"        @openbot-build/plugin-work#commands",
 	"          @openbot-build/plugin-work#start",
-	"openbot/loader-capture",
+	"    @openbot-build/server-testing/test-control",
+	"      @openbot-build/server-testing/test-control",
+	"openbot.loader-capture",
+	"openbot.wallets",
 ]

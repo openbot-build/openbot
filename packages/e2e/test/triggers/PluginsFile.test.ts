@@ -1,8 +1,9 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
 import { assert, layer } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { FailureApi, OpenBotApi } from "@openbot-build/api"
-import { BuiltPrograms, PostgresTest } from "@openbot-build/server-testing"
+import { BuiltPrograms } from "@openbot-build/server-testing"
 import {
 	Array as Arr,
 	Deferred,
@@ -79,7 +80,7 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 					setup: BuiltPrograms.path("setup"),
 					inspect: BuiltPrograms.path("inspect"),
 				})
-				const database = yield* PostgresTest.start
+				const database = yield* TestDatabase.start
 				const folder = yield* fs.makeTempDirectoryScoped()
 				const pluginsFile = path.join(folder, "plugins.yml")
 				yield* fs.writeFileString(
@@ -130,7 +131,7 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 				const badFile = path.join(folder, "bad.yml")
 				yield* fs.writeFileString(badFile, "- id: auth\n  disabled: true\n")
 				const bad = yield* run([programs.server], {
-					OPENBOT_PORT: String(yield* PostgresTest.freePort),
+					OPENBOT_PORT: String(yield* TestDatabase.freePort),
 					OPENBOT_PLUGINS_FILE: badFile,
 				})
 				assert.notStrictEqual(bad.exitCode, 0)
@@ -141,7 +142,7 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 				)
 
 				// Starts the server with the plugins file, and waits until it listens.
-				const port = yield* PostgresTest.freePort
+				const port = yield* TestDatabase.freePort
 				const output = yield* Ref.make("")
 				const ready = yield* Deferred.make<string, ProgramFailed>()
 				const server = yield* ChildProcess.make(

@@ -1,14 +1,25 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { Token, CreatedToken } from "@openbot-build/domain/Tokens"
+import { Vault, Budget } from "@openbot-build/domain/Authorization"
+import { Vault as VaultModel, VaultItem } from "@openbot-build/domain/Vaults"
+import { Budget as BudgetModel } from "@openbot-build/domain/Billing"
 import { BrowserHost, Caller, Policies } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
+import { OpenBotApi } from "@openbot-build/api"
 import {
-	Authorization,
-	BillingApi,
-	OpenBotApi,
-	UserTokensApi,
-	VaultsApi,
-} from "@openbot-build/api"
-import { Array as Arr, Effect, Record, Schema, String as Str } from "effect"
-import { HttpClient, HttpClientRequest, type HttpMethod } from "effect/http"
+	Array as Arr,
+	Effect,
+	Record,
+	Schema,
+	String as Str,
+	Layer,
+} from "effect"
+import {
+	HttpClient,
+	HttpClientRequest,
+	type HttpMethod,
+	FetchHttpClient,
+} from "effect/http"
 import { OpenApi } from "effect/http-api"
 
 const publicOrigin = "https://api-matrix.example.com"
@@ -83,7 +94,12 @@ const status = (call: Caller.Call, expected: number) =>
 		assert.strictEqual(response.status, expected, yield* response.text)
 	})
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"every protected API route rejects a missing caller and every cookie write checks its Origin",
 		() =>
@@ -135,7 +151,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const address = yield* host.address
 				const account = Caller.withCookie({ address, publicOrigin })
 				const tokens = Schema.Struct({
-					items: Schema.Array(UserTokensApi.Token),
+					items: Schema.Array(Token),
 				})
 				const before = yield* Caller.read(
 					tokens,
@@ -160,7 +176,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					before,
 				)
 				const created = yield* Caller.read(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					account(alice.session, "/v1/user/tokens", "POST", {
 						name: "Same origin",
 					}),
@@ -200,7 +216,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 							),
 						)
 				const token =
-					(secret: UserTokensApi.CreatedToken["secret"]): Send =>
+					(secret: CreatedToken["secret"]): Send =>
 					(path, method, payload) =>
 						Effect.flatMap(host.address, (address) =>
 							Caller.withToken(address)(secret, path, method, payload),
@@ -208,22 +224,22 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const account = cookie(alice.session)
 				const stranger = cookie(bob.session)
 				const key = yield* Caller.read(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					account("/v1/user/tokens", "POST", { name: "API test" }),
 					201,
 				)
 				const otherKey = yield* Caller.read(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					stranger("/v1/user/tokens", "POST", { name: "API test" }),
 					201,
 				)
 				const readOnly = yield* Caller.read(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					account("/v1/user/tokens", "POST", {
 						name: "Read only",
 						policy: yield* Policies.json(function* (_) {
-							yield* _.allow("read", Authorization.Vault)
-							yield* _.allow("read", Authorization.Budget)
+							yield* _.allow("read", Vault)
+							yield* _.allow("read", Budget)
 						}),
 					}),
 					201,
@@ -233,13 +249,13 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					["token", token(key.secret)],
 				] as const) {
 					const vault = yield* Caller.read(
-						VaultsApi.Vault,
+						VaultModel,
 						send("/v1/vaults", "POST", { name: "Secrets " + name }),
 						201,
 					)
 					const path = `/v1/vaults/${vault.id}`
 					const item = yield* Caller.read(
-						VaultsApi.VaultItem,
+						VaultItem,
 						send(path + "/items", "POST", {
 							name: "work",
 							source: { _tag: "Builtin" },
@@ -250,7 +266,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					)
 					const itemPath = `${path}/items/${item.id}`
 					const changed = yield* Caller.read(
-						VaultsApi.Vault,
+						VaultModel,
 						send(path, "PATCH", {
 							expectedVersion: vault.version,
 							name: "Changed " + name,
@@ -265,7 +281,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						409,
 					)
 					const changedItem = yield* Caller.read(
-						VaultsApi.VaultItem,
+						VaultItem,
 						send(itemPath, "PATCH", {
 							expectedVersion: item.version,
 							description: "Work token",
@@ -291,7 +307,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						)
 						assert.deepStrictEqual(
 							yield* Caller.read(
-								Schema.Array(VaultsApi.Vault),
+								Schema.Array(VaultModel),
 								outsider("/v1/vaults"),
 							),
 							[],
@@ -306,7 +322,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						403,
 					)
 					const budget = yield* Caller.read(
-						BillingApi.Budget,
+						BudgetModel,
 						send("/v1/organization/budgets", "POST", {
 							scope: "organization",
 							period: "day",
@@ -317,7 +333,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					)
 					const budgetPath = `/v1/organization/budgets/${budget.id}`
 					const changedBudget = yield* Caller.read(
-						BillingApi.Budget,
+						BudgetModel,
 						send(budgetPath, "PATCH", {
 							expectedVersion: budget.version,
 							limitMicros: 2000000,
@@ -351,15 +367,15 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					yield* host.restart
 					for (const reader of [account, token(key.secret)]) {
 						assert.deepStrictEqual(
-							yield* Caller.read(VaultsApi.Vault, reader(path)),
+							yield* Caller.read(VaultModel, reader(path)),
 							changed,
 						)
 						assert.deepStrictEqual(
-							yield* Caller.read(VaultsApi.VaultItem, reader(itemPath)),
+							yield* Caller.read(VaultItem, reader(itemPath)),
 							changedItem,
 						)
 						assert.deepStrictEqual(
-							yield* Caller.read(BillingApi.Budget, reader(budgetPath)),
+							yield* Caller.read(BudgetModel, reader(budgetPath)),
 							changedBudget,
 						)
 						const response = yield* reader(path + "/items")
@@ -376,7 +392,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					yield* status(send(budgetPath), 404)
 				}
 				const kept = yield* Caller.read(
-					VaultsApi.Vault,
+					VaultModel,
 					token(key.secret)("/v1/vaults", "POST", { name: "Kept" }),
 					201,
 				)
@@ -385,7 +401,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				yield* status(token(key.secret)(path), 401)
 				yield* status(token(key.secret)(path, "DELETE"), 401)
 				assert.deepStrictEqual(
-					yield* Caller.read(VaultsApi.Vault, account(path)),
+					yield* Caller.read(VaultModel, account(path)),
 					kept,
 				)
 				yield* status(account(path, "DELETE"), 204)

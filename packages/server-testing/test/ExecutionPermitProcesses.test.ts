@@ -1,3 +1,5 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
@@ -11,18 +13,16 @@ import {
 	Schedule,
 } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Store from "@openbot-build/server-execution/Store"
 import * as Fixture from "./ExecutionPermitFixture.ts"
-import * as PostgresTest from "./PostgresTest.ts"
 
-class Database extends Context.Service<Database, PostgresTest.Database>()(
+class Database extends Context.Service<Database, TestDatabase.Database>()(
 	"@openbot-build/server-testing/test/ExecutionPermitProcesses.test/Database",
 ) {}
 
 const tables = Layer.effectDiscard(
 	Effect.gen(function* () {
-		yield* DatabasePostgres.migrate
+		yield* Migrations.migrate
 		const sql = yield* PgClient.PgClient
 		yield* sql`create table permit_test_nodes (runner integer primary key, go boolean not null default false)`
 		yield* sql`create table permit_test_work (
@@ -37,7 +37,7 @@ const tables = Layer.effectDiscard(
 	Layer.provideMerge(
 		Layer.unwrap(
 			Effect.map(Database, (database) =>
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }),
+				PgClient.layer({ url: Redacted.make(database.url) }),
 			),
 		),
 	),
@@ -45,7 +45,7 @@ const tables = Layer.effectDiscard(
 
 const services = Fixture.services.pipe(
 	Layer.provideMerge(tables),
-	Layer.provideMerge(Layer.effect(Database, PostgresTest.start)),
+	Layer.provideMerge(Layer.effect(Database, TestDatabase.start)),
 	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 

@@ -1,6 +1,8 @@
 import { assert, it } from "@effect/vitest"
 import { Chat, Plugin, Turn } from "@openbot-build/core"
-import { Context, Duration, Effect, Schema } from "effect"
+import { Execution } from "@openbot-build/domain"
+import { category } from "@openbot-build/server-kernel/Records"
+import { Cause, Context, Duration, Effect, Schema } from "effect"
 import { Prompt } from "effect/ai"
 import {
 	FeatureStopped,
@@ -10,7 +12,13 @@ import {
 class Stop extends Schema.TaggedError<
 	Stop,
 	{ readonly brand: unique symbol }
->()("TestStop", { step: Schema.Int }) {}
+>()("TestStop", { step: Schema.Int }, Execution.category("limited")) {}
+
+/** An error that gives no failure category. */
+class Plain extends Schema.TaggedError<
+	Plain,
+	{ readonly brand: unique symbol }
+>()("TestPlain", {}) {}
 
 const turn: Turn.Record = {
 	id: Turn.Id.make("turn"),
@@ -68,6 +76,8 @@ it.effect(
 			assert.ok(Schema.is(FeatureStopped)(before))
 			assert.strictEqual(before.feature, "limited")
 			assert.deepStrictEqual(before.cause, Stop.make({ step: 2 }))
+			assert.strictEqual(before.category, "limited")
+			assert.strictEqual(category(Cause.fail(before)), "limited")
 			assert.strictEqual(
 				before.message,
 				"The bot feature limited stopped the Turn.",
@@ -103,4 +113,23 @@ it.effect("a Bot plugin with no hooks gives a feature with no hook keys", () =>
 		assert.isFalse("afterStep" in registration)
 		assert.isFalse("timeLimit" in registration)
 	}).pipe(Effect.scoped),
+)
+
+it.effect(
+	"BotFeatureStopped has the category unavailable when the error of the feature gives none",
+	() =>
+		Effect.gen(function* () {
+			const plain = Plugin.make({ id: Plugin.Id.make("plain") })<{}, Plain>(
+				() =>
+					Effect.succeed({
+						tools: {},
+						handlers: Context.empty(),
+						beforeStep: () => Effect.fail(Plain.make({})),
+					}),
+			)
+			const registration = yield* fromPlugin("plain", plain).register()
+			const stopped = yield* registration.beforeStep!(step(1)).pipe(Effect.flip)
+			assert.strictEqual(stopped.category, "unavailable")
+			assert.strictEqual(category(Cause.fail(stopped)), "unavailable")
+		}).pipe(Effect.scoped),
 )

@@ -1,6 +1,7 @@
+import { ServiceId } from "@openbot-build/domain/Identity"
 import { Delegations } from "@openbot-build/conversation-contract/bots/Delegations"
-import * as PrivateRpc from "@openbot-build/server-execution/transport/PrivateRpc"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
+import * as PrivateRpc from "@openbot-build/server-execution/PrivateRpc"
+import * as Observation from "@openbot-build/server-execution/Observation"
 /** This entry point is run in two separate processes by ExecutionCluster.test.ts. */
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- NodeHttpServer needs the native server factory.
 import { createServer } from "node:http"
@@ -11,9 +12,9 @@ import {
 	NodeRuntime,
 	NodeServices,
 } from "@effect/platform-node"
-import { Execution, ServiceId } from "@openbot-build/domain"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
-import * as BillingPostgres from "@openbot-build/server-billing/billing/BillingPostgres"
+import { Execution } from "@openbot-build/domain"
+import { Billing } from "@openbot-build/server-billing/Billing"
+import * as BillingPostgres from "@openbot-build/server-billing/BillingPostgres"
 import { PgClient } from "@effect/sql-pg"
 import {
 	Config,
@@ -36,17 +37,16 @@ import {
 	DurableDeferred,
 	type WorkflowEngine,
 } from "effect/workflow"
-import * as Runner from "@openbot-build/server-execution/execution/Runner"
-import * as RunScope from "@openbot-build/server-execution/execution/RunScope"
-import * as Calls from "@openbot-build/server-execution/execution/Calls"
-import * as CallRecovery from "@openbot-build/server-execution/execution/CallRecovery"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
-import * as EngineHost from "@openbot-build/server-execution/execution/EngineHost"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import { DatabasePostgres } from "@openbot-build/openbot"
+import * as Runner from "@openbot-build/server-execution/Runner"
+import * as RunScope from "@openbot-build/server-execution/RunScope"
+import * as Calls from "@openbot-build/server-execution/Calls"
+import * as CallRecovery from "@openbot-build/server-execution/CallRecovery"
+import * as Records from "@openbot-build/server-kernel/Records"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
+import * as EngineHost from "@openbot-build/server-execution/EngineHost"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 
 import * as TurnClusterFixture from "./TurnClusterFixture.ts"
 
@@ -474,7 +474,7 @@ const app = Layer.unwrap(
 			Layer.provide(
 				Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 			),
-			Layer.provideMerge(DatabasePostgres.layer({ databaseUrl: url })),
+			Layer.provideMerge(PgClient.layer({ url: url })),
 			// The engine generation reads the same config.
 			Layer.provideMerge(
 				ShardingConfig.layer({

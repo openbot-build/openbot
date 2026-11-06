@@ -1,12 +1,13 @@
+import { Identity } from "@openbot-build/domain/Identity"
 import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
 import {
 	AuthApi,
-	Authorize,
 	DelegationsApi,
 	FailureApi,
+	Authorization,
 } from "@openbot-build/api"
-import { Execution, Identity } from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/http"
 import { HttpApi, HttpApiBuilder } from "effect/http-api"
@@ -16,16 +17,12 @@ import {
 } from "@openbot-build/conversation-contract/bots/Delegations"
 import { DelegationCommands } from "../src/DelegationCommands.ts"
 import * as DelegationHandlers from "../src/DelegationHandlers.ts"
-import { Commands } from "@openbot-build/server-execution/execution/Commands"
-import {
-	Store,
-	type Loaded,
-} from "@openbot-build/server-execution/execution/Store"
-import { Unavailable } from "@openbot-build/server-execution/execution/Workflows"
-import { ImportedRecords } from "@openbot-build/server-execution/imported/ImportedRecords"
-import * as Boundary from "@openbot-build/server-kernel/errors/HttpBoundary"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import * as Reporting from "@openbot-build/server-kernel/errors/Reporting"
+import { Commands } from "@openbot-build/server-execution/Commands"
+import { Store, type Loaded } from "@openbot-build/server-execution/Store"
+import { Unavailable } from "@openbot-build/server-execution/Workflows"
+import * as Boundary from "@openbot-build/server-kernel/HttpBoundary"
+import { Records } from "@openbot-build/server-kernel/Records"
+import * as Reporting from "@openbot-build/server-kernel/Reporting"
 
 const api = HttpApi.make("openbot-api")
 	.add(DelegationsApi.DelegationsApi)
@@ -73,12 +70,11 @@ it.effect(
 					locate: (id) => Effect.succeed({ namespace: "org", id }),
 					load: () => Effect.succeed(loaded),
 				}),
-				Layer.mock(ImportedRecords, {}),
 				Layer.succeed(AuthApi.BotAuth, {
 					token: (effect) => Effect.provideService(effect, Identity, actor),
 					session: (effect) => Effect.provideService(effect, Identity, actor),
 				}),
-				Layer.succeed(Authorize, (effect) => effect),
+				Layer.succeed(Authorization.Authorize, (effect) => effect),
 			)
 			const routes = Layer.merge(
 				HttpApiBuilder.layer(api).pipe(

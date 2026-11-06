@@ -1,16 +1,31 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import * as Read from "./Read.ts"
 import { PgClient } from "@effect/sql-pg"
 import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
-import { ChatCommandReceipt, ExecutionsApi } from "@openbot-build/api"
-import { Deferred, Effect, Ref, Schema, Stream, Array as Arr } from "effect"
+import { ExecutionsApi, ChatsApi } from "@openbot-build/api"
+import {
+	Deferred,
+	Effect,
+	Ref,
+	Schema,
+	Stream,
+	Array as Arr,
+	Layer,
+} from "effect"
 import { LanguageModel, Response } from "effect/ai"
 
 const usage = {
 	inputTokens: { total: 1, uncached: 1, cacheRead: 0, cacheWrite: 0 },
 	outputTokens: { total: 1, text: 1, reasoning: 0 },
 }
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"a damaged saved Chat does not stop another Chat from recovering and accepting input",
 		() =>
@@ -161,7 +176,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const first = yield* Messages.message(send, bot, "hello")
 				yield* Deferred.await(started)
 				const second = yield* Caller.read(
-					ChatCommandReceipt,
+					ChatsApi.ChatCommandReceipt,
 					send(`/v1/chats/${first.chat}/messages`, "POST", {
 						input: "me too",
 						queue: true,

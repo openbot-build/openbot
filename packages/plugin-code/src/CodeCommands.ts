@@ -3,7 +3,7 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import { CodeRuns, Execution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Array as Arr, Clock, Effect, Layer, Option, Schema } from "effect"
@@ -19,22 +19,14 @@ import { codeExecutions } from "@openbot-build/server-database/ExecutionSchema"
 import {
 	type Authorize,
 	type Decide,
-} from "@openbot-build/server-execution/execution/Engine"
-import { codeModeOf } from "@openbot-build/server-kernel/settings/Documents"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+} from "@openbot-build/server-execution/Engine"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import {
 	workflowName,
 	Input,
 	Saved,
 	CodeCommands,
 } from "@openbot-build/apps-contract/code/CodeCommands"
-export {
-	workflowName,
-	Input,
-	CodeCommands,
-} from "@openbot-build/apps-contract/code/CodeCommands"
-export type { Service } from "@openbot-build/apps-contract/code/CodeCommands"
-
 export const programStep = "program"
 
 const codec = Schema.toCodecJson(Saved)
@@ -54,7 +46,7 @@ const make = Effect.gen(function* () {
 	const enabled = Effect.gen(function* () {
 		const platform = yield* settings.platform
 		if (Option.isNone(platform)) return yield* Execution.Forbidden.make({})
-		const limits = codeModeOf(platform.value.document)
+		const limits = platform.value.document.codeMode
 		if (!limits.enabled) return yield* Execution.Forbidden.make({})
 		return {
 			timeoutMs: limits.timeoutMs,

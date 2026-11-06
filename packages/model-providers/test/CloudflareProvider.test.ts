@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest"
 import { OpenAiClient } from "@effect/ai-openai-compat"
 import { Array as Arr, Effect, Layer, Ref, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
-import * as Provider from "@openbot-build/model-providers/providers/openai-compat/OpenAiCompatProvider"
+import * as Provider from "@openbot-build/model-providers/OpenAiCompatProvider"
 
 const call = {
 	id: "call-test",

@@ -83,7 +83,7 @@ export type Edit = typeof Edit.Type
 export const LogEntry = Schema.Struct({
 	version: Schema.Natural,
 	at: Schema.Finite,
-	by: Schema.Literals(["memory_bot", "person", "promotion"]),
+	by: Schema.Literals(["memory_bot", "person"]),
 	ids: Schema.Array(Schema.String),
 	/** Why the memory Bot made a change, when it shows more people an entry. */
 	reason: Schema.optionalKey(Schema.String),
@@ -152,8 +152,8 @@ export const Enrichment = Schema.Struct({
 	turn: Turn.Id,
 	/** The input as the model saw it, written again by the memory Bot. */
 	text: Schema.String,
-	/** The words of the person. Older records do not have it. */
-	original: Schema.optional(Schema.String),
+	/** The words of the person. */
+	original: Schema.String,
 	entries: Schema.Array(Schema.String),
 	at: Schema.Finite,
 })

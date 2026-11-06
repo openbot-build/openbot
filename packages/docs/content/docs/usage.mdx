@@ -57,8 +57,7 @@ not zero. The same confirmed receipt never charges the call twice.
 Before sending, OpenBot holds an estimate in `reservedMicros`. It uses about
 four text characters per input token and 1,024 output tokens. Other input parts
 get a rough size. The actual cost can be higher. The saved estimate stays in
-`estimatedMicros` after the call ends. This field is `null` when an old record
-no longer has its estimate.
+`estimatedMicros` after the call ends.
 
 Calls with `pending` or `unknown` usage keep their holds. Ending or stopping an
 execution, or changing its owner, does not release an unknown hold. Only a
@@ -326,15 +325,6 @@ costs count in the period when the receipt is recorded. The final cost can
 exceed the estimate, so a budget is not a promise that the provider's final
 charge will stay below its limit.
 
-An old `unknown` call with a saved `estimatedMicros` still counts as held money,
-even if `reservedMicros` is 0. Missing old estimates stay `null`. If an old
-unknown call has no estimate and may have a cost, OpenBot stops new calls under
-the hard budgets that cover it until its cost is confirmed. For platform calls,
-this also applies to the affected credit limit. A saved zero estimate does not
-cause this missing-estimate block or add a hold. An old call known to be free
-does not cause this block either. Other budget and credit limits still apply to
-new calls.
-
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -409,10 +399,6 @@ While credits are on:
   not reduce the confirmed balance, but the held credits cannot be used again. A
   late confirmed receipt takes the actual cost once and releases the hold. This
   can take the balance below 0.
-- An old unknown platform call with no estimate and a possible cost stops new
-  platform calls until its cost is confirmed. A saved zero estimate or an old
-  call known to be free does not cause this missing-estimate block or add a
-  hold. Other credit limits still apply to new calls.
 
 Calls with the organization's own key never take credits, also when credits are
 on.
@@ -446,7 +432,8 @@ own system and uses the credit grant API or public host service to add money.
 When a budget or the credits stop a call, the model call fails with an `AiError`
 of the reason `QuotaExhaustedError`. The Turn ends with the status `Failed` and
 the code `model_error`. The metadata of the error says why, in `openbot.reason`:
-`budget` or `credits`. For a budget, `openbot.budgetId` names it.
+`budget` or `credits`. For a budget, `openbot.budgetId` names it. The saved
+failure of the model call has the category `limited`.
 
 When OpenBot cannot read the budgets, for example because the database is down,
 it stops the call too.

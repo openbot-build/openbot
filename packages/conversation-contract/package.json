@@ -10,14 +10,15 @@
 		"src"
 	],
 	"exports": {
+		"./artifacts/Citations": "./dist/artifacts/Citations.js",
 		"./bots/BotMemories": "./dist/bots/BotMemories.js",
 		"./bots/BotRecords": "./dist/bots/BotRecords.js",
 		"./bots/Bots": "./dist/bots/Bots.js",
 		"./bots/DefaultBot": "./dist/bots/DefaultBot.js",
 		"./bots/DelegationQueries": "./dist/bots/DelegationQueries.js",
+		"./bots/Delegations": "./dist/bots/Delegations.js",
 		"./bots/DelegationSource": "./dist/bots/DelegationSource.js",
 		"./bots/DelegationUsage": "./dist/bots/DelegationUsage.js",
-		"./bots/Delegations": "./dist/bots/Delegations.js",
 		"./bots/MemoryBot": "./dist/bots/MemoryBot.js",
 		"./capabilities/Approvals": "./dist/capabilities/Approvals.js",
 		"./capabilities/Capability": "./dist/capabilities/Capability.js",
@@ -56,8 +57,7 @@
 		"./chats/TurnContext": "./dist/chats/TurnContext.js",
 		"./chats/WorkAdmission": "./dist/chats/WorkAdmission.js",
 		"./work/Reminders": "./dist/work/Reminders.js",
-		"./artifacts/Citations": "./dist/artifacts/Citations.js",
-		"./artifacts/History": "./dist/artifacts/History.js"
+		"./work/Todos": "./dist/work/Todos.js"
 	},
 	"scripts": {
 		"build": "tsdown",

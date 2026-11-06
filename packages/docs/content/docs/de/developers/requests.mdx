@@ -268,15 +268,3 @@ Ressourcen, Ressourcen-Vorlagen und Prompts einer App sind Lesen. Darum brauchen
 sie keine Entscheidung. Die eigenen Hinweise einer App entscheiden nie, welche
 Tools sicher sind. Nur die Organization kann Tools als Lesen markieren, mit
 `appReadRules` in ihren [Einstellungen](/de/organization#einstellungen).
-
-## Anfragen aus einer älteren Version
-
-Jede Anfrageansicht hat `executionId` und `executionStatus`. Nach einem
-Datenupgrade kann eine alte wartende Anfrage noch `status: "pending"` haben,
-während ihre Ausführung `executionStatus: "interrupted"` hat. Die gespeicherte
-Aktion bleibt nach den aktuellen Zugriffsregeln zur Prüfung verfügbar.
-
-Der alte Datensatz hat keinen Nachweis für das ursprüngliche Token. Er kann
-keine Rechte erteilen oder die alte Aktion ausführen. Eine Antwort erhält `409`
-mit `RequestConflict`. Sende neue Chat-Eingabe, um die Aktion mit den aktuellen
-Rechten des Aufrufers erneut anzufragen.

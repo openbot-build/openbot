@@ -8,7 +8,7 @@ import {
 	methodsOf,
 	type Options,
 	withMethods,
-} from "@openbot-build/server-billing/models/ModelMethods"
+} from "@openbot-build/server-billing/ModelMethods"
 
 type Load = Files["Service"]["load"]
 

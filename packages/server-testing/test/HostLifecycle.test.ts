@@ -1,3 +1,6 @@
+import { PgClient } from "@effect/sql-pg"
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Execution } from "@openbot-build/domain"
 import { FailureApi } from "@openbot-build/api"
@@ -9,20 +12,21 @@ import {
 	Layer,
 	Logger,
 	Option,
+	Predicate,
 	Ref,
 	References,
 	Stream,
+	Redacted,
 } from "effect"
 import { FetchHttpClient, HttpClient, HttpServer } from "effect/http"
 import { SqlClient } from "effect/sql"
-import { Composition, PresetPlugins } from "@openbot-build/openbot/Parts"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
+import { Preset } from "@openbot-build/openbot"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
 import * as Feature from "@openbot-build/server-plugin/Feature"
 import * as TurnWorkflow from "@openbot-build/plugin-chats/TurnWorkflow"
-import * as BrowserHost from "./BrowserHost.ts"
-import * as TestHost from "./TestHost.ts"
+import * as TestHost from "../src/TestHost.ts"
 
 /** The service that the provider of the test publishes. */
 class Probe extends Context.Service<Probe, { readonly name: string }>()(
@@ -81,7 +85,7 @@ const probes = (
 
 /** The preset with the two plugins of the test at the end. */
 const entries = [
-	...PresetPlugins.entries,
+	...Preset.entries,
 	{ id: "test-provider", name: providerName },
 	{ id: "test-consumer", name: consumerName },
 ]
@@ -112,27 +116,30 @@ const reach = (
 	)
 
 /** Waits until every fork of the host is active. */
-const allActive = until(
-	Effect.gen(function* () {
-		const composition = yield* Composition.Composition
-		const trees = yield* Stream.runHead(composition.forks)
-		const forks = Composition.flatten(Option.getOrElse(trees, () => []))
-		return Option.liftPredicate(
-			forks,
-			(forks) =>
-				Arr.isReadonlyArrayNonEmpty(forks) &&
-				Arr.every(forks, (fork) => fork.state._tag === "Active"),
-		)
-	}),
-)
+const allActive = (control: TestHost.Control) =>
+	until(
+		Effect.gen(function* () {
+			const trees = yield* Stream.runHead(control.forks)
+			const forks = TestHost.flatten(Option.getOrElse(trees, () => []))
+			return Option.liftPredicate(
+				forks,
+				(forks) =>
+					Arr.isReadonlyArrayNonEmpty(forks) &&
+					Arr.every(forks, (fork) => fork.state._tag === "Active"),
+			)
+		}),
+	)
 
 const actor = { kind: "member", organizationId: "org", userId: "user" } as const
 
 // The database is a real server, so these tests use the real clock.
-layer(BrowserHost.layerPlatform, {
-	excludeTestServices: true,
-	timeout: "240 seconds",
-})((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+		timeout: "240 seconds",
+	},
+)((it) => {
 	it.effect(
 		"a restart of a provider stops its consumer first, and a running execution goes on in the next generation",
 		() =>
@@ -140,17 +147,18 @@ layer(BrowserHost.layerPlatform, {
 				const events = yield* Ref.make<ReadonlyArray<string>>([])
 				const note = (event: string) => Ref.update(events, Arr.append(event))
 				const release = yield* Deferred.make<void>()
-				const options = yield* TestHost.makeSettings
-				yield* TestHost.migrate(options)
+				const database = yield* TestDatabase.migrated
+				const control = yield* TestHost.control
 				const context = yield* Layer.build(
 					TestHost.layer({
-						...options,
+						database,
 						entries,
 						plugins: probes(note, release),
+						probes: [control],
 					}),
 				)
 				yield* Effect.gen(function* () {
-					const composition = yield* Composition.Composition
+					const composition = yield* control.value
 					const store = yield* Store.Store
 					yield* store.submit(
 						"host-lifecycle",
@@ -182,18 +190,20 @@ layer(BrowserHost.layerPlatform, {
 					yield* reach(events, "run with probe", 2)
 					yield* Deferred.succeed(release, undefined)
 					yield* reach(events, "run ended")
-					yield* allActive
+					yield* allActive(composition)
 				}).pipe(Effect.provideContext(context))
 			}).pipe(Effect.scoped),
 	)
 
 	it.effect("turning a plugin off and on again makes every fork active", () =>
 		Effect.gen(function* () {
-			const options = yield* TestHost.makeSettings
-			yield* TestHost.migrate(options)
-			const context = yield* Layer.build(TestHost.layer(options))
+			const database = yield* TestDatabase.migrated
+			const control = yield* TestHost.control
+			const context = yield* Layer.build(
+				TestHost.layer({ database, probes: [control] }),
+			)
 			yield* Effect.gen(function* () {
-				const composition = yield* Composition.Composition
+				const composition = yield* control.value
 				const workflows = yield* Workflows.Workflows
 				yield* composition.loader.update("bots", { disabled: true })
 				yield* composition.loader.ready
@@ -204,7 +214,7 @@ layer(BrowserHost.layerPlatform, {
 				)
 				yield* composition.loader.update("bots", { disabled: false })
 				yield* composition.loader.ready
-				yield* allActive
+				yield* allActive(composition)
 			}).pipe(Effect.provideContext(context))
 		}).pipe(Effect.scoped),
 	)
@@ -213,11 +223,13 @@ layer(BrowserHost.layerPlatform, {
 		"the routes of a plugin that is off answer 503, and the OpenAPI document stays the same",
 		() =>
 			Effect.gen(function* () {
-				const options = yield* TestHost.makeSettings
-				yield* TestHost.migrate(options)
-				const context = yield* Layer.build(TestHost.layer(options))
+				const database = yield* TestDatabase.migrated
+				const control = yield* TestHost.control
+				const context = yield* Layer.build(
+					TestHost.layer({ database, probes: [control] }),
+				)
 				yield* Effect.gen(function* () {
-					const composition = yield* Composition.Composition
+					const composition = yield* control.value
 					const address = HttpServer.formatAddress(
 						(yield* HttpServer.HttpServer).address,
 					)
@@ -250,7 +262,7 @@ layer(BrowserHost.layerPlatform, {
 
 					yield* composition.loader.update("triggers", { disabled: false })
 					yield* composition.loader.ready
-					yield* allActive
+					yield* allActive(composition)
 					assert.isUndefined(yield* offFeature)
 				}).pipe(
 					Effect.provideContext(context),
@@ -285,21 +297,23 @@ layer(BrowserHost.layerPlatform, {
 					}
 					if (message === "Shutdown complete") open -= 1
 				})
-				const options = yield* TestHost.makeSettings
-				yield* TestHost.migrate(options)
-				const context = yield* Layer.build(TestHost.layer(options)).pipe(
+				const database = yield* TestDatabase.migrated
+				const control = yield* TestHost.control
+				const context = yield* Layer.build(
+					TestHost.layer({ database, probes: [control] }),
+				).pipe(
 					Effect.provide(Logger.layer([counter])),
 					Effect.provideService(References.MinimumLogLevel, "Debug"),
 				)
 				yield* Effect.gen(function* () {
-					const composition = yield* Composition.Composition
+					const composition = yield* control.value
 					assert.strictEqual(open, 1)
 					yield* composition.loader.update("work", { disabled: true })
 					yield* composition.loader.ready
 					yield* composition.stable
 					yield* composition.loader.update("work", { disabled: false })
 					yield* composition.loader.ready
-					yield* allActive
+					yield* allActive(composition)
 					// The swap opens the next generation after the plugins settle.
 					yield* until(
 						Effect.sync(() =>
@@ -314,19 +328,23 @@ layer(BrowserHost.layerPlatform, {
 
 	it.effect("the host does not start without a required plugin", () =>
 		Effect.gen(function* () {
-			const options = yield* TestHost.makeSettings
-			yield* TestHost.migrate(options)
+			const database = yield* TestDatabase.migrated
 			const error = yield* Layer.build(
 				TestHost.layer({
-					...options,
-					entries: Arr.map(PresetPlugins.entries, (entry) =>
+					database,
+					entries: Arr.map(Preset.entries, (entry) =>
 						entry.id === "auth" ? { ...entry, disabled: true } : entry,
 					),
 				}),
 			).pipe(Effect.flip)
-			assert.deepStrictEqual(
-				error,
-				PresetPlugins.RequiredPluginMissing.make({ ids: ["auth"] }),
+			assert.strictEqual(error._tag, "StartFailed")
+			assert.strictEqual(
+				error._tag === "StartFailed" ? error.reason : undefined,
+				"RequiredPluginMissing",
+			)
+			assert.strictEqual(
+				error.message,
+				"These plugins are needed and are missing or turned off: auth",
 			)
 		}).pipe(Effect.scoped),
 	)
@@ -335,22 +353,24 @@ layer(BrowserHost.layerPlatform, {
 		"the host does not start when a plugin fails, and it saves the failure",
 		() =>
 			Effect.gen(function* () {
-				const options = yield* TestHost.makeSettings
-				yield* TestHost.migrate(options)
+				const database = yield* TestDatabase.migrated
 				const missing = "@openbot-build/plugin-missing"
 				const error = yield* Layer.build(
 					TestHost.layer({
-						...options,
-						entries: [
-							...PresetPlugins.entries,
-							{ id: "missing", name: missing },
-						],
+						database,
+						entries: [...Preset.entries, { id: "missing", name: missing }],
 					}),
 				).pipe(Effect.scoped, Effect.flip)
-				assert.strictEqual(error._tag, "PluginsInactive")
+				assert.strictEqual(
+					error._tag === "StartFailed" ? error.reason : undefined,
+					"PluginsInactive",
+				)
 				const failed =
-					error._tag === "PluginsInactive"
-						? Arr.filter(error.forks, (fork) => fork.plugin === missing)
+					error._tag === "StartFailed"
+						? Arr.filter(
+								TestHost.inactiveForks(error.cause),
+								(fork) => fork.plugin === missing,
+							)
 						: []
 				assert.strictEqual(failed.length, 1)
 				assert.strictEqual(failed[0]?.state, "Failed")
@@ -362,24 +382,28 @@ layer(BrowserHost.layerPlatform, {
 						sql<{
 							readonly id: string
 						}>`select id from openbot_execution_failures where id = ${errorId}`,
-				).pipe(Effect.provide(TestHost.layerShared(options)))
+				).pipe(
+					Effect.provide(PgClient.layer({ url: Redacted.make(database.url) })),
+				)
 				assert.strictEqual(rows.length, 1)
 			}),
 	)
 
 	it.effect("a runtime edit cannot turn off a required plugin", () =>
 		Effect.gen(function* () {
-			const options = yield* TestHost.makeSettings
-			yield* TestHost.migrate(options)
-			const context = yield* Layer.build(TestHost.layer(options))
-			const composition = Context.get(context, Composition.Composition)
+			const database = yield* TestDatabase.migrated
+			const control = yield* TestHost.control
+			yield* Layer.build(TestHost.layer({ database, probes: [control] }))
+			const composition = yield* control.value
 			const error = yield* composition.loader
 				.update("auth", { disabled: true })
 				.pipe(Effect.flip)
 			assert.strictEqual(error._tag, "StoreError")
+			const cause = error._tag === "StoreError" ? error.cause : undefined
+			assert.isTrue(Predicate.isTagged(cause, "RequiredPluginMissing"))
 			assert.deepStrictEqual(
-				error._tag === "StoreError" ? error.cause : undefined,
-				PresetPlugins.RequiredPluginMissing.make({ ids: ["auth"] }),
+				Predicate.hasProperty(cause, "ids") ? cause.ids : undefined,
+				["auth"],
 			)
 		}).pipe(Effect.scoped),
 	)

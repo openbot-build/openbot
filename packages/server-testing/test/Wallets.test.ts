@@ -1,23 +1,23 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { assert, it } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Context, Effect, Exit, Layer, Redacted, Schema } from "effect"
 import { Billing as Model } from "@openbot-build/domain"
 import { Model as CoreModel } from "@openbot-build/core"
-import { Billing as BillingService } from "@openbot-build/server-billing/billing/Billing"
-import { DatabasePostgres as Database } from "@openbot-build/openbot"
-import * as Billing from "@openbot-build/server-billing/billing/BillingPostgres"
-import * as Host from "@openbot-build/server-billing/billing/Host"
+import { Billing as BillingService } from "@openbot-build/server-billing/Billing"
+import * as Billing from "@openbot-build/server-billing/BillingPostgres"
+import { Wallets as Host } from "@openbot-build/openbot"
 import * as Organizations from "@openbot-build/plugin-organization/OrganizationPostgres"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
 import * as Audit from "@openbot-build/plugin-audit/AuditLogPostgres"
-import * as PostgresTest from "./PostgresTest.ts"
-import { layerSettings } from "./OrganizationFixture.ts"
+import { layerSettings } from "../src/OrganizationFixture.ts"
 
 const fixture = Effect.gen(function* () {
-	const database = yield* PostgresTest.start
-	const db = Database.layer({ databaseUrl: Redacted.make(database.url) })
-	yield* Database.migrate.pipe(Effect.provide(db))
+	const database = yield* TestDatabase.start
+	const db = PgClient.layer({ url: Redacted.make(database.url) })
+	yield* Migrations.migrate.pipe(Effect.provide(db))
 	const services = yield* Layer.build(
 		Host.layer.pipe(
 			Layer.provideMerge(Layer.merge(Billing.layer, Organizations.layer)),

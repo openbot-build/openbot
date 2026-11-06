@@ -1,8 +1,9 @@
-import { Authorization, Caller, Execution } from "@openbot-build/domain"
+import { Caller } from "@openbot-build/domain/Identity"
+import { Authorization, Execution } from "@openbot-build/domain"
 import { Effect, Option, Schema } from "effect"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
-import { Store, storage } from "@openbot-build/server-execution/execution/Store"
-import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
+import { Store, storage } from "@openbot-build/server-execution/Store"
+import type { Authorize } from "@openbot-build/server-execution/Engine"
 import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
 
 const sameCaller = Schema.toEquivalence(Caller)
@@ -32,7 +33,6 @@ export const make = Effect.gen(function* () {
 				if (
 					Option.isNone(current) ||
 					!current.value.enabled ||
-					current.value.needsAuthorization ||
 					current.value.actor !== saved.identity.owner.userId
 				)
 					return yield* Execution.Forbidden.make({})

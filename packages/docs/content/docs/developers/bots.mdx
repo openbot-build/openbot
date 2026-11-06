@@ -27,7 +27,7 @@ To talk to a Bot, send it a message:
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"input":"Plan three days in Rome."}' \
+  -d '{"commandKey":"rome-1","input":"Plan three days in Rome."}' \
   https://api.example.com/v1/bots/$BOT/messages
 ```
 
@@ -66,10 +66,6 @@ Bot.
 
 You can still archive your default Bot. After that, a trigger without a Bot
 fails until you pick another default Bot.
-
-Older versions of OpenBot made a Main Bot for each member. When you upgrade,
-each Main Bot becomes a normal Bot, and it becomes the default Bot of its
-member. Its memory and Grants stay.
 
 ### No limits that a Bot knows
 

@@ -1,8 +1,5 @@
-import {
-	Files as FileData,
-	Execution,
-	type ExecutionIdentity,
-} from "@openbot-build/domain"
+import type { ExecutionIdentity } from "@openbot-build/domain/Identity"
+import { Files as FileData, Execution } from "@openbot-build/domain"
 import { Context, type Effect, type Option, type Stream } from "effect"
 import type { files } from "@openbot-build/server-database/Schema"
 type StoredFile = typeof files.$inferSelect

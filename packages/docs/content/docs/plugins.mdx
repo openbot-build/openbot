@@ -42,35 +42,34 @@ plugins with "Yes" in the column "Needed" can never be off. The column "Needs"
 lists the other plugins that a plugin uses. A plugin starts only when every
 plugin that it needs is on.
 
-| Plugin          | What it gives                                                           | Needed | Needs                                                                                                           |
-| --------------- | ----------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------- |
-| `audit`         | The audit log of each organization.                                     | Yes    |                                                                                                                 |
-| `mail`          | Mail from the platform, with the SMTP settings of the platform.         |        |                                                                                                                 |
-| `platform`      | The platform admins and the platform settings.                          | Yes    | `access`, `audit`, `auth`, `authorization`, `mail`, `models`, `organization`                                    |
-| `organization`  | Organizations, their members, and invitations.                          | Yes    | `audit`, `auth`, `authorization`, `mail`, `models`, `platform`                                                  |
-| `access`        | Who may join the platform, and how.                                     | Yes    | `auth`, `authorization`                                                                                         |
-| `sso`           | The sign-in connections of organizations.                               |        | `access`, `audit`, `auth`, `authorization`                                                                      |
-| `auth`          | Sign-in, user tokens, and the check of each caller.                     | Yes    | `access`, `audit`, `authorization`, `mail`, `organization`, `platform`, `sso`                                   |
-| `authorization` | Roles, and the check of the permissions of each caller.                 | Yes    | `auth`, `organization`, `platform`                                                                              |
-| `models`        | Model providers, models, and the model registry.                        |        | `audit`, `auth`, `authorization`                                                                                |
-| `files`         | Stored files and their work.                                            |        | `auth`, `authorization`                                                                                         |
-| `artifacts`     | Fixed files, saved sources, and citations.                              |        | `apps`, `auth`, `authorization`, `computers`, `files`, `imported`, `organization`                               |
-| `bots`          | Bots, their memory, and the delegations between them.                   |        | `audit`, `auth`, `authorization`, `capabilities`, `chats`, `imported`, `mail`, `models`, `organization`, `work` |
-| `capabilities`  | Grants, Rules, requests, and the checks of them.                        |        | `apps`, `audit`, `auth`, `authorization`, `bots`, `chats`, `imported`, `models`                                 |
-| `work`          | Reminders, and the work tools of Bots.                                  |        | `bots`, `chats`                                                                                                 |
-| `imported`      | Executions that started in another program.                             |        | `authorization`, `bots`                                                                                         |
-| `chats`         | Chats, Turns, tools, and Live connections.                              |        | `auth`, `authorization`, `bots`, `capabilities`, `channels`, `files`, `imported`, `models`, `organization`      |
-| `channels`      | Channels, their messages, and the Channel tools of Bots.                |        | `audit`, `auth`, `authorization`, `bots`, `capabilities`, `chats`, `imported`, `models`, `organization`         |
-| `apps`          | App connections, the App Index, and the App tools of Bots.              |        | `auth`, `authorization`, `bots`, `capabilities`, `chats`, `code`, `imported`, `models`, `vaults`                |
-| `code`          | Code runs of Bots in a sandbox.                                         |        | `apps`, `auth`, `authorization`, `chats`, `imported`, `vaults`                                                  |
-| `vaults`        | Vaults, and the secret providers that they read.                        |        | `audit`, `auth`, `authorization`, `bots`                                                                        |
-| `computers`     | Computers, their pairings and sessions, and the Computer tools of Bots. |        | `audit`, `auth`, `authorization`, `bots`, `chats`                                                               |
-| `triggers`      | Triggers that start Turns, and their webhooks.                          |        | `audit`, `auth`, `authorization`, `bots`, `chats`, `models`                                                     |
-| `billing`       | The wallets of organizations, usage, and budgets.                       |        | `audit`, `auth`, `authorization`, `organization`                                                                |
-| `settings`      | The settings of each member.                                            |        | `auth`, `authorization`, `bots`                                                                                 |
-| `turn-limiter`  | A limit on the model steps of each Turn. Off at first.                  |        |                                                                                                                 |
-| `time-limiter`  | A limit on the time of each Turn. Off at first.                         |        |                                                                                                                 |
-| `token-limiter` | A limit on the input and output tokens of each Turn. Off at first.      |        |                                                                                                                 |
+| Plugin          | What it gives                                                           | Needed | Needs                                                                                               |
+| --------------- | ----------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------- |
+| `audit`         | The audit log of each organization.                                     | Yes    |                                                                                                     |
+| `mail`          | Mail from the platform, with the SMTP settings of the platform.         |        |                                                                                                     |
+| `platform`      | The platform admins and the platform settings.                          | Yes    | `access`, `audit`, `auth`, `authorization`, `mail`, `models`, `organization`                        |
+| `organization`  | Organizations, their members, and invitations.                          | Yes    | `audit`, `auth`, `authorization`, `mail`, `models`, `platform`                                      |
+| `access`        | Who may join the platform, and how.                                     | Yes    | `auth`, `authorization`                                                                             |
+| `sso`           | The sign-in connections of organizations.                               |        | `access`, `audit`, `auth`, `authorization`                                                          |
+| `auth`          | Sign-in, user tokens, and the check of each caller.                     | Yes    | `access`, `audit`, `authorization`, `mail`, `organization`, `platform`, `sso`                       |
+| `authorization` | Roles, and the check of the permissions of each caller.                 | Yes    | `auth`, `organization`, `platform`                                                                  |
+| `models`        | Model providers, models, and the model registry.                        |        | `audit`, `auth`, `authorization`                                                                    |
+| `files`         | Stored files and their work.                                            |        | `auth`, `authorization`                                                                             |
+| `artifacts`     | Fixed files, saved sources, and citations.                              |        | `apps`, `auth`, `authorization`, `computers`, `files`, `organization`                               |
+| `bots`          | Bots, their memory, and the delegations between them.                   |        | `audit`, `auth`, `authorization`, `capabilities`, `chats`, `mail`, `models`, `organization`, `work` |
+| `capabilities`  | Grants, Rules, requests, and the checks of them.                        |        | `audit`, `auth`, `authorization`, `bots`, `chats`, `models`                                         |
+| `work`          | Reminders, and the work tools of Bots.                                  |        | `bots`, `chats`                                                                                     |
+| `chats`         | Chats, Turns, tools, and Live connections.                              |        | `auth`, `authorization`, `bots`, `capabilities`, `channels`, `files`, `models`, `organization`      |
+| `channels`      | Channels, their messages, and the Channel tools of Bots.                |        | `audit`, `auth`, `authorization`, `bots`, `capabilities`, `chats`, `models`, `organization`         |
+| `apps`          | App connections, the App Index, and the App tools of Bots.              |        | `auth`, `authorization`, `bots`, `capabilities`, `chats`, `code`, `models`, `vaults`                |
+| `code`          | Code runs of Bots in a sandbox.                                         |        | `apps`, `auth`, `authorization`, `chats`, `vaults`                                                  |
+| `vaults`        | Vaults, and the secret providers that they read.                        |        | `audit`, `auth`, `authorization`, `bots`                                                            |
+| `computers`     | Computers, their pairings and sessions, and the Computer tools of Bots. |        | `audit`, `auth`, `authorization`, `bots`, `chats`                                                   |
+| `triggers`      | Triggers that start Turns, and their webhooks.                          |        | `audit`, `auth`, `authorization`, `bots`, `chats`, `models`                                         |
+| `billing`       | The usage and the budgets of organizations.                             |        | `audit`, `auth`, `authorization`, `organization`                                                    |
+| `settings`      | The settings of each member.                                            |        | `auth`, `authorization`, `bots`                                                                     |
+| `turn-limiter`  | A limit on the model steps of each Turn. Off at first.                  |        |                                                                                                     |
+| `time-limiter`  | A limit on the time of each Turn. Off at first.                         |        |                                                                                                     |
+| `token-limiter` | A limit on the input and output tokens of each Turn. Off at first.      |        |                                                                                                     |
 
 A plugin uses another plugin in a later step of its start. So two plugins can
 need each other, such as `bots` and `chats`.
@@ -86,8 +85,8 @@ What this means for you:
   off every plugin that needs it.
 
 When a plugin is off and an on plugin needs it, the start fails with
-`PluginsInactive`. The error names the plugins that wait and the services that
-they wait for.
+`Launch.StartFailed` and the reason `PluginsInactive`. The error names the
+plugins that wait and the services that they wait for.
 
 ---
 
@@ -134,55 +133,52 @@ one on, give `disabled: false` and its limit in `config`:
     maxTokens: 200000
 ```
 
-| Plugin          | Config field  | Value                                                                                                                                                     |
-| --------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `turn-limiter`  | `maxSteps`    | A whole number from 1. Each model request of a Turn is one step. The first request counts too.                                                            |
-| `time-limiter`  | `maxDuration` | Milliseconds, such as `600000`, or a text such as `10 minutes`. `openbot-inspect plugins` shows a text as `"<redacted>"`, so a number is easier to check. |
-| `token-limiter` | `maxTokens`   | A whole number from 1. It counts the input and output tokens of all model requests of a Turn.                                                             |
+| Plugin          | Config field  | Value                                                                                          |
+| --------------- | ------------- | ---------------------------------------------------------------------------------------------- |
+| `turn-limiter`  | `maxSteps`    | A whole number from 1. Each model request of a Turn is one step. The first request counts too. |
+| `time-limiter`  | `maxDuration` | Milliseconds, such as `600000`.                                                                |
+| `token-limiter` | `maxTokens`   | A whole number from 1. It counts the input and output tokens of all model requests of a Turn.  |
 
 - A limit plugin that is on needs its config. Without good config the plugin
-  fails, and the start stops with `PluginsInactive`.
+  fails, and the start stops with the reason `PluginsInactive`.
 - `config` alone does not turn a limit on. An entry with `config` and no
   `disabled` is an error: "This plugin is off. Add "disabled: false" to turn it
   on."
-- A limit can not use `!env`. Give every server the same limits. The config is
-  in the manifest hash, but a value of `!env` is not.
+- Give every server the same limits. The config is in the manifest hash.
 - Each Turn keeps the limits that were on when it started, also after a restart
   of the server. A new limit counts only for new Turns.
 - The time counts from the start of the Turn, also while the Turn waits, for
   example for a server that starts again.
 - A Turn at a limit ends as failed. Its error record has `BotFeatureStopped`
   with the error of the limit, such as `ModelStepLimitExceeded`. The API shows
-  the failure category `unavailable`.
-- When you turn a limit plugin off, a Turn that started with it waits until it
-  is on again. To remove a limit, first set a high limit. Turn the plugin off
-  only when no Turn runs.
+  the failure category `limited`. A client tries the Turn again only after the
+  limit changes.
+- A Turn keeps the steps, the tokens, and the start time that it used, also
+  after a restart. So a restart does not give a Turn more steps, tokens, or
+  time.
+- When you turn a limit plugin off, a Turn that started with it goes on without
+  that limit. It does not wait for the plugin.
 
 ### Give config to a plugin
 
-An entry can have `config`, the settings of one plugin. Today only the three
-limit plugins take config. `config` on another plugin of OpenBot is an error,
-and the start stops with "This plugin takes no config." This way a value that no
-plugin reads can not look like it works.
+An entry can have `config`, the settings of one plugin. The three limit plugins
+and `apps` take config. `config` on another plugin of OpenBot is an error, and
+the start stops with "This plugin takes no config." This way a value that no
+plugin reads can not look like it works. A new config starts the plugin again.
 
-### Values from the environment
-
-A value can come from an environment variable with the tag `!env`:
+The config of `apps` sets the timing of the App Index worker. `intervalMs` is
+the wait after a good run, and `retryMs` the wait after a failed run, both in
+milliseconds. The defaults are one hour and one minute.
 
 ```yaml
-- id: some-plugin
+- id: apps
   config:
-    token: !env SOME_TOKEN
+    intervalMs: 600000
+    retryMs: 30000
 ```
 
-The file holds only the name of the variable. The value is read when the plugin
-starts, and it goes only to that plugin. OpenBot never logs it,
-`openbot-inspect plugins` never prints it, and it is not in the manifest hash.
-Like every other variable, it can also come from the file `/run/secrets/<NAME>`.
-See [Secrets as files](/configuration#secrets-as-files).
-
-The file is read once, but the value is read again each time the plugin starts.
-Put secrets only in `!env`, never as plain text in the file.
+Config holds plain values only, the same on every server. It holds no secrets.
+Secrets live in the [platform settings](/configuration).
 
 ### Rules
 
@@ -199,11 +195,9 @@ with the place in the file.
 | turns off a needed plugin                                            | Error. "This plugin is needed, so it can not be turned off." |
 | gives `config` to a plugin of OpenBot that takes no config           | Error. "This plugin takes no config."                        |
 | gives `config` to a limit plugin that stays off                      | Error. Add `disabled: false`.                                |
-| uses `!env` in the config of a limit plugin                          | Error. "The config of this plugin can not use !env."         |
 | has a new id with no `name`                                          | Error. A new entry needs a name.                             |
 | has a new id and a name that does not come with OpenBot              | Error. Only plugins that come with OpenBot can run.          |
 | has a new id and a name that already runs as another entry           | Error. Change that entry instead.                            |
-| uses `!env` with a name that is not an environment variable name     | Error. Use capital letters, digits, and `_`.                 |
 | has YAML that is not valid, or a YAML tag that OpenBot does not know | Error, with the line and the column.                         |
 
 Every plugin that can run comes with the image. OpenBot never loads a plugin
@@ -271,13 +265,13 @@ openbot-inspect plugins --file /etc/openbot/plugins.yml
 
 - `source` is `preset` for a plugin of OpenBot, and `file` for a new entry.
 - `changed` says what the file changed: `disabled`, `config`, or both.
-- `config` is there only when an entry has config. An `!env` value shows as
-  `{ "env": "NAME" }`. Every other text value shows as `"<redacted>"`.
+- `config` is there only when an entry has config. Every text value shows as
+  `"<redacted>"`.
 - `file` is `null` when no file is set.
 
-In the Docker image, run
-`/usr/local/bin/node /app/dist/app/Inspect.mjs plugins`. When the file is not
-good, the program prints the problems and ends with exit code 1.
+In the Docker image, run `/usr/local/bin/node /app/dist/Inspect.mjs plugins`.
+When the file is not good, the program prints the problems and ends with exit
+code 1.
 
 ---
 

@@ -1,4 +1,9 @@
 import {
+	ExecutionIdentity,
+	restrictExecution,
+	executionCallers,
+} from "@openbot-build/domain/Identity"
+import {
 	Chat,
 	ChatStoreRepository,
 	Item,
@@ -7,15 +12,7 @@ import {
 	TurnState,
 } from "@openbot-build/core"
 import { SqlClient } from "effect/sql"
-import * as Imported from "@openbot-build/server-execution/imported/Executions"
-import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
-import {
-	executionCallers,
-	restrictExecution,
-	Execution,
-	ExecutionIdentity,
-	ToolExecution,
-} from "@openbot-build/domain"
+import { Execution, ToolExecution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Array as Arr, Clock, Effect, Layer, Option, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
@@ -27,14 +24,14 @@ import {
 import {
 	Store as Executions,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import * as DelegationSource from "@openbot-build/conversation-contract/bots/DelegationSource"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as TurnEnd from "./TurnEnd.ts"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
-import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
-import { databaseError } from "@openbot-build/server-kernel/database/DatabaseError"
+import * as Todos from "@openbot-build/conversation-contract/work/Todos"
+import { databaseError } from "@openbot-build/server-kernel/DatabaseError"
 import { inExecution } from "@openbot-build/conversation-contract/chats/ChatEncoding"
 import {
 	Input,
@@ -42,14 +39,6 @@ import {
 	workflowName,
 	InputCommands,
 } from "@openbot-build/conversation-contract/chats/InputCommands"
-export {
-	Input,
-	Message,
-	workflowName,
-	InputCommands,
-} from "@openbot-build/conversation-contract/chats/InputCommands"
-export type { Service } from "@openbot-build/conversation-contract/chats/InputCommands"
-
 const messageCodec = Schema.toCodecJson(Message)
 
 const codec = Schema.toCodecJson(Input)
@@ -169,25 +158,6 @@ const make = Effect.gen(function* () {
 		const key = {
 			namespace,
 			id: yield* Schema.decodeEffect(Execution.Id)(rows[0].id),
-		}
-		const saved = yield* executions.load(key)
-		if (saved.workflow === Imported.workflowName) {
-			const input = yield* Schema.decodeUnknownEffect(Imported.Input)(
-				saved.input,
-			)
-			if (
-				saved.context?.kind !== "Chat" ||
-				saved.context.id !== chat ||
-				ownerKey(input.owner) !== namespace ||
-				!(
-					Execution.isTerminal(saved.record.status) ||
-					saved.record.status === "outcome_unknown"
-				)
-			)
-				return yield* Execution.Forbidden.make({})
-			yield* executions.loadService(key, Imported.serviceId)
-			// History has no caller. It may stop a queue, but can never steer or own fresh input.
-			return { key, record: saved.record, identity: undefined }
 		}
 		return { key, ...(yield* executions.loadMember(key)) }
 	})
@@ -314,16 +284,6 @@ const make = Effect.gen(function* () {
 							view.chat.turn === undefined
 								? undefined
 								: yield* find(namespace, input.chat, view.chat.turn.id)
-						if (
-							current !== undefined &&
-							current.identity === undefined &&
-							current.record.status === "outcome_unknown"
-						)
-							return yield* Chat.Conflict.make({
-								chat: input.chat,
-								message:
-									"The old Turn has an unknown result. Stop its execution before new input.",
-							})
 						const busy =
 							current !== undefined &&
 							!Execution.isTerminal(current.record.status)
@@ -335,7 +295,6 @@ const make = Effect.gen(function* () {
 							(current?.record.status === "running" ||
 								current?.record.status === "waiting" ||
 								current?.record.status === "queued") &&
-							current.identity !== undefined &&
 							sameIdentity(current.identity, input.identity)
 						const last = Arr.last(view.chat.inbox)
 						const pending =
@@ -350,7 +309,6 @@ const make = Effect.gen(function* () {
 							last.value.action === undefined &&
 							pending !== undefined &&
 							pending.record.status === "queued" &&
-							pending.identity !== undefined &&
 							sameIdentity(pending.identity, input.identity)
 								? pending
 								: undefined
@@ -634,7 +592,7 @@ const make = Effect.gen(function* () {
 						)
 							return yield* Execution.Conflict.make({ id: fence.id })
 						const current = yield* find(fence.namespace, chat, turn.id)
-						if (current.key.id !== fence.id || current.identity === undefined)
+						if (current.key.id !== fence.id)
 							return yield* Execution.Conflict.make({ id: fence.id })
 						let endEvents: ReadonlyArray<
 							Exclude<Execution.EventBody, { readonly _tag: "State" }>
@@ -665,10 +623,15 @@ const make = Effect.gen(function* () {
 											outcome.status === "interrupted" ||
 											outcome.status === "cancelled"
 												? Turn.Status.Interrupted()
-												: Turn.Status.Failed({
-														code: "internal_error",
-														message: `The execution failed. Error ID: ${outcome.failure.errorId}`,
-													}),
+												: outcome.failure.category === "limited"
+													? Turn.Status.Failed({
+															code: "limited",
+															message: `A limit stopped the Turn. Error ID: ${outcome.failure.errorId}`,
+														})
+													: Turn.Status.Failed({
+															code: "internal_error",
+															message: `The execution failed. Error ID: ${outcome.failure.errorId}`,
+														}),
 									}).pipe(
 										Effect.map(
 											({ mutation }) =>

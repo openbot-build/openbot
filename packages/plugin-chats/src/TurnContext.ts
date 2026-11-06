@@ -8,12 +8,6 @@ import {
 	MemberInactive,
 	TurnContext,
 } from "@openbot-build/conversation-contract/chats/TurnContext"
-export {
-	MemberInactive,
-	TurnContext,
-} from "@openbot-build/conversation-contract/chats/TurnContext"
-export type { Failure } from "@openbot-build/conversation-contract/chats/TurnContext"
-
 export const layer = Layer.effect(
 	TurnContext,
 	Effect.gen(function* () {

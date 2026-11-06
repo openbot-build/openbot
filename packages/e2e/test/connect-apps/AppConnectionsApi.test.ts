@@ -1,3 +1,4 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { ConnectionsApi as Api } from "@openbot-build/api"
 import {
@@ -5,10 +6,15 @@ import {
 	BrowserHost,
 	Caller,
 } from "@openbot-build/server-testing"
-import { Effect } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/http"
+import { Effect, Layer } from "effect"
+import { HttpClient, HttpClientResponse, FetchHttpClient } from "effect/http"
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"ordinary HTTP clients prepare and confirm protected Apps without trusting caller authorization claims",
 		() =>

@@ -1,6 +1,20 @@
-import { Delivery } from "./Mail.ts"
+import { BotId } from "@openbot-build/domain/BotId"
 import {
-	BotId,
+	InvitationNotFound,
+	InvitationInvalid,
+	InvitationStatus,
+	InvitationId,
+} from "@openbot-build/domain/Invitation"
+import {
+	LogEntry,
+	PurgeRequest,
+	PurgeResult,
+	MemoryBotSettings,
+	UpdateMemoryBotRequest,
+	View as BotMemoryView,
+} from "@openbot-build/domain/BotMemory"
+import { Delivery } from "@openbot-build/domain/Mail"
+import {
 	BotMember,
 	Bot,
 	CreateBotRequest,
@@ -13,37 +27,6 @@ import {
 	Rule,
 	CreateRuleRequest,
 	UpdateRuleRequest,
-	BotMemoryView,
-	UpdateBotMemoryRequest,
-	BotNotFound,
-	RuleNotFound,
-	GrantNotFound,
-	BotConflict,
-	BotInvalid,
-	BotStorageUnavailable,
-} from "@openbot-build/domain/Bots"
-export {
-	BotId,
-	BotOwner,
-	BotSource,
-	BotMember,
-	Bot,
-	CreateBotRequest,
-	UpdateBotRequest,
-	CapabilityAction,
-	Capability,
-	GrantId,
-	RuleId,
-	Decider,
-	GrantScope,
-	GrantStatus,
-	Grant,
-	CreateGrantRequest,
-	RuleStatus,
-	Rule,
-	CreateRuleRequest,
-	UpdateRuleRequest,
-	BotMemoryView,
 	UpdateBotMemoryRequest,
 	BotNotFound,
 	RuleNotFound,
@@ -59,7 +42,6 @@ import {
 	AuthorizationErrors,
 	GroupRequired,
 } from "./Authorization.ts"
-import * as BotMemory from "./BotMemory.ts"
 import { Schema } from "effect"
 import {
 	HttpApi,
@@ -68,12 +50,6 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import {
-	InvitationId,
-	InvitationInvalid,
-	InvitationNotFound,
-	InvitationStatus,
-} from "./Invitation.ts"
 
 /** Only entries with all of these tags. Separate the tags with commas. */
 const memoryQuery = {
@@ -106,13 +82,6 @@ export const BotErrors = [
 ] as const
 
 import {
-	BotInvitation,
-	CreateBotInvitationRequest,
-	BotInvitationSecret,
-	AcceptBotInvitationRequest,
-} from "@openbot-build/domain/BotSharing"
-export {
-	InvitationSecretPrefix,
 	BotInvitation,
 	CreateBotInvitationRequest,
 	BotInvitationSecret,
@@ -183,7 +152,7 @@ export class BotsApi extends HttpApiGroup.make("bots")
 		),
 		HttpApiEndpoint.get("botMemoryLog", "/v1/bots/:botId/memory/log", {
 			params: botParams,
-			success: Schema.Array(BotMemory.LogEntry),
+			success: Schema.Array(LogEntry),
 			error: BotErrors,
 		}).annotate(
 			OpenApi.Description,
@@ -191,8 +160,8 @@ export class BotsApi extends HttpApiGroup.make("bots")
 		),
 		HttpApiEndpoint.post("purgeBotMemory", "/v1/bots/:botId/memory/purge", {
 			params: botParams,
-			payload: BotMemory.PurgeRequest,
-			success: BotMemory.PurgeResult,
+			payload: PurgeRequest,
+			success: PurgeResult,
 			error: BotErrors,
 		}).annotate(
 			OpenApi.Description,
@@ -200,7 +169,7 @@ export class BotsApi extends HttpApiGroup.make("bots")
 		),
 		HttpApiEndpoint.get("memoryBot", "/v1/bots/:botId/memory/bot", {
 			params: botParams,
-			success: BotMemory.MemoryBotSettings,
+			success: MemoryBotSettings,
 			error: BotErrors,
 		}).annotate(
 			OpenApi.Description,
@@ -208,8 +177,8 @@ export class BotsApi extends HttpApiGroup.make("bots")
 		),
 		HttpApiEndpoint.patch("updateMemoryBot", "/v1/bots/:botId/memory/bot", {
 			params: botParams,
-			payload: BotMemory.UpdateMemoryBotRequest,
-			success: BotMemory.MemoryBotSettings,
+			payload: UpdateMemoryBotRequest,
+			success: MemoryBotSettings,
 			error: BotErrors,
 		}).annotate(
 			OpenApi.Description,

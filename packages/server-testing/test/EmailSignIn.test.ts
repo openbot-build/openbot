@@ -1,3 +1,5 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { SessionInfo } from "@openbot-build/domain/Accounts"
 import { assert, it } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import { AuthApi } from "@openbot-build/api"
@@ -17,14 +19,15 @@ import {
 	HttpClient,
 	HttpClientRequest,
 	HttpClientResponse,
+	FetchHttpClient,
 } from "effect/http"
 import {
 	Transport,
 	TransportError,
 	type Message,
 } from "@openbot-build/identity-contract/mail/Transport"
-import * as BrowserHost from "./BrowserHost.ts"
-import * as Caller from "./Caller.ts"
+import * as BrowserHost from "../src/BrowserHost.ts"
+import * as Caller from "../src/Caller.ts"
 
 it.live(
 	"email codes keep first access closed, grant only verified identities and cannot be replayed or used for OIDC accounts",
@@ -138,7 +141,7 @@ it.live(
 			)
 			const asAdmin = Caller.withCookie({ address, publicOrigin: origin })
 			const session = yield* Caller.read(
-				AuthApi.SessionInfo,
+				SessionInfo,
 				asAdmin(cookie, "/auth/session"),
 			)
 			assert.strictEqual(session.platformAdmin, true)
@@ -202,6 +205,15 @@ it.live(
 			yield* Ref.set(fail, true)
 			assert.strictEqual((yield* send("failed@example.com")).status, 503)
 			assert.strictEqual((yield* send("failed@example.com")).status, 403)
-		}).pipe(Effect.scoped, Effect.provide(BrowserHost.layerPlatform)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(
+				Layer.mergeAll(
+					NodeServices.layer,
+					NodeCrypto.layer,
+					FetchHttpClient.layer,
+				),
+			),
+		),
 	{ timeout: 120000 },
 )

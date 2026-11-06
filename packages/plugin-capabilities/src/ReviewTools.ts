@@ -10,15 +10,15 @@ import {
 	Option,
 } from "effect"
 import { Tool, Toolkit } from "effect/ai"
-import { Records, category } from "@openbot-build/server-kernel/errors/Records"
-import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
-import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
-import type { Fence } from "@openbot-build/server-execution/execution/Store"
+import { Records, category } from "@openbot-build/server-kernel/Records"
+import { CallContext } from "@openbot-build/server-execution/CallContext"
+import * as Recovery from "@openbot-build/server-execution/Recovery"
+import type { Fence } from "@openbot-build/server-execution/Store"
 import {
 	Local,
 	ReviewAllowed,
 	SavedResult,
-} from "@openbot-build/tools-contract/plugins/ToolEntry"
+} from "@openbot-build/tools-contract/ToolEntry"
 import * as BotDecisions from "./BotDecisions.ts"
 import * as CapabilityAccess from "./CapabilityAccess.ts"
 import * as Judge from "./Judge.ts"
@@ -26,12 +26,6 @@ import {
 	names,
 	ReviewTools,
 } from "@openbot-build/conversation-contract/capabilities/ReviewTools"
-export {
-	names,
-	ReviewTools,
-} from "@openbot-build/conversation-contract/capabilities/ReviewTools"
-export type { Service } from "@openbot-build/conversation-contract/capabilities/ReviewTools"
-
 const Scope = Schema.Literals(["once", "chat", "lifetime"])
 
 const Approve = Schema.Struct({

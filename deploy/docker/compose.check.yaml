@@ -8,7 +8,7 @@ services:
     image: openbot:${OPENBOT_RELEASE}
     platform: linux/amd64
     command:
-      - /app/dist/app/Setup.mjs
+      - /app/dist/Setup.mjs
       - --config=/check/setup.json
     volumes:
       - ./check.setup.json:/check/setup.json:ro

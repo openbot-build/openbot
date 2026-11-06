@@ -1,30 +1,34 @@
-import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
+import {
+	ModelProvidersUnavailable,
+	ModelProviderNotFound,
+	ModelNotFound,
+	ModelProviderInvalid,
+} from "@openbot-build/domain/Models"
+import { type Caller, Identity } from "@openbot-build/domain/Identity"
+import { ProviderOAuth } from "@openbot-build/models-contract/ProviderOAuth"
 import { Model, Provider } from "@openbot-build/core"
-import { ModelProvidersApi, OpenBotApi } from "@openbot-build/api"
+import { OpenBotApi } from "@openbot-build/api"
 import { Authorization } from "@openbot-build/domain"
-import { type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
-import { organizationKey } from "@openbot-build/identity-contract/audit/Resources"
+import { Billing } from "@openbot-build/server-billing/Billing"
+import { organizationKey } from "@openbot-build/domain/AuditResources"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import {
 	ModelProviders,
 	organizationOwner,
 	type Owner,
 	view,
-} from "@openbot-build/models-contract/models/ModelProviders"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
+} from "@openbot-build/models-contract/ModelProviders"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
 import {
 	Models,
 	view as modelView,
-} from "@openbot-build/models-contract/models/Models"
-import { checkUnused } from "@openbot-build/models-contract/models/ProviderUseHttp"
-export { checkUnused } from "@openbot-build/models-contract/models/ProviderUseHttp"
-
+} from "@openbot-build/models-contract/Models"
+import { checkUnused } from "@openbot-build/models-contract/ProviderUseHttp"
 export const layer = HttpApiBuilder.group(
 	OpenBotApi,
 	"modelProviders",
@@ -59,7 +63,7 @@ export const layer = HttpApiBuilder.group(
 					})
 					.pipe(
 						Failures.replace("Could not write the audit log", () =>
-							ModelProvidersApi.ModelProvidersUnavailable.make({}),
+							ModelProvidersUnavailable.make({}),
 						),
 					)
 			const recordModel = (
@@ -80,7 +84,7 @@ export const layer = HttpApiBuilder.group(
 					})
 					.pipe(
 						Failures.replace("Could not write the audit log", () =>
-							ModelProvidersApi.ModelProvidersUnavailable.make({}),
+							ModelProvidersUnavailable.make({}),
 						),
 					)
 			const owned = (caller: Caller): Owner =>
@@ -91,7 +95,7 @@ export const layer = HttpApiBuilder.group(
 						Option.match({
 							onNone: () =>
 								Effect.fail(
-									ModelProvidersApi.ModelProviderNotFound.make({
+									ModelProviderNotFound.make({
 										providerId: Provider.Id.make(providerId),
 									}),
 								),
@@ -105,7 +109,7 @@ export const layer = HttpApiBuilder.group(
 						Option.match({
 							onNone: () =>
 								Effect.fail(
-									ModelProvidersApi.ModelNotFound.make({
+									ModelNotFound.make({
 										modelId: Model.Id.make(modelId),
 									}),
 								),
@@ -172,7 +176,7 @@ export const layer = HttpApiBuilder.group(
 							.view(caller.organizationId)
 							.pipe(
 								Failures.replace("Could not read the model catalog", () =>
-									ModelProvidersApi.ModelProvidersUnavailable.make({}),
+									ModelProvidersUnavailable.make({}),
 								),
 							)
 						// The catalog has only the models that the caller may use, and
@@ -300,7 +304,7 @@ export const layer = HttpApiBuilder.group(
 							.prices(provider.id)
 							.pipe(
 								Failures.replace("Could not read the model prices", () =>
-									ModelProvidersApi.ModelProvidersUnavailable.make({}),
+									ModelProvidersUnavailable.make({}),
 								),
 							)
 						return { items }
@@ -313,14 +317,14 @@ export const layer = HttpApiBuilder.group(
 						if (
 							!Arr.some(provider.models, (link) => link.model === payload.model)
 						)
-							return yield* ModelProvidersApi.ModelProviderInvalid.make({
+							return yield* ModelProviderInvalid.make({
 								message: "The provider does not offer this model.",
 							})
 						const price = yield* billing
 							.setPrice(provider.id, payload, caller.userId)
 							.pipe(
 								Failures.replace("Could not set the model price", () =>
-									ModelProvidersApi.ModelProvidersUnavailable.make({}),
+									ModelProvidersUnavailable.make({}),
 								),
 							)
 						yield* audit
@@ -339,7 +343,7 @@ export const layer = HttpApiBuilder.group(
 							})
 							.pipe(
 								Failures.replace("Could not write the audit log", () =>
-									ModelProvidersApi.ModelProvidersUnavailable.make({}),
+									ModelProvidersUnavailable.make({}),
 								),
 							)
 						return price

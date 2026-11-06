@@ -5,8 +5,8 @@ import {
 	CatalogDiscovery,
 	Client,
 	Discovery,
-	Index,
 	Indexing,
+	IndexStore as ProtocolIndex,
 } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -23,12 +23,13 @@ import {
 } from "effect"
 import type { PgClient } from "@effect/sql-pg"
 import { discover } from "./Discovery.ts"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
+import type { InstanceSettings } from "@openbot-build/server-kernel/InstanceSettings"
 import * as IndexStore from "./IndexStore.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
-import type { Records } from "@openbot-build/server-kernel/errors/Records"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import * as Report from "@openbot-build/server-kernel/Report"
+import type { Records } from "@openbot-build/server-kernel/Records"
 
 export class AppInspections extends Context.Service<
 	AppInspections,
@@ -40,23 +41,23 @@ export class AppInspections extends Context.Service<
 			Developers.DeveloperInputInvalid
 		>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/AppInspections") {}
+>()("@openbot-build/plugin-apps/AppInspections") {}
 
 export const make: Effect.Effect<
 	typeof AppInspections.Service,
 	never,
 	| Discovery.Discovery
 	| Indexing.PublicationInspection
-	| Index.IndexStore
+	| ProtocolIndex.IndexStore
 	| PgClient.PgClient
 	| Records
+	| InstanceSettings
 > = Effect.gen(function* () {
 	const inspection = yield* Indexing.PublicationInspection
 	const report = yield* Report.make
-	const index = yield* Index.IndexStore
+	const index = yield* ProtocolIndex.IndexStore
 	const db = yield* Db.make
-	const namespace = yield* IndexNamespace
+	const namespace = yield* instanceNamespace
 	const discovery = yield* Discovery.Discovery
 	return AppInspections.of({
 		inspect: (input) =>

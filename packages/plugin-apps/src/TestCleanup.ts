@@ -1,3 +1,5 @@
+import * as TestCommands from "./TestCommands.ts"
+import { ServiceId, type Caller } from "@openbot-build/domain/Identity"
 import {
 	type ServiceExecution,
 	Store,
@@ -5,17 +7,15 @@ import {
 	type Key,
 	type Fence,
 	type Submission,
-} from "@openbot-build/server-execution/execution/Store"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+} from "@openbot-build/server-execution/Store"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import * as Grants from "./GrantCleanup.ts"
-import * as RetryingCall from "@openbot-build/server-execution/execution/RetryingCall"
+import * as RetryingCall from "@openbot-build/server-execution/RetryingCall"
 import {
 	AppAuthorizations,
 	Authorization,
-	type Caller,
 	Developers,
 	Execution,
-	ServiceId,
 } from "@openbot-build/domain"
 import { and, eq, inArray, ne, or } from "drizzle-orm"
 import {
@@ -37,11 +37,11 @@ import {
 	executionCalls,
 	executions,
 } from "@openbot-build/server-database/Schema"
-import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
+import type { Authorize } from "@openbot-build/server-execution/Engine"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
 import * as Rows from "./DeveloperRows.ts"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 
 export const workflowName = "openbot.developer-test-cleanup"
@@ -53,7 +53,7 @@ const Input = Schema.Struct({
 	owner: Schema.String,
 	createdAt: Schema.Finite,
 })
-/** Creation and maintenance use the same service command. No old caller is needed. */
+/** Creation and maintenance use the same service command. It needs no saved caller. */
 export const submission = (
 	indexNamespace: string,
 	owner: string,
@@ -173,15 +173,14 @@ export interface Service {
 }
 
 export class TestCleanup extends Context.Service<TestCleanup, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-apps/TestCleanup",
+	"@openbot-build/plugin-apps/TestCleanup",
 ) {}
 
 const make = Effect.gen(function* () {
 	const crypto = yield* SecureRandom.SecureRandom
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
-	const namespace = yield* IndexNamespace
+	const namespace = yield* instanceNamespace
 	const store = yield* Store
 	const checks = yield* Check.make
 	const access = yield* DeveloperAccess
@@ -514,7 +513,7 @@ const make = Effect.gen(function* () {
 				.where(
 					and(
 						eq(executions.namespace, record.owner),
-						eq(executions.workflow, "openbot.developer-test"),
+						eq(executions.workflow, TestCommands.workflowName),
 						eq(executions.resourceKind, "DeveloperTest"),
 						eq(executions.resourceId, record.value.id),
 					),
@@ -539,7 +538,7 @@ const make = Effect.gen(function* () {
 				.where(
 					and(
 						eq(executions.namespace, record.owner),
-						eq(executions.workflow, "openbot.app-grant-cleanup"),
+						eq(executions.workflow, Grants.workflowName),
 						or(
 							inArray(executions.id, grants),
 							inArray(

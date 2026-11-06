@@ -40,8 +40,7 @@ cd openbot
 devenv shell -- pnpm dev:setup
 ```
 
-这条命令会生成 `.env.development`，其中有一个新的密钥。如果你有旧版本留下的
-`.env.development`，请先删除它。
+这条命令会生成 `.env.development`，其中有一个新的密钥。
 
 </Step>
 
@@ -143,14 +142,17 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"input":"Hello"}' \
+  -d '{"commandKey":"hello-1","input":"Hello"}' \
   http://localhost/v1/bots/<botId>/messages
 ```
 
+`commandKey`
+是你给这条消息起的名字。如果网络出错，用同一个键和同一个请求体再发一次，OpenBot不会把这条消息收两次。
+
 OpenBot 会创建你和这个 Bot 的 Chat，这条消息会启动一个 Turn。Turn 在后台运行，你会立即得到
-`202`，其中有 `delivery: "started"`。加上
-`"stream": true`，就能以实时流的形式得到回答。要在之后读取回答，请从回答中取出
-`chat`，然后调用 `GET /v1/chats/<chatId>`。
+`202`。回执中有 `executionId`、`commandKey`、`sequence`、`chat`、`turn` 和
+`inputId`。要读取回答，请从回执中取出 `chat`，然后调用
+`GET /v1/chats/<chatId>`。
 
 </Step>
 

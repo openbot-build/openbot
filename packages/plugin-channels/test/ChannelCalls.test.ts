@@ -12,9 +12,9 @@ import {
 } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
 import { Target } from "../src/Channel.ts"
-import * as CustomChannel from "../src/custom/CustomChannel.ts"
+import * as CustomChannel from "../src/CustomChannel.ts"
 import * as Http from "../src/Http.ts"
-import * as LarkChannel from "../src/lark/LarkChannel.ts"
+import * as LarkChannel from "../src/LarkChannel.ts"
 import { hmacHex } from "../src/Text.ts"
 
 /** A guarded network that fails each request with this failure. */

@@ -1,4 +1,4 @@
-import type { Paused } from "@openbot-build/server-execution/execution/Admission"
+import type { Paused } from "@openbot-build/server-execution/Admission"
 import { type Developers, Execution } from "@openbot-build/domain"
 import {
 	type Failure,
@@ -19,11 +19,11 @@ import { Prompt, Toolkit, type Tool } from "effect/ai"
 import * as Hex from "effect/encoding/Hex"
 import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 import * as Db from "@openbot-build/server-database/Database"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import * as Background from "@openbot-build/server-kernel/execution/Background"
-import { type Fence } from "@openbot-build/server-execution/execution/Store"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import * as Background from "@openbot-build/server-kernel/Background"
+import { type Fence } from "@openbot-build/server-execution/Store"
 import { ExecutionFeatures } from "./ExecutionFeatures.ts"
-import { HostTools } from "@openbot-build/tools-contract/chats/HostTools"
+import { HostTools } from "@openbot-build/tools-contract/HostTools"
 import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import { ToolCommands } from "@openbot-build/conversation-contract/chats/ToolCommands"
@@ -46,8 +46,7 @@ export interface Service {
 }
 
 export class ToolSession extends Context.Service<ToolSession, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-chats/ToolSession",
+	"@openbot-build/plugin-chats/ToolSession",
 ) {}
 
 const make = Effect.gen(function* () {

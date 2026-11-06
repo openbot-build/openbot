@@ -1,6 +1,5 @@
 import { Schema, String as Str } from "effect"
 import { TokenId } from "./TokenId.ts"
-export { TokenId } from "./TokenId.ts"
 import { SecretOutput } from "./Secret.ts"
 import { Caller } from "./Identity.ts"
 import { PolicyInput, PolicySchema } from "./Authorization.ts"

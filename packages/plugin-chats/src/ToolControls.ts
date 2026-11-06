@@ -1,5 +1,6 @@
+import { Caller } from "@openbot-build/domain/Identity"
 import { type Chat, type ChatStore, Bot, Operation } from "@openbot-build/core"
-import { Caller, Execution } from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
@@ -12,17 +13,17 @@ import {
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
 import * as Db from "@openbot-build/server-database/Database"
-import { Records, category } from "@openbot-build/server-kernel/errors/Records"
-import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
-import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
+import { Records, category } from "@openbot-build/server-kernel/Records"
+import { CallContext } from "@openbot-build/server-execution/CallContext"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import { Observation } from "@openbot-build/server-execution/Observation"
+import * as Recovery from "@openbot-build/server-execution/Recovery"
 import {
 	Store,
 	storage,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
-import * as ToolEntry from "@openbot-build/tools-contract/plugins/ToolEntry"
+} from "@openbot-build/server-execution/Store"
+import * as ToolEntry from "@openbot-build/tools-contract/ToolEntry"
 import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import { ToolCommands } from "@openbot-build/conversation-contract/chats/ToolCommands"
 import * as ToolResults from "@openbot-build/conversation-contract/chats/ToolResults"
@@ -153,8 +154,7 @@ export interface Service {
 }
 
 export class ToolControls extends Context.Service<ToolControls, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-chats/ToolControls",
+	"@openbot-build/plugin-chats/ToolControls",
 ) {}
 
 const make = Effect.gen(function* () {

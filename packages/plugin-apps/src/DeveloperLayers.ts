@@ -18,7 +18,7 @@ import * as Watches from "./DeveloperWatches.ts"
 import * as Monitor from "./DeveloperMonitor.ts"
 import * as TestRuntime from "./DeveloperTestRuntime.ts"
 import * as TestStores from "./DeveloperTestStores.ts"
-import * as ConnectionScopes from "@openbot-build/server-execution/resources/ConnectionScopes"
+import * as ConnectionScopes from "@openbot-build/server-execution/ConnectionScopes"
 
 /**
  * The services of the developer center. They use the public network, the DNS

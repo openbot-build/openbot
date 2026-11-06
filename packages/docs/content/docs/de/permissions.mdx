@@ -161,11 +161,8 @@ Ability 3.2.0 hat keine Grenzen für Größe, Tiefe oder Suche in der Bibliothek
 Die obigen Grenzen für OpenBot-Anfragen gelten weiter. Feldlisten nutzen echte
 Pfade oder `*`. Muster wie `owner*` sind nicht gültig.
 
-Stoppe beim Wechsel von Ability 2 auf 3 alle Server und starte
-`openbot-migrate`. Die Migration ändert die Platform-Ceiling von einem Objekt zu
-JSON-Text. Die Spalten für Rollen, Mitglieder und Tokens halten schon JSON-Text.
-Clients müssen für `policy` und `ceiling` Strings senden. Alte Policies müssen
-gültige Felder nutzen. Eine Policy, die nicht lädt, gibt keinen Zugriff.
+Clients senden `policy` und `ceiling` als JSON-Text. Eine gespeicherte Policy
+muss gültige Felder nutzen. Eine Policy, die nicht lädt, gibt keinen Zugriff.
 
 ### Regeln
 

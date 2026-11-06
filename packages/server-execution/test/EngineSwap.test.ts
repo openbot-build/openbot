@@ -12,9 +12,9 @@ import {
 	String as Str,
 } from "effect"
 import { TestClock } from "effect/testing"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import * as EngineHost from "@openbot-build/server-execution/execution/EngineHost"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import * as EngineHost from "@openbot-build/server-execution/EngineHost"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
 
 const open = Workflows.Policy.Public({ authorize: () => Effect.void })
 

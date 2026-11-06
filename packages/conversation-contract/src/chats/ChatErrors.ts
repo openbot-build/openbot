@@ -2,9 +2,9 @@ import {
 	ChatNotFound,
 	ChatConflict,
 	ChatStorageUnavailable,
-} from "@openbot-build/domain"
+} from "@openbot-build/domain/Chats"
 import { Effect } from "effect"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import type { InputCommands } from "./InputCommands.ts"
 import type * as ChatCommands from "./ChatCommands.ts"
 import type * as ChatQueries from "./ChatQueries.ts"

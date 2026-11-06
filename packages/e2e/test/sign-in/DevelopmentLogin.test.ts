@@ -1,6 +1,11 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { SessionInfo } from "@openbot-build/domain/Accounts"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { assert, layer, vi } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
-import { DatabasePostgres, Host } from "@openbot-build/openbot"
+import { Host } from "@openbot-build/openbot"
+import { BuiltinModels } from "@openbot-build/models-contract/BuiltinModels"
 import { AuthApi } from "@openbot-build/api"
 import { Config, Model, Provider } from "@openbot-build/core"
 import {
@@ -32,7 +37,6 @@ import {
 } from "effect/http"
 
 import {
-	PostgresTest,
 	DefaultBot,
 	Organizations,
 	Messages,
@@ -83,7 +87,7 @@ layer(
 		() =>
 			Effect.gen(function* () {
 				const crypto = yield* SecureRandom.SecureRandom
-				const database = yield* PostgresTest.start
+				const database = yield* TestDatabase.start
 				yield* Effect.acquireRelease(
 					Effect.sync(() => {
 						const actualFetch = globalThis.fetch
@@ -114,7 +118,7 @@ layer(
 					host: "127.0.0.1",
 					port: 0,
 					// A Chat needs a model. This one gives the same short answer to each Turn.
-					builtinModels: {
+					outside: Layer.succeed(BuiltinModels, {
 						providers: [{ id: model.provider, name: "Test" }],
 						models: [
 							Config.Model.make({
@@ -148,7 +152,7 @@ layer(
 										}),
 									),
 							}),
-					},
+					}),
 					databaseUrl: Redacted.make(database.url),
 					clusterSecret: Redacted.make(
 						"test-cluster-secret-with-at-least-32-characters",
@@ -164,9 +168,9 @@ layer(
 					},
 				}
 				// The migration has its own database pool. It closes after the migration.
-				yield* DatabasePostgres.migrate.pipe(
+				yield* Migrations.migrate.pipe(
 					Effect.provide(
-						DatabasePostgres.layer(options).pipe(
+						PgClient.layer({ url: options.databaseUrl }).pipe(
 							Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 						),
 					),
@@ -224,7 +228,7 @@ layer(
 				const status = (path: string, init?: Parameters<typeof request>[1]) =>
 					Effect.map(request(path, init), (response) => response.status)
 				const sessionInfo = (response: HttpClientResponse.HttpClientResponse) =>
-					HttpClientResponse.schemaBodyJson(AuthApi.SessionInfo)(response)
+					HttpClientResponse.schemaBodyJson(SessionInfo)(response)
 				const login = Effect.gen(function* () {
 					const response = yield* request("/auth/development/sign-in", {
 						method: "POST",

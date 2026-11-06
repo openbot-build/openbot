@@ -1,21 +1,17 @@
+import { Caller } from "@openbot-build/domain/Identity"
 import {
 	type MemberExecution,
 	Store,
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
-import {
-	Authorization,
-	Caller,
-	Developers,
-	Execution,
-} from "@openbot-build/domain"
+} from "@openbot-build/server-execution/Store"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
+import { Authorization, Developers, Execution } from "@openbot-build/domain"
 import { Context, Effect, Layer, Schema } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
-import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
+import type { Authorize } from "@openbot-build/server-execution/Engine"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import type * as Models from "./DeveloperModels.ts"
@@ -77,8 +73,7 @@ export interface Service {
 }
 
 export class ProofCommands extends Context.Service<ProofCommands, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-apps/ProofCommands",
+	"@openbot-build/plugin-apps/ProofCommands",
 ) {}
 
 const make = Effect.gen(function* () {

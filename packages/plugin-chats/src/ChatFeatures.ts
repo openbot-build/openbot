@@ -1,5 +1,8 @@
+import type {
+	Identity,
+	ExecutionIdentity,
+} from "@openbot-build/domain/Identity"
 import { Bot, Chat, type ChatStore, Operations } from "@openbot-build/core"
-import type { Identity, ExecutionIdentity } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
@@ -12,25 +15,24 @@ import {
 	type Scope,
 } from "effect"
 import { Prompt, type LanguageModel, type Tool } from "effect/ai"
-import * as Background from "@openbot-build/server-kernel/execution/Background"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
+import * as Background from "@openbot-build/server-kernel/Background"
+import * as Report from "@openbot-build/server-kernel/Report"
 import { Files } from "@openbot-build/apps-contract/files/Files"
 import { withFiles } from "@openbot-build/apps-contract/files/ModelFiles"
 import type { Entry } from "@openbot-build/apps-contract/apps/WorkflowTools"
 import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
-import type { Fence } from "@openbot-build/server-execution/execution/Store"
-import type { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
+import type { Fence } from "@openbot-build/server-execution/Store"
+import type { Definition } from "@openbot-build/tools-contract/ToolDefinitions"
 import * as Assembly from "./Assembly.ts"
 import { names as executionToolNames } from "./ToolControls.ts"
-import { operationsOf } from "@openbot-build/server-kernel/settings/Documents"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import type {
 	InputCommands,
 	Input,
 } from "@openbot-build/conversation-contract/chats/InputCommands"
 import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
-import * as Registration from "@openbot-build/tools-contract/plugins/Registration"
+import * as Registration from "@openbot-build/tools-contract/Registration"
 import { TurnContext } from "@openbot-build/conversation-contract/chats/TurnContext"
 
 export type Tools = Record<string, Tool.Any>
@@ -89,8 +91,7 @@ export class ChatFeatures extends Context.Service<
 		/** Gives back a saved tool from its definition, through the features of this Turn. */
 		readonly restore: (definition: Definition) => Option.Option<Entry>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-chats/ChatFeatures") {}
+>()("@openbot-build/plugin-chats/ChatFeatures") {}
 
 /**
  * No feature tools and no files. Each Turn has only the tools of the host, and a
@@ -224,7 +225,7 @@ export const make = (fence: Fence, prepared: ReadonlyArray<Prepared>) =>
 			operationSettings: (organizationId) =>
 				settings.organization(organizationId).pipe(
 					Effect.map((snapshot) => {
-						const limits = operationsOf(snapshot.document)
+						const limits = snapshot.document
 						return {
 							budget: Duration.millis(limits.toolForegroundBudgetMs),
 							maxDuration: Duration.millis(limits.toolMaxDurationMs),

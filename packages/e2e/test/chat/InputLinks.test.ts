@@ -1,12 +1,9 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { ChatItem } from "@openbot-build/domain/Artifacts"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
 import { assert, layer } from "@effect/vitest"
-import {
-	ChatCommandReceipt,
-	ChatItem,
-	ChatSummary,
-	ChatView,
-	ExecutionsApi,
-	UserTokensApi,
-} from "@openbot-build/api"
+import { ExecutionsApi, ChatsApi } from "@openbot-build/api"
 import { Execution } from "@openbot-build/domain"
 import {
 	BrowserHost,
@@ -14,7 +11,15 @@ import {
 	Messages,
 	Wait,
 } from "@openbot-build/server-testing"
-import { Array as Arr, Deferred, Effect, Option, Schema, Stream } from "effect"
+import {
+	Array as Arr,
+	Deferred,
+	Effect,
+	Option,
+	Schema,
+	Stream,
+	Layer,
+} from "effect"
 import { LanguageModel, Prompt, Response } from "effect/ai"
 
 const origin = "https://input-links.example.com"
@@ -63,7 +68,7 @@ const read = <S extends Schema.Constraint>(
 	call: Caller.Call,
 	status = 200,
 ) => Effect.flatMap(call, Caller.json(schema, status))
-const accepted = (send: Messages.Send, receipt: ChatCommandReceipt) =>
+const accepted = (send: Messages.Send, receipt: ChatsApi.ChatCommandReceipt) =>
 	Effect.gen(function* () {
 		assert.ok(receipt.inputId !== undefined)
 		const page = yield* read(
@@ -87,7 +92,12 @@ const accepted = (send: Messages.Send, receipt: ChatCommandReceipt) =>
 		})
 	})
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"a lost first Bot reply keeps its input ID after a restart",
 		() =>
@@ -103,14 +113,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				yield* Deferred.await(test.started)
 				yield* Deferred.succeed(test.gate, undefined)
 				const chats = yield* read(
-					Schema.Array(ChatSummary),
+					Schema.Array(ChatsApi.ChatSummary),
 					test.cookie(`/v1/chats?bot=${test.bot}`, "GET"),
 				)
 				assert.strictEqual(chats.length, 1)
 				yield* Messages.settled(test.cookie, chats[0]!.chat.id)
 				yield* test.host.restart
 				const repeat = read(
-					ChatCommandReceipt,
+					ChatsApi.ChatCommandReceipt,
 					test.cookie(`/v1/bots/${test.bot}/messages`, "POST", payload),
 					202,
 				)
@@ -151,7 +161,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 			Effect.gen(function* () {
 				const test = yield* start("queued-input-ids")
 				const token = yield* read(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					test.cookie("/v1/user/tokens", "POST", { name: "Input work" }),
 					201,
 				)
@@ -160,7 +170,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						Caller.withToken(address)(token.secret, path, method, body),
 					)
 				const first = yield* read(
-					ChatCommandReceipt,
+					ChatsApi.ChatCommandReceipt,
 					send(`/v1/bots/${test.bot}/messages`, "POST", {
 						commandKey: "start",
 						input: "Same words.",
@@ -173,7 +183,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					["queue-one", "queue-two"],
 					(commandKey) =>
 						read(
-							ChatCommandReceipt,
+							ChatsApi.ChatCommandReceipt,
 							send(path + "/messages", "POST", {
 								commandKey,
 								input: "Same words.",
@@ -185,13 +195,13 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				for (const receipt of [first, ...queued]) yield* accepted(send, receipt)
 				assert.notStrictEqual(queued[0]!.inputId, queued[1]!.inputId)
 				assert.notStrictEqual(first.inputId, queued[0]!.inputId)
-				const waiting = yield* read(ChatView, send(path, "GET"))
+				const waiting = yield* read(ChatsApi.ChatView, send(path, "GET"))
 				assert.deepStrictEqual(
-					Arr.map(waiting.queuedInputs ?? [], (input) => input.id),
+					Arr.map(waiting.queuedInputs, (input) => input.id),
 					Arr.map(queued, (receipt) => receipt.inputId),
 				)
 				assert.ok(
-					Arr.every(waiting.queuedInputs ?? [], (input) =>
+					Arr.every(waiting.queuedInputs, (input) =>
 						Schema.toEquivalence(Prompt.Prompt)(
 							input.content,
 							Prompt.make("Same words."),
@@ -199,7 +209,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					),
 				)
 				const repeated = yield* read(
-					ChatCommandReceipt,
+					ChatsApi.ChatCommandReceipt,
 					send(path + "/messages", "POST", {
 						commandKey: "queue-one",
 						input: "Same words.",
@@ -256,7 +266,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					queue: true,
 				}
 				const repeat = read(
-					ChatCommandReceipt,
+					ChatsApi.ChatCommandReceipt,
 					test.cookie(path + "/messages", "POST", payload),
 					202,
 				)
@@ -264,7 +274,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				yield* accepted(test.cookie, receipt)
 				assert.ok(
 					Arr.some(
-						(yield* Messages.view(test.cookie, first.chat)).queuedInputs ?? [],
+						(yield* Messages.view(test.cookie, first.chat)).queuedInputs,
 						(input) => input.id === receipt.inputId,
 					),
 				)

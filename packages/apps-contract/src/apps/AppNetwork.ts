@@ -9,5 +9,4 @@ export class AppNetwork extends Context.Service<
 			origins: ReadonlyArray<string>,
 		) => Layer.Layer<Network.Network>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/apps-contract/apps/AppNetwork") {}
+>()("@openbot-build/apps-contract/apps/AppNetwork") {}

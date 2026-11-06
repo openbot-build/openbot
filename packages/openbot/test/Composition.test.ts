@@ -1,25 +1,29 @@
-import type { Records } from "@openbot-build/server-kernel/errors/Records"
-import type { SqlClient } from "effect/sql"
+import type { Records } from "@openbot-build/server-kernel/Records"
 import { assert, it } from "@effect/vitest"
-import type { NodeServices } from "@effect/platform-node"
-import { Effect, type Layer, Redacted, String as Str } from "effect"
+import { Plugin as GraftPlugin } from "@graftland/graft"
+import { Effect, Layer, Redacted, String as Str } from "effect"
 import type { Digest, SecureRandom } from "effect/crypto"
-import type { Etag, HttpClient, HttpPlatform, HttpRouter } from "effect/http"
-import type * as Assembly from "../src/app/Assembly.ts"
-import * as Host from "../src/app/Host.ts"
-import type * as Launch from "../src/app/Launch.ts"
-import * as Outside from "../src/app/Outside.ts"
-import type * as Preset from "../src/app/Preset.ts"
-import type * as Shared from "../src/app/Shared.ts"
-import type * as Authentication from "@openbot-build/plugin-auth/HttpMiddleware"
-import type * as Authorization from "@openbot-build/plugin-authorization/Layer"
-import type { Wallets } from "@openbot-build/server-billing/billing/Host"
-import type { HostTools } from "@openbot-build/tools-contract/chats/HostTools"
-import type { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import type { PgClient } from "@effect/sql-pg"
+import type { HttpClient } from "effect/http"
+import type * as Assembly from "../src/Assembly.ts"
+import * as Host from "../src/Host.ts"
+import type * as Launch from "../src/Launch.ts"
+import * as Outside from "../src/Outside.ts"
+import type * as Preset from "../src/Preset.ts"
+import type * as Feature from "@openbot-build/server-plugin/Feature"
+import type { Wallets } from "../src/Wallets.ts"
 
 /** True when the two types are the same. */
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+
+/**
+ * The members of `A` that are the same type as a member of `B`. It compares
+ * whole types, because the type of one service can extend another.
+ */
+type Overlap<A, B> = A extends unknown
+	? true extends (B extends unknown ? Same<A, B> : never)
+		? A
+		: never
+	: never
 
 /**
  * The platform services, such as those of `NodeCrypto.layer` and
@@ -50,7 +54,7 @@ it.effect(
 			const outside = Outside.layer
 			const outsideGives: Same<
 				Layer.Success<typeof outside>,
-				Outside.Services
+				Host.Outside
 			> = true
 			const outsideNeeds: Same<
 				Layer.Services<typeof outside>,
@@ -63,80 +67,56 @@ it.effect(
 		}),
 )
 
-it.effect(
-	"the private server gets the shared and outside services from its caller",
-	() =>
-		Effect.sync(() => {
-			const customNeeds: Same<
-				Exclude<
-					Layer.Services<ReturnType<typeof Assembly.layerServer>>,
-					| Outside.Services
-					| HostTools
-					| Shared.Services
-					| Platform
-					| SqlClient.SqlClient
-				>,
-				never
-			> = true
-			assert.isTrue(customNeeds)
-		}),
-)
-
-it.effect("the public options take no changed list of plugins", () =>
-	Effect.sync(() => {
-		const entries: "entries" extends keyof Host.Options ? false : true = true
-		const plugins: "plugins" extends keyof Host.Options ? false : true = true
-		const appEntries: "entries" extends keyof Host.AppOptions ? false : true =
-			true
-		assert.deepStrictEqual([entries, plugins, appEntries], [true, true, true])
-	}),
-)
-
-/** The services that more routes could use before the plugin host. */
-type OldRouteServices =
-	| HttpRouter.HttpRouter
-	| NodeServices.NodeServices
-	| Etag.Generator
-	| HttpPlatform.HttpPlatform
-	| PgClient.PgClient
-	| Settings
-	| Wallets
-	| Layer.Services<
-			| typeof Authentication.layerBotAuth
-			| typeof Authentication.layerNoStore
-			| typeof Authorization.layer
-	  >
-
-/** The services of the router and of the platform. The host does not give them. */
-type Serving =
-	| HttpRouter.HttpRouter
-	| NodeServices.NodeServices
-	| Etag.Generator
-	| HttpPlatform.HttpPlatform
+/** Every service that a plugin of the preset publishes. */
+type Published = {
+	readonly [Id in Preset.Id]: Feature.ServicesOf<
+		(typeof Preset.plugins)[Id]["plugin"]
+	>
+}[Preset.Id]
 
 it.effect(
-	"the plugins publish no service of the kernel, and the routes get every service that they may use",
+	"the plugins publish no service of the kernel, and the host gives no service of a plugin",
 	() =>
 		Effect.sync(() => {
-			const apart: [Extract<Preset.Published, Assembly.Kernel>] extends [never]
-				? true
-				: false = true
-			const old: Same<OldRouteServices, Host.RouteServices> = true
-			const given: Same<
-				Exclude<
-					Exclude<Host.RouteServices, Serving>,
-					Preset.Published | Assembly.Kernel
-				>,
+			const apart: Same<Overlap<Published, Assembly.Kernel>, never> = true
+			// Routes and startup work inject every service of a plugin that they need.
+			const routes: Same<
+				Overlap<Host.RouteServices, Published | Wallets>,
 				never
 			> = true
-			// The entry points give a snapshot of the published services, so their callers keep them.
+			const startup: Same<
+				Overlap<Host.StartupServices, Published | Wallets>,
+				never
+			> = true
 			const app = Host.layerApp(options)
-			const snapshot: [Preset.Published] extends [Layer.Success<typeof app>]
-				? true
-				: false = true
+			const server = Host.layer(options)
+			const noPlugin: Same<
+				Overlap<
+					Layer.Success<typeof app> | Layer.Success<typeof server>,
+					Published | Wallets
+				>,
+				never
+			> = true
 			assert.deepStrictEqual(
-				[apart, old, given, snapshot],
+				[apart, routes, startup, noPlugin],
 				[true, true, true, true],
 			)
 		}),
+)
+
+it.effect("only routes and startup make the work of the host", () =>
+	Effect.sync(() => {
+		const plugin = GraftPlugin.make({
+			name: "outside",
+			apply: () => Effect.void,
+		})
+		// @ts-expect-error A plain object with a plugin is not work of the host.
+		const forged: Host.Work = { plugin }
+		const made: Host.Work = Host.startup({
+			name: "test",
+			inject: [],
+			layer: Layer.empty,
+		})
+		assert.deepStrictEqual([typeof made, typeof forged], ["object", "object"])
+	}),
 )

@@ -1,10 +1,11 @@
-import {
-	AppIndex as Domain,
-	Settings as SettingsDomain,
-} from "@openbot-build/domain"
+import { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import { AppIndex as Domain } from "@openbot-build/domain"
 import * as Models from "./IndexModels.ts"
 
-import { type Index as ProtocolIndex, Network } from "@openbot-build/protocol"
+import {
+	Network,
+	type IndexStore as ProtocolIndex,
+} from "@openbot-build/protocol"
 import {
 	Array as Arr,
 	Context,
@@ -23,13 +24,14 @@ import {
 import { eq } from "drizzle-orm"
 import type { PgClient } from "@effect/sql-pg"
 import { appIndexEntries } from "@openbot-build/server-database/Schema"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
+import type { InstanceSettings } from "@openbot-build/server-kernel/InstanceSettings"
 import * as IndexStore from "./IndexStore.ts"
 import { Governance } from "./Governance.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 
 export type Error =
 	| Domain.IndexInputInvalid
@@ -58,7 +60,7 @@ export class PublicIndex extends Context.Service<
 		/** The sources, with the address of the OpenBot Index at the current public origin. */
 		readonly sources: Effect.Effect<
 			ReadonlyArray<Domain.Source>,
-			SettingsDomain.SettingsUnavailable
+			SettingsUnavailable
 		>
 		readonly search: (input: Domain.Query) => Effect.Effect<Models.Page, Error>
 		readonly get: (
@@ -66,8 +68,7 @@ export class PublicIndex extends Context.Service<
 			source?: string,
 		) => Effect.Effect<Models.App, Error>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/PublicIndex") {}
+>()("@openbot-build/plugin-apps/AppIndex/PublicIndex") {}
 
 const Cursor = Schema.fromJsonString(
 	Schema.Struct({
@@ -120,11 +121,11 @@ export const make = (
 ): Effect.Effect<
 	typeof PublicIndex.Service,
 	never,
-	PgClient.PgClient | Governance | Settings
+	PgClient.PgClient | Governance | Settings | InstanceSettings
 > =>
 	Effect.gen(function* () {
 		const db = yield* Db.make
-		const namespace = yield* IndexNamespace
+		const namespace = yield* instanceNamespace
 		const governance = yield* Governance
 		const settings = yield* Settings
 		const localId = "openbot"
@@ -301,9 +302,7 @@ export const make = (
 		})
 		return PublicIndex.of({
 			sources: Effect.map(
-				Platform.publicOriginOr(settings, () =>
-					SettingsDomain.SettingsUnavailable.make({}),
-				),
+				Platform.publicOriginOr(settings, () => SettingsUnavailable.make({})),
 				(publicOrigin) =>
 					Arr.map(providersAt(publicOrigin), (provider) => provider.source),
 			),

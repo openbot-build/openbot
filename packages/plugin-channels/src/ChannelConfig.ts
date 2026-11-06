@@ -1,45 +1,49 @@
+import { Version } from "@openbot-build/domain/Version"
+import { Caller } from "@openbot-build/domain/Identity"
+import type { BotId } from "@openbot-build/domain/BotId"
 import {
 	type MemberExecution,
 	Store,
 	storage,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import {
-	type BotId,
 	type Developers,
 	Authorization,
-	Caller,
 	Channels as Domain,
 	Execution,
-	Version,
 } from "@openbot-build/domain"
-import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { SecretStorageError } from "@openbot-build/server-kernel/Secrets"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
-import { and, eq } from "drizzle-orm"
-import { Context, Effect, Layer, Option, Redacted, Schema } from "effect"
+import {
+	Clock,
+	Context,
+	Effect,
+	Layer,
+	Option,
+	Redacted,
+	Schema,
+	Struct,
+} from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Base64Url } from "effect/encoding"
+import { Base64Url, Hex } from "effect/encoding"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
-import * as Db from "@openbot-build/server-database/Database"
-import { channels as rows } from "@openbot-build/server-database/Schema"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import {
-	organizationKey,
-	segment,
-} from "@openbot-build/identity-contract/audit/Resources"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
-import type { End } from "@openbot-build/server-execution/execution/Program"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { organizationKey, segment } from "@openbot-build/domain/AuditResources"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import type { Authorize } from "@openbot-build/server-execution/Engine"
+import type { End } from "@openbot-build/server-execution/Program"
+import * as Platform from "@openbot-build/server-kernel/Platform"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import {
 	Channels,
 	Credentials,
 } from "@openbot-build/conversation-contract/channels/Channels"
 import { fromInput } from "./ChannelInput.ts"
+import { viewOf } from "./Channels.ts"
 
 export const workflowName = "openbot.channel-configuration"
 export const Create = Schema.Struct({
@@ -57,8 +61,15 @@ export const Update = Schema.Struct({
 	linkPath: Schema.optionalKey(Schema.NullOr(Schema.String)),
 	enabled: Schema.optionalKey(Schema.Boolean),
 })
+/**
+ * The Channel as the configuration work saves it, without its execution link.
+ * The work exists before the Channel row that links to it.
+ */
+const ChannelInput = Schema.Struct(
+	Struct.omit(Domain.Channel.fields, ["executionId"]),
+)
 const Input = Schema.Struct({
-	channel: Domain.Channel,
+	channel: ChannelInput,
 	credentials: Credentials,
 	webhookUrl: Schema.String,
 	predecessor: Schema.NullOr(
@@ -80,7 +91,6 @@ export interface Service {
 			bot: BotId
 			actor: string
 			enabled: boolean
-			needsAuthorization: boolean
 			linkPath: string | null
 			credentials: Domain.ChannelCredentialsView
 			version: number
@@ -112,7 +122,6 @@ export interface Service {
 			bot: BotId
 			actor: string
 			enabled: boolean
-			needsAuthorization: boolean
 			linkPath: string | null
 			credentials: Domain.ChannelCredentialsView
 			version: number
@@ -145,7 +154,6 @@ export interface Service {
 				bot: BotId
 				actor: string
 				enabled: boolean
-				needsAuthorization: boolean
 				linkPath: string | null
 				credentials: Domain.ChannelCredentialsView
 				version: number
@@ -188,15 +196,13 @@ export interface Service {
 }
 
 export class ChannelConfig extends Context.Service<ChannelConfig, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-channels/ChannelConfig",
+	"@openbot-build/plugin-channels/ChannelConfig",
 ) {}
 
 const make = Effect.gen(function* () {
 	const store = yield* Store
 	const admit = yield* ChannelAdmission.make
 	const channels = yield* Channels
-	const db = yield* Db.make
 	const crypto = yield* SecureRandom.SecureRandom
 	const checks = yield* Check.make
 	const bots = yield* Bots
@@ -422,34 +428,62 @@ const make = Effect.gen(function* () {
 									: previous?.bot
 						if (bot === undefined) return yield* Execution.Forbidden.make({})
 						yield* checkBot(caller, bot)
-						const channel =
-							command._tag === "Create"
-								? yield* channels.create({
-										caller,
-										name: command.input.name,
+						const now = yield* Clock.currentTimeMillis
+						const channel: typeof ChannelInput.Type =
+							previous === null
+								? {
+										id: Domain.ChannelId.make(
+											"chn_" +
+												Hex.encode(
+													yield* crypto.randomBytes(16).pipe(Effect.orDie),
+												),
+										),
+										kind: nextCredentials.kind,
+										name: command._tag === "Create" ? command.input.name : "",
 										bot,
-										credentials: nextCredentials,
-										linkPath: command.input.linkPath ?? null,
-										enabled: command.input.enabled ?? true,
-									})
-								: yield* channels.update(
-										caller,
-										command.id,
-										command._tag === "Update"
-											? command.input.expectedVersion
-											: command.expectedVersion,
-										{
-											...(command._tag === "Update" ? command.input : {}),
-											credentials: nextCredentials,
-										},
-									)
+										actor: caller.userId,
+										enabled:
+											command._tag === "Create"
+												? (command.input.enabled ?? true)
+												: true,
+										linkPath:
+											command._tag === "Create"
+												? (command.input.linkPath ?? null)
+												: null,
+										credentials: viewOf(nextCredentials),
+										version: 0,
+										createdAt: now,
+										updatedAt: now,
+									}
+								: {
+										...Struct.omit(previous, ["executionId"]),
+										...(command._tag === "Update"
+											? {
+													...(command.input.name === undefined
+														? {}
+														: { name: command.input.name }),
+													...(command.input.linkPath === undefined
+														? {}
+														: { linkPath: command.input.linkPath }),
+													...(command.input.enabled === undefined
+														? {}
+														: { enabled: command.input.enabled }),
+												}
+											: {}),
+										bot,
+										actor: caller.userId,
+										credentials: viewOf(nextCredentials),
+										version: previous.version + 1,
+										updatedAt: now,
+									}
 						const predecessor =
-							previous?.executionId == null
+							previous === null
 								? null
 								: yield* store.locate(
 										previous.executionId,
 										caller.organizationId,
 									)
+						// The work comes first, so the Channel row can link to it.
 						const key = yield* create({
 							workflow: workflowName,
 							resource: { kind: "ChannelConfiguration", id: channel.id },
@@ -468,16 +502,25 @@ const make = Effect.gen(function* () {
 								secret,
 							}),
 						})
-						yield* db
-							.update(rows)
-							.set({ executionId: key.id })
-							.where(
-								and(
-									eq(rows.organizationId, caller.organizationId),
-									eq(rows.id, channel.id),
-								),
-							)
-							.pipe(storage)
+						if (command._tag === "Create")
+							yield* channels.create({
+								id: channel.id,
+								executionId: key.id,
+								at: now,
+								caller,
+								name: channel.name,
+								bot,
+								credentials: nextCredentials,
+								linkPath: channel.linkPath,
+								enabled: channel.enabled,
+							})
+						else
+							yield* channels.update(caller, channel.id, channel.version - 1, {
+								...(command._tag === "Update" ? command.input : {}),
+								credentials: nextCredentials,
+								executionId: key.id,
+								at: now,
+							})
 						yield* audit
 							.record({
 								organizationId: caller.organizationId,

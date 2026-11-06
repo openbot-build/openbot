@@ -1,10 +1,10 @@
+import { IndexStore } from "@openbot-build/protocol"
 import {
 	CatalogDiscovery,
 	MemoryStore,
 	MemoryIndex,
 	AppConnections,
 	Client,
-	Index,
 	Discovery,
 	Document,
 	App,
@@ -216,9 +216,9 @@ it.live(
 						}),
 						connection: bob,
 					})
-					const index = yield* Index.IndexStore
+					const index = yield* IndexStore.IndexStore
 					yield* index.upsert(
-						Index.Entry.make({
+						IndexStore.Entry.make({
 							cardUrl: fixture.connection.cardUrl,
 							card: yield* fixture.card,
 							checkedAt: 0,

@@ -141,13 +141,6 @@ Fähigkeiten. Die Requests gehen an den Actor.
 
 ---
 
-Nach einem Daten-Upgrade kann ein Trigger `needsAuthorization: true` zeigen.
-Prompt, Zeitplan, nächste Zeit und Aktivierung bleiben erhalten. Timer und
-Webhook können aber keine Arbeit starten. Speichere eine Änderung mit aktuellen
-Rechten, um einen neuen Aufrufer zu setzen und diesen Zustand zu löschen. Der
-neue Timer nutzt die nächste Zeit nach der Änderung. Alte Arbeit behält ihren
-Status. Sie startet nicht erneut als neuer Aufrufer.
-
 ## Berechtigungen
 
 | Aktion auf `Trigger` | Was sie erlaubt                                                               |

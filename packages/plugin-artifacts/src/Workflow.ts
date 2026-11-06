@@ -1,11 +1,8 @@
 import { Effect, Layer } from "effect"
 import { Digest } from "effect/crypto"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import * as Program from "@openbot-build/server-execution/execution/Program"
-import {
-	Policy,
-	Workflows,
-} from "@openbot-build/server-execution/execution/Workflows"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import * as Program from "@openbot-build/server-execution/Program"
+import { Policy, Workflows } from "@openbot-build/server-execution/Workflows"
 import { Artifacts, workflowName } from "./Artifacts.ts"
 
 export const workflow = Engine.define(workflowName)

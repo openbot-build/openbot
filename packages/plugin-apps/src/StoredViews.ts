@@ -1,9 +1,10 @@
 import {
-	ExperienceNotFound,
+	type ExperienceNotFound,
 	ExperienceStorageUnavailable,
-	ChatConflict,
-} from "@openbot-build/domain"
-import { AppCalls, AppViews as Api, ConnectionId } from "@openbot-build/domain"
+} from "@openbot-build/domain/ExperienceErrors"
+import type { ChatConflict } from "@openbot-build/domain/Chats"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
+import { AppCalls, AppViews as Api } from "@openbot-build/domain"
 
 import { Chat, Item, Turn } from "@openbot-build/core"
 import { and, eq, like } from "drizzle-orm"
@@ -16,9 +17,9 @@ import {
 	String as Str,
 } from "effect"
 import { appSecrets } from "@openbot-build/server-database/Schema"
-import type { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { Secrets } from "@openbot-build/server-kernel/Secrets"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 
 /** The open App views, their actions and their confirmed interaction state, kept sealed in Postgres. */
 export type Error =

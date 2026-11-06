@@ -1,23 +1,26 @@
+import type { BotId } from "@openbot-build/domain/BotId"
+import type { Capability } from "@openbot-build/domain/Bots"
+import type { LimitControl } from "@openbot-build/domain/Delegations"
 import {
 	type ExecutionIdentity,
-	type Authorization,
 	executionCallers,
+} from "@openbot-build/domain/Identity"
+import {
+	type Authorization,
 	Bots as BotsApi,
 	type Execution,
 } from "@openbot-build/domain"
 import type { Chain } from "@openbot-build/conversation-contract/chats/ChatHost"
 import { type Turn, type Chat } from "@openbot-build/core"
-import type * as PolicyOrigin from "@openbot-build/conversation-contract/capabilities/PolicyOrigin"
 import * as GrantUse from "./GrantUse.ts"
-import type { Fence } from "@openbot-build/server-execution/execution/Store"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
+import type { Fence } from "@openbot-build/server-execution/Store"
+import * as Report from "@openbot-build/server-kernel/Report"
 import {
 	Array as Arr,
 	Cause,
 	Context,
 	Data,
 	Effect,
-	Layer,
 	Option,
 	Schema,
 	pipe,
@@ -25,7 +28,6 @@ import {
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import {
-	type Capability,
 	describe,
 	memberTarget,
 } from "@openbot-build/conversation-contract/capabilities/Capability"
@@ -55,7 +57,8 @@ export interface Holding {
 	readonly rules: Option.Option<ReadonlyArray<BotsApi.Rule>>
 }
 const sameRules = Schema.toEquivalence(Schema.Array(BotsApi.Rule))
-type UseGrant = (
+/** Finds the Grant that an attempt may use, and spends it when it is one-use. */
+export type UseGrant = (
 	current: typeof Work.Service,
 	attempt: Attempt,
 ) => Effect.Effect<
@@ -74,7 +77,7 @@ export interface Service {
 			readonly namespace: string
 			readonly bot: BotsApi.Bot
 			readonly chain: Chain
-			readonly deciders: ReadonlyArray<BotsApi.BotId>
+			readonly deciders: ReadonlyArray<BotId>
 			readonly chat: Chat.Id
 			readonly turn: Turn.Id
 		},
@@ -94,7 +97,7 @@ export interface Service {
 			readonly namespace: string
 			readonly bot: BotsApi.Bot
 			readonly chain: Chain
-			readonly deciders: ReadonlyArray<BotsApi.BotId>
+			readonly deciders: ReadonlyArray<BotId>
 			readonly chat: Chat.Id
 			readonly turn: Turn.Id
 		},
@@ -122,10 +125,10 @@ export interface Service {
 export class CapabilityAccess extends Context.Service<
 	CapabilityAccess,
 	Service
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-capabilities/CapabilityAccess") {}
+>()("@openbot-build/plugin-capabilities/CapabilityAccess") {}
 
-const makeWith = (useGrant: UseGrant) =>
+/** The checks of a Bot, with the Grant use that the caller gives. */
+export const makeWith = (useGrant: UseGrant) =>
 	Effect.gen(function* () {
 		const report = yield* Report.make
 		const bots = yield* Bots
@@ -327,35 +330,11 @@ const makeWith = (useGrant: UseGrant) =>
 		})
 		return CapabilityAccess.of({ member, check, holds, holding, stillHolds })
 	})
-/** Used only by the old member runtime until its execution cutover. */
-export const make = Effect.gen(function* () {
-	const grants = yield* Grants
-	return yield* makeWith((current, attempt) =>
-		Effect.gen(function* () {
-			const grant = yield* grants.match({
-				organizationId: current.identity.owner.organizationId,
-				bot: current.bot.id,
-				capability: attempt.capability,
-				chat: current.chat,
-			})
-			if (Option.isNone(grant) || grant.value.effect === "deny") return grant
-			return (yield* grants.use(
-				current.identity.owner.organizationId,
-				grant.value,
-			))
-				? grant
-				: Option.none()
-		}),
-	)
-})
-
 /** Each resumed check keeps its own one-use Grant, while all current policy checks still run. */
-export const durable = (fence: Fence, control?: PolicyOrigin.Control) =>
+export const durable = (fence: Fence, control?: LimitControl) =>
 	Effect.gen(function* () {
 		const use = yield* GrantUse.make
 		return yield* makeWith((_current, attempt) =>
 			use.check(fence, attempt.site, attempt.capability, control),
 		)
 	})
-
-export const layer = Layer.effect(CapabilityAccess, make)

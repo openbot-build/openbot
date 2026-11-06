@@ -3,7 +3,7 @@ title: Platform
 description: 平台管理员、设置程序、平台设置，以及共享的模型和模型提供方。
 ---
 
-邀请制升级默认值、邮箱登录、审批、组角色及管理员恢复请参阅[账号准入](/zh-cn/access)。
+邀请制默认值、邮箱登录、审批、组角色及管理员恢复请参阅[账号准入](/zh-cn/access)。
 
 面向平台运维人员。这些任务会影响整个部署。请按任务要求准备服务器访问权限或平台管理权限。从[管理员手册](/zh-cn/admin)开始。
 
@@ -54,7 +54,7 @@ curl -b cookies.txt \
 
 设置程序用 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS`
 连接数据库。它会写入第一份平台设置和第一批平台管理员。在镜像中，它是
-`/app/dist/app/Setup.mjs`。从源代码运行时，使用
+`/app/dist/Setup.mjs`。从源代码运行时，使用
 `pnpm --filter @openbot-build/openbot setup`。这个包还提供命令 `openbot-setup`。
 
 创建私有的 `setup.json` 文件（权限为 `600`）：
@@ -75,7 +75,7 @@ curl -b cookies.txt \
 ```sh
 docker run --rm --env-file openbot.env \
   -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
-  /app/dist/app/Setup.mjs --config=/run/setup.json
+  /app/dist/Setup.mjs --config=/run/setup.json
 ```
 
 `--config` 指定文件路径，`--force` 只用于恢复。文件必须包含 `publicOrigin`
@@ -90,8 +90,6 @@ docker run --rm --env-file openbot.env \
 `fileStorage` 时，新平台不配置文件存储，恢复时保留原有存储。后续通过
 `PATCH /v1/platform/settings` 的 `files.storage`
 修改。密钥只放在私有文件中，初始化程序会加密保存到数据库。
-
-不再读取旧的逐项设置参数及 `OPENBOT_SETUP_*` 环境变量，请把这些值移入文件。
 
 设置程序还会生成一个随机的登录密钥。Better
 Auth 用它来签名登录 cookie。OpenBot 加密保存它，你永远看不到它。
@@ -247,7 +245,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ## 发送邮件
 
 平台管理员可以设置 SMTP，也就是把邮件交给邮件服务器的协议。设置后，OpenBot 会发送[组织邀请](/zh-cn/organization#邀请)和
-[Bot 邮箱邀请](/zh-cn/developers/sharing#邀请别人)。新平台和旧版本保存的设置都默认关闭邮件发送。Bot 邀请链接不会发送邮件。
+[Bot 邮箱邀请](/zh-cn/developers/sharing#邀请别人)。邮件发送默认关闭。Bot 邀请链接不会发送邮件。
 
 把下面的请求体发给 `PATCH /v1/platform/settings`。`expectedVersion`
 必须是你刚读到的版本。SMTP 密码会加密保存在数据库中，每个实例都会立即使用新设置。

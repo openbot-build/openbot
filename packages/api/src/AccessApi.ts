@@ -7,23 +7,6 @@ import {
 	onPlatform,
 	PlatformAuthorize,
 } from "./Authorization.ts"
-export {
-	AdmissionMode,
-	GroupMapping,
-	ProviderAccess,
-	Registration,
-	providerDefaults,
-	defaults,
-	AccountStatus,
-	User,
-	Request,
-	Grant,
-	Event,
-	LoginOptions,
-	AccessDenied,
-	AccessConflict,
-	AccessUnavailable,
-} from "@openbot-build/domain/Access"
 const errors = [
 	Access.AccessDenied.pipe(HttpApiSchema.status(403)),
 	Access.AccessUnavailable.pipe(HttpApiSchema.status(503)),

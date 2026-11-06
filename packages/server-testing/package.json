@@ -2,29 +2,12 @@
 	"name": "@openbot-build/server-testing",
 	"version": "0.1.0",
 	"license": "AGPL-3.0-only",
+	"private": true,
 	"type": "module",
-	"description": "Test helpers of the OpenBot server as TypeScript source, and the tests that start a database or a whole server",
+	"description": "Test helpers of the OpenBot server as TypeScript source in src, and the tests that start a database or a whole server in test",
 	"sideEffects": false,
-	"files": [
-		"test/Testing.ts",
-		"test/AppFixture.ts",
-		"test/BotFixture.ts",
-		"test/BrowserHost.ts",
-		"test/Caller.ts",
-		"test/ChatTest.ts",
-		"test/DefaultBot.ts",
-		"test/DevelopmentLogin.ts",
-		"test/Messages.ts",
-		"test/OrganizationFixture.ts",
-		"test/Organizations.ts",
-		"test/Policies.ts",
-		"test/PostgresTest.ts",
-		"test/TestHost.ts",
-		"test/Wait.ts",
-		"test/testing"
-	],
 	"exports": {
-		".": "./test/Testing.ts"
+		".": "./src/index.ts"
 	},
 	"scripts": {
 		"build": "tsc -p tsconfig.json --noEmit",
@@ -70,7 +53,6 @@
 		"@openbot-build/server-development": "workspace:*",
 		"@openbot-build/server-execution": "workspace:*",
 		"@openbot-build/server-kernel": "workspace:*",
-		"@openbot-build/server-upgrade": "workspace:*",
 		"@openbot-build/tools-contract": "workspace:*",
 		"drizzle-orm": "1.0.0-rc.5",
 		"effect": "4.1.2",
@@ -82,10 +64,10 @@
 	},
 	"devDependencies": {
 		"@graftland/graft": "0.4.0",
+		"@graftland/loader": "0.4.0",
 		"@openbot-build/client": "workspace:*",
 		"@openbot-build/model-providers": "workspace:*",
 		"@openbot-build/plugin-audit": "workspace:*",
-		"@openbot-build/plugin-imported": "workspace:*",
 		"@openbot-build/server-plugin": "workspace:*",
 		"vitest": "5.0.5"
 	},

@@ -1,7 +1,8 @@
-import { AppIndex, ExperienceStorageUnavailable } from "@openbot-build/domain"
+import { ExperienceStorageUnavailable } from "@openbot-build/domain/ExperienceErrors"
+import { AppIndex } from "@openbot-build/domain"
 import { Array as Arr, Context, Effect, HashMap, Layer, Option } from "effect"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 
 /** One snapshot serves a whole list. Actions read current restrictions before sending. */
 export interface Service {
@@ -24,8 +25,7 @@ export interface Service {
 }
 
 export class Governance extends Context.Service<Governance, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-apps/Governance",
+	"@openbot-build/plugin-apps/Governance",
 ) {}
 
 const make = Effect.gen(function* () {

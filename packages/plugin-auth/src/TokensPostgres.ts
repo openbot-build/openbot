@@ -1,3 +1,4 @@
+import { TokenId } from "@openbot-build/domain/TokenId"
 import { Tokens as TokensModel } from "@openbot-build/domain"
 
 import { Authorization } from "@openbot-build/domain"
@@ -21,8 +22,8 @@ import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
 import {
 	AuthUnavailable,
 	CredentialRejected,
-} from "@openbot-build/server-kernel/auth/Model"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+} from "@openbot-build/server-kernel/AuthModel"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import * as Db from "@openbot-build/server-database/Database"
 
 const isUuid = Schema.is(Schema.String.check(Schema.isUUID()))
@@ -48,7 +49,7 @@ const view = (
 	Schema.decodeEffect(PolicyJson)(row.policy).pipe(
 		storageUnavailable("The stored policy of a token does not decode."),
 		Effect.map((policy) => ({
-			id: TokensModel.TokenId.make(row.id),
+			id: TokenId.make(row.id),
 			name: row.name,
 			prefix: row.prefix,
 			policy,
@@ -230,7 +231,7 @@ export const make: Effect.Effect<
 					kind: "user_token" as const,
 					userId: row.userId,
 					organizationId: row.organizationId,
-					tokenId: TokensModel.TokenId.make(row.id),
+					tokenId: TokenId.make(row.id),
 				}
 			}),
 	})

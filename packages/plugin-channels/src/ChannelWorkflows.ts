@@ -1,11 +1,8 @@
 import { Effect, Layer, Stream } from "effect"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import {
-	Policy,
-	Workflows,
-} from "@openbot-build/server-execution/execution/Workflows"
-import * as Program from "@openbot-build/server-execution/execution/Program"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import { Policy, Workflows } from "@openbot-build/server-execution/Workflows"
+import * as Program from "@openbot-build/server-execution/Program"
+import { Observation } from "@openbot-build/server-execution/Observation"
 import { ChannelInbox, workflowName as inputName } from "./ChannelInbox.ts"
 import { ChannelWatch, workflowName as watchName } from "./ChannelWatch.ts"
 import { ChannelQueue, workflowName as deliveryName } from "./ChannelQueue.ts"

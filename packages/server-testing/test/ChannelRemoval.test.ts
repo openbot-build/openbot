@@ -1,3 +1,9 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { Channels as ChannelsModel } from "@openbot-build/conversation-contract/channels/Channels"
+import { BotId } from "@openbot-build/domain/BotId"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
+import { SecureRandom } from "effect/crypto"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
@@ -6,7 +12,7 @@ import { HttpClient } from "effect/http"
 import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import * as ChannelRegistry from "@openbot-build/plugin-channels/ChannelRegistry"
 import { Chat } from "@openbot-build/core"
-import { Authorization, BotId, Execution } from "@openbot-build/domain"
+import { Authorization, Execution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -31,23 +37,21 @@ import * as Removal from "@openbot-build/plugin-channels/ChannelRemoval"
 import * as ChannelWatch from "@openbot-build/plugin-channels/ChannelWatch"
 import * as Channels from "@openbot-build/plugin-channels/Channels"
 import * as Db from "@openbot-build/server-database/Database"
-import { DatabasePostgres as Database } from "@openbot-build/openbot"
 import {
 	channelInbox,
 	channelDeliveries,
 } from "@openbot-build/server-database/Schema"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Postgres from "./PostgresTest.ts"
-import * as Wait from "./Wait.ts"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Observation from "@openbot-build/server-execution/Observation"
+import * as Records from "@openbot-build/server-kernel/Records"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as Wait from "../src/Wait.ts"
 
-const database = Layer.effectDiscard(Database.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(Postgres.start, (db) =>
-				Database.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),
@@ -74,8 +78,14 @@ const caller = {
 } as const
 const namespace = ownerKey(caller)
 const key = (id: Execution.Id) => ({ namespace, id })
-const create = Effect.flatMap(Channels.Channels, (channels) =>
-	channels.create({
+// The Channel stores call no workflow, so a made-up configuration ID is enough.
+const create = Effect.gen(function* () {
+	const channels = yield* ChannelsModel
+	const crypto = yield* SecureRandom.SecureRandom
+	return yield* channels.create({
+		id: "chn_" + (yield* crypto.uuidV7().pipe(Effect.orDie)),
+		executionId: Execution.Id.make("channel-configuration"),
+		at: 0,
 		caller,
 		name: "Team",
 		bot: BotId.make("bot-test"),
@@ -86,8 +96,8 @@ const create = Effect.flatMap(Channels.Channels, (channels) =>
 		},
 		enabled: true,
 		linkPath: null,
-	}),
-)
+	})
+})
 const message = (id: string) =>
 	ChannelEvent.Message({
 		eventId: id,
@@ -157,7 +167,7 @@ layer(services, {
 				const entries = yield* Ref.make<ReadonlyArray<Entry>>([])
 				yield* Effect.gen(function* () {
 					const removal = yield* Removal.ChannelRemoval
-					const channels = yield* Channels.Channels
+					const channels = yield* ChannelsModel
 					const inbox = yield* ChannelInbox.ChannelInbox
 					const queue = yield* ChannelQueue.ChannelQueue
 					const watches = yield* ChannelWatch.ChannelWatch
@@ -408,7 +418,7 @@ layer(services, {
 				const channel = yield* create
 				const removal = yield* Removal.ChannelRemoval
 				const store = yield* Store.Store
-				const channels = yield* Channels.Channels
+				const channels = yield* ChannelsModel
 				const receipt = yield* removal.request(
 					caller,
 					channel.id,

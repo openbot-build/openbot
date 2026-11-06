@@ -1,10 +1,7 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
-import {
-	ChatCommandReceipt,
-	ChatSummary,
-	DelegationsApi,
-	ExecutionsApi,
-} from "@openbot-build/api"
+import { DelegationsApi, ExecutionsApi, ChatsApi } from "@openbot-build/api"
 import { Item } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
 import {
@@ -13,7 +10,7 @@ import {
 	Messages,
 	Workflow,
 } from "@openbot-build/server-testing"
-import { Array as Arr, Effect, Option, Schema, Stream } from "effect"
+import { Array as Arr, Effect, Option, Schema, Stream, Layer } from "effect"
 import { LanguageModel, Prompt, Response } from "effect/ai"
 
 const usage = {
@@ -55,10 +52,13 @@ const events = (send: Messages.Send, id: Execution.Id) =>
 		send(`/v1/executions/${id}/events`, "GET"),
 	)
 
-layer(BrowserHost.layerPlatform, {
-	excludeTestServices: true,
-	timeout: "60 seconds",
-})((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+		timeout: "60 seconds",
+	},
+)((it) => {
 	it.effect(
 		"the server runs a task and returns its notice through registered workflows",
 		() =>
@@ -110,7 +110,7 @@ layer(BrowserHost.layerPlatform, {
 						publicOrigin: "https://workflow-features.example.com",
 					})(member.session, path, method, payload)
 				const receipt = yield* Caller.read(
-					ChatCommandReceipt,
+					ChatsApi.ChatCommandReceipt,
 					send(`/v1/bots/${bot}/messages`, "POST", {
 						commandKey: "task-input",
 						input: "Start the task",
@@ -158,7 +158,7 @@ layer(BrowserHost.layerPlatform, {
 					snapshot.turn?.id,
 				)
 				const tasks = yield* Caller.read(
-					Schema.Array(ChatSummary),
+					Schema.Array(ChatsApi.ChatSummary),
 					send("/v1/chats?kind=task", "GET"),
 				)
 				assert.ok(

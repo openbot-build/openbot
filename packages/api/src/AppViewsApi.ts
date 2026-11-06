@@ -1,39 +1,25 @@
-import { Chat, Item } from "@openbot-build/core"
-import { Ui } from "@openbot-build/protocol"
-import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
-import { AppViews, Execution } from "@openbot-build/domain"
-import { AppOperationId } from "./AppExecution.ts"
-import { ExperienceErrors } from "./ExperienceErrors.ts"
-import { AppRestricted } from "./ConnectionsApi.ts"
-import { errors as executionErrors } from "./ExecutionsApi.ts"
 import {
 	ChatNotFound,
 	ChatStorageUnavailable,
 	ChatModelInvalid,
 	ChatConflict,
-} from "./ChatsApi.ts"
-
-export const {
-	AppViewId,
-	Binding,
-	ActionRequest,
-	ActionTicket,
-	Interaction,
-	AppViewUnavailable,
-	ViewReadAction,
-	ActionKind,
-	ActionSource,
-} = AppViews
-export type AppViewId = AppViews.AppViewId
-export type Binding = AppViews.Binding
-export type ActionRequest = AppViews.ActionRequest
-export type ActionTicket = AppViews.ActionTicket
-export type Interaction = AppViews.Interaction
-export type AppViewUnavailable = AppViews.AppViewUnavailable
-export type ViewReadAction = AppViews.ViewReadAction
-export type ActionKind = AppViews.ActionKind
-export type ActionSource = AppViews.ActionSource
+} from "@openbot-build/domain/Chats"
+import { AppRestricted } from "@openbot-build/domain/AppIndex"
+import { AppOperationId } from "@openbot-build/domain/AppCalls"
+import { AppViewId } from "@openbot-build/domain/AppViews"
+import { Binding } from "@openbot-build/domain/AppViews"
+import { ActionRequest } from "@openbot-build/domain/AppViews"
+import { ActionTicket } from "@openbot-build/domain/AppViews"
+import { Interaction } from "@openbot-build/domain/AppViews"
+import { AppViewUnavailable } from "@openbot-build/domain/AppViews"
+import { ViewReadAction } from "@openbot-build/domain/AppViews"
+import { Chat, Item } from "@openbot-build/core"
+import { Ui } from "@openbot-build/protocol"
+import { Schema } from "effect"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
+import { Execution } from "@openbot-build/domain"
+import { ExperienceErrors } from "./ExperienceErrors.ts"
+import { errors as executionErrors } from "./ExecutionsApi.ts"
 
 export const Opened = Schema.Struct({
 	...Binding.fields,

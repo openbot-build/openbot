@@ -1,3 +1,4 @@
+import type { LimitControl } from "@openbot-build/domain/Delegations"
 import { Item, ToolStep } from "@openbot-build/core"
 import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
 import { Requests } from "@openbot-build/conversation-contract/capabilities/Requests"
@@ -15,7 +16,7 @@ import {
 	Store,
 	storage,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import { Grants } from "@openbot-build/conversation-contract/capabilities/Grants"
 
 class GrantTaken extends Schema.TaggedError<
@@ -37,7 +38,7 @@ export const make = Effect.gen(function* () {
 		fence: Fence,
 		site: Execution.CallSite,
 		capability: BotDomain.Capability,
-		control?: PolicyOrigin.Control,
+		control?: LimitControl,
 	) {
 		const origin = yield* source(fence, site, control)
 		const organizationId = origin.identity.owner.organizationId

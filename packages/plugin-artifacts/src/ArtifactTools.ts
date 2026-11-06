@@ -1,10 +1,10 @@
+import { executionCallers } from "@openbot-build/domain/Identity"
 import { Digest } from "effect/crypto"
 import { Bot, type Chat, type ChatStore } from "@openbot-build/core"
 import {
 	ArtifactCommands,
 	Artifacts as Data,
 	Execution,
-	executionCallers,
 } from "@openbot-build/domain"
 import {
 	Array as Arr,
@@ -23,13 +23,10 @@ import * as Citations from "@openbot-build/conversation-contract/artifacts/Citat
 import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 import type * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import * as Db from "@openbot-build/server-database/Database"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import {
-	Store,
-	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
-import * as ToolEntry from "@openbot-build/tools-contract/plugins/ToolEntry"
-import { toolJson } from "@openbot-build/tools-contract/plugins/ToolJson"
+import { Records } from "@openbot-build/server-kernel/Records"
+import { Store, type Fence } from "@openbot-build/server-execution/Store"
+import * as ToolEntry from "@openbot-build/tools-contract/ToolEntry"
+import { toolJson } from "@openbot-build/tools-contract/ToolJson"
 
 export const names = {
 	capture: "openbot_capture_source",

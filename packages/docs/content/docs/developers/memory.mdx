@@ -17,8 +17,7 @@ how Bot memory learns, who sees what, and how to read and change it with the
 API.
 
 Bot memory is the only memory. A Chat keeps its history, but no separate list of
-facts. Older versions of OpenBot also kept learned memory for each Session. That
-memory is gone.
+facts.
 
 ---
 
@@ -65,9 +64,12 @@ OpenBot sets the `for:` tags. Nobody sees an entry without one.
 
 For a fact with several source Items, OpenBot saves each Item's access rule when
 it learns the fact. These records stay private; the public entry format stays
-the same. For an observation, it checks every source entry and each source of
-that entry in turn. A missing source, a loop in the source links, or missing
-access proof hides the result. The same check applies to reads, change logs,
+the same. Every fact must have these records. When a read or a change of the
+memory meets a stored fact that has none, the server stops it and answers `503`
+(`BotStorageUnavailable`). It does not delete the fact. For an observation,
+OpenBot checks every source entry and each source of that entry in turn. A
+missing source, a loop in the source links, or a source rule that the reader
+does not pass hides the result. The same check applies to reads, change logs,
 edits, and the memory used in confessions and input additions.
 
 The server checks tags, source links, and access rules without opening the
@@ -246,7 +248,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `GET /v1/bots/:botId/memory/log` lists the changes of entries that you may see:
 `version`, the time, what made the change (`memory_bot` or `person`), and the
-ids. Changes from older versions of OpenBot can also say `promotion`.
+ids.
 
 To remove memory without reading it, send one tag of OpenBot to
 `POST /v1/bots/:botId/memory/purge`: a `from:`, `chat:`, `org:` or `channel:`
@@ -258,12 +260,9 @@ When you [delete the history of a Chat](/developers/chats#delete-the-history),
 the memory that the Bot learned from it stays. Purge `chat:<id>` to remove it
 too.
 
-The same source access rule applies to old and new memory. If OpenBot cannot
-prove access to every source of an old entry, it keeps that entry hidden. It
-also leaves that entry and conclusions based on it out of learning input. The
-entry can become visible only after it is rebuilt from sources whose access can
-be checked. OpenBot does not rebuild these entries during an upgrade. It does
-not give a wider audience to old memory. A private pinned entry made with
+OpenBot shows a learned entry only when it can prove access to every source of
+the entry. Otherwise it keeps that entry hidden. It also leaves that entry and
+conclusions based on it out of learning input. A private pinned entry made with
 `Remember` keeps its own access rule.
 
 ---
@@ -277,7 +276,7 @@ Two routes show what happened in one of your Chats:
   them to people.
 - `GET /v1/chats/:chatId/enrichments` lists how the memory Bot wrote the input
   of each Turn again: the new `text`, the words of the person in `original`, and
-  the entries that it used. Older records have no `original`.
+  the entries that it used.
 
 Both need `read` on the Chat, so only the person who owns the Chat can read
 them.

@@ -1,10 +1,7 @@
 import { Effect, Layer } from "effect"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import {
-	Policy,
-	Workflows,
-} from "@openbot-build/server-execution/execution/Workflows"
-import * as Program from "@openbot-build/server-execution/execution/Program"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import { Policy, Workflows } from "@openbot-build/server-execution/Workflows"
+import * as Program from "@openbot-build/server-execution/Program"
 import { DeveloperIndexing, workflowName } from "./DeveloperIndexing.ts"
 export const workflow = Engine.define(workflowName)
 /** Adds the workflow and its access rules. When the scope closes, they go. */

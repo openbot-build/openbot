@@ -1,3 +1,4 @@
+import { IndexStore } from "@openbot-build/protocol"
 import {
 	Array as Arr,
 	HashMap,
@@ -18,7 +19,6 @@ import {
 	PublicIndexing,
 	MemoryIndex,
 	MemoryStore,
-	Index,
 	Document,
 	Indexing,
 	Network,
@@ -207,7 +207,8 @@ it.effect(
 								"Unconfirmed",
 							)
 							assert.strictEqual(
-								(yield* (yield* Index.IndexStore).get(fixture.cardUrl))._tag,
+								(yield* (yield* IndexStore.IndexStore).get(fixture.cardUrl))
+									._tag,
 								"Some",
 							)
 							fixture.catalog(
@@ -227,7 +228,7 @@ it.effect(
 							})
 							const withdrawn = yield* Indexing.sync(input)
 							assert.strictEqual(withdrawn._tag, "Withdrawn")
-							const index = yield* Index.IndexStore
+							const index = yield* IndexStore.IndexStore
 							assert.strictEqual(
 								Option.isNone(yield* index.get(fixture.cardUrl)),
 								true,
@@ -283,7 +284,7 @@ it.effect(
 					Match.tag("Indexed", (indexed) => {
 						assert.deepStrictEqual(
 							indexed.entry.evidence[0],
-							Index.Evidence.make({
+							IndexStore.Evidence.make({
 								publisherUrl: "https://publisher.example/product",
 								catalogUrl: "https://publisher.example/catalog?product=notes",
 								cardUrl: fixture.cardUrl,
@@ -415,12 +416,12 @@ it.effect(
 				)
 			}).pipe(provideSite(fixture))
 			const valid = site()
-			const broken = Layer.succeed(Index.IndexStore, {
+			const broken = Layer.succeed(IndexStore.IndexStore, {
 				get: () => Effect.succeedNone,
 				withdraw: () => Effect.void,
 				upsert: () =>
 					Effect.fail(
-						Index.IndexError.make({
+						IndexStore.IndexError.make({
 							reason: "Unavailable",
 							operation: "upsert",
 						}),

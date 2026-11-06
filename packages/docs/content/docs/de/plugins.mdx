@@ -45,35 +45,34 @@ Plugins mit „Ja“ in der Spalte „Nötig“ können nie aus sein. Die Spalte
 nennt die anderen Plugins, die ein Plugin nutzt. Ein Plugin startet erst, wenn
 jedes Plugin an ist, das es braucht.
 
-| Plugin          | Was es gibt                                                                  | Nötig | Braucht                                                                                                         |
-| --------------- | ---------------------------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------- |
-| `audit`         | Das Audit-Log jeder Organisation.                                            | Ja    |                                                                                                                 |
-| `mail`          | Mails der Plattform, mit den SMTP-Einstellungen der Plattform.               |       |                                                                                                                 |
-| `platform`      | Die Plattform-Admins und die Plattform-Einstellungen.                        | Ja    | `access`, `audit`, `auth`, `authorization`, `mail`, `models`, `organization`                                    |
-| `organization`  | Organisationen, ihre Mitglieder und Einladungen.                             | Ja    | `audit`, `auth`, `authorization`, `mail`, `models`, `platform`                                                  |
-| `access`        | Wer der Plattform beitreten darf, und wie.                                   | Ja    | `auth`, `authorization`                                                                                         |
-| `sso`           | Die Anmelde-Verbindungen der Organisationen.                                 |       | `access`, `audit`, `auth`, `authorization`                                                                      |
-| `auth`          | Anmeldung, Nutzer-Tokens und die Prüfung jedes Aufrufers.                    | Ja    | `access`, `audit`, `authorization`, `mail`, `organization`, `platform`, `sso`                                   |
-| `authorization` | Rollen und die Prüfung der Rechte jedes Aufrufers.                           | Ja    | `auth`, `organization`, `platform`                                                                              |
-| `models`        | Modell-Anbieter, Modelle und das Modell-Register.                            |       | `audit`, `auth`, `authorization`                                                                                |
-| `files`         | Gespeicherte Dateien und ihre Arbeit.                                        |       | `auth`, `authorization`                                                                                         |
-| `artifacts`     | Feste Dateien, gespeicherte Quellen und Zitate.                              |       | `apps`, `auth`, `authorization`, `computers`, `files`, `imported`, `organization`                               |
-| `bots`          | Bots, ihr Gedächtnis und die Delegationen zwischen ihnen.                    |       | `audit`, `auth`, `authorization`, `capabilities`, `chats`, `imported`, `mail`, `models`, `organization`, `work` |
-| `capabilities`  | Grants, Rules, Anfragen und ihre Prüfung.                                    |       | `apps`, `audit`, `auth`, `authorization`, `bots`, `chats`, `imported`, `models`                                 |
-| `work`          | Erinnerungen und die Arbeits-Werkzeuge der Bots.                             |       | `bots`, `chats`                                                                                                 |
-| `imported`      | Ausführungen, die in einem anderen Programm begonnen haben.                  |       | `authorization`, `bots`                                                                                         |
-| `chats`         | Chats, Turns, Werkzeuge und Live-Verbindungen.                               |       | `auth`, `authorization`, `bots`, `capabilities`, `channels`, `files`, `imported`, `models`, `organization`      |
-| `channels`      | Channels, ihre Nachrichten und die Channel-Werkzeuge der Bots.               |       | `audit`, `auth`, `authorization`, `bots`, `capabilities`, `chats`, `imported`, `models`, `organization`         |
-| `apps`          | App-Verbindungen, der App Index und die App-Werkzeuge der Bots.              |       | `auth`, `authorization`, `bots`, `capabilities`, `chats`, `code`, `imported`, `models`, `vaults`                |
-| `code`          | Code-Läufe der Bots in einer Sandbox.                                        |       | `apps`, `auth`, `authorization`, `chats`, `imported`, `vaults`                                                  |
-| `vaults`        | Vaults und die Anbieter von Geheimnissen, die sie lesen.                     |       | `audit`, `auth`, `authorization`, `bots`                                                                        |
-| `computers`     | Computer, ihre Kopplungen und Sitzungen und die Computer-Werkzeuge der Bots. |       | `audit`, `auth`, `authorization`, `bots`, `chats`                                                               |
-| `triggers`      | Trigger, die Turns starten, und ihre Webhooks.                               |       | `audit`, `auth`, `authorization`, `bots`, `chats`, `models`                                                     |
-| `billing`       | Die Wallets der Organisationen, die Nutzung und Budgets.                     |       | `audit`, `auth`, `authorization`, `organization`                                                                |
-| `settings`      | Die Einstellungen jedes Mitglieds.                                           |       | `auth`, `authorization`, `bots`                                                                                 |
-| `turn-limiter`  | Ein Limit für die Modellschritte jedes Turns. Am Anfang aus.                 |       |                                                                                                                 |
-| `time-limiter`  | Ein Limit für die Zeit jedes Turns. Am Anfang aus.                           |       |                                                                                                                 |
-| `token-limiter` | Ein Limit für die Eingabe- und Ausgabe-Tokens jedes Turns. Am Anfang aus.    |       |                                                                                                                 |
+| Plugin          | Was es gibt                                                                  | Nötig | Braucht                                                                                             |
+| --------------- | ---------------------------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------- |
+| `audit`         | Das Audit-Log jeder Organisation.                                            | Ja    |                                                                                                     |
+| `mail`          | Mails der Plattform, mit den SMTP-Einstellungen der Plattform.               |       |                                                                                                     |
+| `platform`      | Die Plattform-Admins und die Plattform-Einstellungen.                        | Ja    | `access`, `audit`, `auth`, `authorization`, `mail`, `models`, `organization`                        |
+| `organization`  | Organisationen, ihre Mitglieder und Einladungen.                             | Ja    | `audit`, `auth`, `authorization`, `mail`, `models`, `platform`                                      |
+| `access`        | Wer der Plattform beitreten darf, und wie.                                   | Ja    | `auth`, `authorization`                                                                             |
+| `sso`           | Die Anmelde-Verbindungen der Organisationen.                                 |       | `access`, `audit`, `auth`, `authorization`                                                          |
+| `auth`          | Anmeldung, Nutzer-Tokens und die Prüfung jedes Aufrufers.                    | Ja    | `access`, `audit`, `authorization`, `mail`, `organization`, `platform`, `sso`                       |
+| `authorization` | Rollen und die Prüfung der Rechte jedes Aufrufers.                           | Ja    | `auth`, `organization`, `platform`                                                                  |
+| `models`        | Modell-Anbieter, Modelle und das Modell-Register.                            |       | `audit`, `auth`, `authorization`                                                                    |
+| `files`         | Gespeicherte Dateien und ihre Arbeit.                                        |       | `auth`, `authorization`                                                                             |
+| `artifacts`     | Feste Dateien, gespeicherte Quellen und Zitate.                              |       | `apps`, `auth`, `authorization`, `computers`, `files`, `organization`                               |
+| `bots`          | Bots, ihr Gedächtnis und die Delegationen zwischen ihnen.                    |       | `audit`, `auth`, `authorization`, `capabilities`, `chats`, `mail`, `models`, `organization`, `work` |
+| `capabilities`  | Grants, Rules, Anfragen und ihre Prüfung.                                    |       | `audit`, `auth`, `authorization`, `bots`, `chats`, `models`                                         |
+| `work`          | Erinnerungen und die Arbeits-Werkzeuge der Bots.                             |       | `bots`, `chats`                                                                                     |
+| `chats`         | Chats, Turns, Werkzeuge und Live-Verbindungen.                               |       | `auth`, `authorization`, `bots`, `capabilities`, `channels`, `files`, `models`, `organization`      |
+| `channels`      | Channels, ihre Nachrichten und die Channel-Werkzeuge der Bots.               |       | `audit`, `auth`, `authorization`, `bots`, `capabilities`, `chats`, `models`, `organization`         |
+| `apps`          | App-Verbindungen, der App Index und die App-Werkzeuge der Bots.              |       | `auth`, `authorization`, `bots`, `capabilities`, `chats`, `code`, `models`, `vaults`                |
+| `code`          | Code-Läufe der Bots in einer Sandbox.                                        |       | `apps`, `auth`, `authorization`, `chats`, `vaults`                                                  |
+| `vaults`        | Vaults und die Anbieter von Geheimnissen, die sie lesen.                     |       | `audit`, `auth`, `authorization`, `bots`                                                            |
+| `computers`     | Computer, ihre Kopplungen und Sitzungen und die Computer-Werkzeuge der Bots. |       | `audit`, `auth`, `authorization`, `bots`, `chats`                                                   |
+| `triggers`      | Trigger, die Turns starten, und ihre Webhooks.                               |       | `audit`, `auth`, `authorization`, `bots`, `chats`, `models`                                         |
+| `billing`       | Die Nutzung und die Budgets der Organisationen.                              |       | `audit`, `auth`, `authorization`, `organization`                                                    |
+| `settings`      | Die Einstellungen jedes Mitglieds.                                           |       | `auth`, `authorization`, `bots`                                                                     |
+| `turn-limiter`  | Ein Limit für die Modellschritte jedes Turns. Am Anfang aus.                 |       |                                                                                                     |
+| `time-limiter`  | Ein Limit für die Zeit jedes Turns. Am Anfang aus.                           |       |                                                                                                     |
+| `token-limiter` | Ein Limit für die Eingabe- und Ausgabe-Tokens jedes Turns. Am Anfang aus.    |       |                                                                                                     |
 
 Ein Plugin nutzt ein anderes Plugin erst in einem späteren Schritt seines
 Starts. Darum können zwei Plugins einander brauchen, zum Beispiel `bots` und
@@ -91,8 +90,8 @@ Was das für dich heißt:
   du auch jedes Plugin ausschalten, das dieses Plugin braucht.
 
 Wenn ein Plugin aus ist und ein Plugin, das an ist, es braucht, scheitert der
-Start mit `PluginsInactive`. Der Fehler nennt die Plugins, die warten, und die
-Dienste, auf die sie warten.
+Start mit `Launch.StartFailed` und dem Grund `PluginsInactive`. Der Fehler nennt
+die Plugins, die warten, und die Dienste, auf die sie warten.
 
 ---
 
@@ -138,58 +137,56 @@ eines einzuschalten, gib `disabled: false` und sein Limit in `config` an:
     maxTokens: 200000
 ```
 
-| Plugin          | Konfigurationsfeld | Wert                                                                                                                                                               |
-| --------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `turn-limiter`  | `maxSteps`         | Eine ganze Zahl ab 1. Jede Modellanfrage eines Turns ist ein Schritt. Die erste Anfrage zählt auch.                                                                |
-| `time-limiter`  | `maxDuration`      | Millisekunden, wie `600000`, oder ein Text wie `10 minutes`. `openbot-inspect plugins` zeigt einen Text als `"<redacted>"`, also ist eine Zahl leichter zu prüfen. |
-| `token-limiter` | `maxTokens`        | Eine ganze Zahl ab 1. Sie zählt die Eingabe- und Ausgabe-Tokens aller Modellanfragen eines Turns.                                                                  |
+| Plugin          | Konfigurationsfeld | Wert                                                                                                |
+| --------------- | ------------------ | --------------------------------------------------------------------------------------------------- |
+| `turn-limiter`  | `maxSteps`         | Eine ganze Zahl ab 1. Jede Modellanfrage eines Turns ist ein Schritt. Die erste Anfrage zählt auch. |
+| `time-limiter`  | `maxDuration`      | Millisekunden, wie `600000`.                                                                        |
+| `token-limiter` | `maxTokens`        | Eine ganze Zahl ab 1. Sie zählt die Eingabe- und Ausgabe-Tokens aller Modellanfragen eines Turns.   |
 
 - Ein Limit-Plugin, das an ist, braucht seine Konfiguration. Ohne gute
-  Konfiguration scheitert das Plugin, und der Start endet mit `PluginsInactive`.
+  Konfiguration scheitert das Plugin, und der Start endet mit dem Grund
+  `PluginsInactive`.
 - `config` allein schaltet kein Limit an. Ein Eintrag mit `config` und ohne
   `disabled` ist ein Fehler: „This plugin is off. Add "disabled: false" to turn
   it on.“
-- Ein Limit kann `!env` nicht nutzen. Gib jedem Server dieselben Limits. Die
-  Konfiguration ist im Manifest-Hash, ein Wert von `!env` aber nicht.
+- Gib jedem Server dieselben Limits. Die Konfiguration ist im Manifest-Hash.
 - Jeder Turn behält die Limits, die an waren, als er startete, auch nach einem
   Neustart des Servers. Ein neues Limit zählt nur für neue Turns.
 - Die Zeit zählt ab dem Start des Turns, auch während der Turn wartet, zum
   Beispiel auf einen Server, der neu startet.
 - Ein Turn an einem Limit endet als gescheitert. Sein Fehlereintrag hat
   `BotFeatureStopped` mit dem Fehler des Limits, wie `ModelStepLimitExceeded`.
-  Die API zeigt die Fehlerkategorie `unavailable`.
-- Wenn du ein Limit-Plugin ausschaltest, wartet ein Turn, der damit startete,
-  bis es wieder an ist. Um ein Limit zu entfernen, setze zuerst ein hohes Limit.
-  Schalte das Plugin erst aus, wenn kein Turn läuft.
+  Die API zeigt die Fehlerkategorie `limited`. Ein Client versucht den Turn erst
+  wieder, wenn sich das Limit ändert.
+- Ein Turn behält die Schritte, die Tokens und die Startzeit, die er nutzte,
+  auch nach einem Neustart. Ein Neustart gibt einem Turn also nicht mehr
+  Schritte, Tokens oder Zeit.
+- Wenn du ein Limit-Plugin ausschaltest, läuft ein Turn, der damit startete,
+  ohne dieses Limit weiter. Er wartet nicht auf das Plugin.
 
 ### Einem Plugin Konfiguration geben
 
-Ein Eintrag kann `config` haben, die Einstellungen eines Plugins. Heute nehmen
-nur die drei Limit-Plugins Konfiguration an. `config` an einem anderen Plugin
-von OpenBot ist ein Fehler, und der Start endet mit „This plugin takes no
+Ein Eintrag kann `config` haben, die Einstellungen eines Plugins. Die drei
+Limit-Plugins und `apps` nehmen Konfiguration an. `config` an einem anderen
+Plugin von OpenBot ist ein Fehler, und der Start endet mit „This plugin takes no
 config.“ So sieht ein Wert, den kein Plugin liest, nicht so aus, als würde er
-wirken.
+wirken. Eine neue Konfiguration startet das Plugin neu.
 
-### Werte aus der Umgebung
-
-Ein Wert kann mit dem Tag `!env` aus einer Umgebungsvariable kommen:
+Die Konfiguration von `apps` setzt das Timing der Arbeit des App Index.
+`intervalMs` ist die Wartezeit nach einem guten Lauf, `retryMs` die Wartezeit
+nach einem fehlgeschlagenen Lauf, beide in Millisekunden. Standard sind eine
+Stunde und eine Minute.
 
 ```yaml
-- id: some-plugin
+- id: apps
   config:
-    token: !env SOME_TOKEN
+    intervalMs: 600000
+    retryMs: 30000
 ```
 
-Die Datei enthält nur den Namen der Variable. Der Wert wird gelesen, wenn das
-Plugin startet, und er geht nur an dieses Plugin. OpenBot schreibt ihn nie ins
-Log, `openbot-inspect plugins` gibt ihn nie aus, und er ist nicht im
-Manifest-Hash. Wie jede andere Variable kann er auch aus der Datei
-`/run/secrets/<NAME>` kommen. Siehe
-[Geheimnisse als Dateien](/de/configuration#geheimnisse-als-dateien).
-
-Die Datei wird einmal gelesen, aber der Wert wird bei jedem Start des Plugins
-neu gelesen. Schreibe Geheimnisse nur mit `!env`, nie als einfachen Text in die
-Datei.
+Konfiguration enthält nur einfache Werte, auf jedem Server dieselben. Sie
+enthält keine Geheimnisse. Geheimnisse liegen in den
+[Plattform-Einstellungen](/de/configuration).
 
 ### Regeln
 
@@ -206,11 +203,9 @@ mit der Stelle in der Datei.
 | schaltet ein nötiges Plugin aus                                            | Fehler. „This plugin is needed, so it can not be turned off.“      |
 | gibt einem Plugin von OpenBot `config`, das keine Konfiguration nimmt      | Fehler. „This plugin takes no config.“                             |
 | gibt einem Limit-Plugin `config`, das aus bleibt                           | Fehler. Gib `disabled: false` an.                                  |
-| nutzt `!env` in der Konfiguration eines Limit-Plugins                      | Fehler. „The config of this plugin can not use !env.“              |
 | hat eine neue ID ohne `name`                                               | Fehler. Ein neuer Eintrag braucht einen Namen.                     |
 | hat eine neue ID und einen Namen, der nicht mit OpenBot kommt              | Fehler. Nur Plugins, die mit OpenBot kommen, können laufen.        |
 | hat eine neue ID und einen Namen, der schon als anderer Eintrag läuft      | Fehler. Ändere stattdessen diesen Eintrag.                         |
-| nutzt `!env` mit einem Namen, der kein Name einer Umgebungsvariable ist    | Fehler. Nutze Großbuchstaben, Ziffern und `_`.                     |
 | hat YAML, das nicht gültig ist, oder ein YAML-Tag, das OpenBot nicht kennt | Fehler, mit Zeile und Spalte.                                      |
 
 Jedes Plugin, das laufen kann, ist im Image. OpenBot lädt nie ein Plugin von
@@ -280,14 +275,13 @@ openbot-inspect plugins --file /etc/openbot/plugins.yml
 - `source` ist `preset` für ein Plugin von OpenBot und `file` für einen neuen
   Eintrag.
 - `changed` sagt, was die Datei geändert hat: `disabled`, `config` oder beides.
-- `config` ist nur da, wenn ein Eintrag Konfiguration hat. Ein Wert mit `!env`
-  erscheint als `{ "env": "NAME" }`. Jeder andere Text erscheint als
-  `"<redacted>"`.
+- `config` ist nur da, wenn ein Eintrag Konfiguration hat. Jeder Text erscheint
+  als `"<redacted>"`.
 - `file` ist `null`, wenn keine Datei gesetzt ist.
 
-Im Docker-Image startest du
-`/usr/local/bin/node /app/dist/app/Inspect.mjs plugins`. Wenn die Datei nicht
-gut ist, gibt das Programm die Probleme aus und endet mit dem Exit-Code 1.
+Im Docker-Image startest du `/usr/local/bin/node /app/dist/Inspect.mjs plugins`.
+Wenn die Datei nicht gut ist, gibt das Programm die Probleme aus und endet mit
+dem Exit-Code 1.
 
 ---
 

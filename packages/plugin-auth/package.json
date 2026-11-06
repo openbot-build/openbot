@@ -11,9 +11,7 @@
 	],
 	"exports": {
 		".": "./dist/index.js",
-		"./Auth": "./dist/Auth.js",
-		"./HttpMiddleware": "./dist/HttpMiddleware.js",
-		"./HttpMounts": "./dist/HttpMounts.js"
+		"./TokensPostgres": "./dist/TokensPostgres.js"
 	},
 	"scripts": {
 		"build": "tsdown",

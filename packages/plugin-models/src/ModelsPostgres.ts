@@ -11,7 +11,7 @@ import {
 	String as Str,
 } from "effect"
 import { and, asc, eq, or } from "drizzle-orm"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import {
 	modelProviders,
 	models,
@@ -22,11 +22,8 @@ import {
 	ownerOf,
 	type Owner,
 	usableBy,
-} from "@openbot-build/models-contract/models/ModelProviders"
-import {
-	Models,
-	type StoredModel,
-} from "@openbot-build/models-contract/models/Models"
+} from "@openbot-build/models-contract/ModelProviders"
+import { Models, type StoredModel } from "@openbot-build/models-contract/Models"
 import * as Db from "@openbot-build/server-database/Database"
 
 const Options = Schema.fromJsonString(Schema.Array(Schema.String))

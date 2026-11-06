@@ -1,21 +1,21 @@
+import {
+	type Caller,
+	restrictExecution,
+	ServiceId,
+} from "@openbot-build/domain/Identity"
+import { TokenId } from "@openbot-build/domain/TokenId"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import { assert, it } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { Chat, Turn } from "@openbot-build/core"
-import {
-	Authorization,
-	Execution,
-	ServiceId,
-	TokenId,
-	restrictExecution,
-	type Caller,
-} from "@openbot-build/domain"
+import { Authorization, Execution } from "@openbot-build/domain"
 import { Effect, Layer, Ref, Option, Schema } from "effect"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as CapabilityAccess from "@openbot-build/plugin-capabilities/CapabilityAccess"
+import * as CapabilityAccessFixture from "./CapabilityAccessFixture.ts"
 import { Grants } from "@openbot-build/conversation-contract/capabilities/Grants"
 import { Judge } from "@openbot-build/plugin-capabilities/Judge"
 import { Rules } from "@openbot-build/conversation-contract/capabilities/Rules"
@@ -42,7 +42,7 @@ const policy = Authorizer.layer(Authorization.Auth, {
 			}),
 		),
 })
-const access = CapabilityAccess.layer.pipe(
+const access = CapabilityAccessFixture.layer.pipe(
 	Layer.provide(ErrorRecordsFixture.layer),
 	Layer.provide([
 		policy,
@@ -147,7 +147,7 @@ for (const action of [
 				})
 				const gate = yield* CapabilityAccess.CapabilityAccess.pipe(
 					Effect.provide(
-						CapabilityAccess.layer.pipe(
+						CapabilityAccessFixture.layer.pipe(
 							Layer.provide(ErrorRecordsFixture.layer),
 							Layer.provide([
 								currentPolicy,

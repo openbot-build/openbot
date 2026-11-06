@@ -1,20 +1,20 @@
-import { Chat, type Plugin, type Turn } from "@openbot-build/core"
-import { Caller, Execution, TokenId } from "@openbot-build/domain"
-import {
-	Bots as BotsApi,
-	ChatKind,
-	ChatParent,
-	PlanApproval,
-	type ExecutionIdentity,
-} from "@openbot-build/domain"
-import type * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
+import { BotId } from "@openbot-build/domain/BotId"
+import { TokenId } from "@openbot-build/domain/TokenId"
+import { ChatKind, ChatParent } from "@openbot-build/domain/Chats"
+import { Caller, type ExecutionIdentity } from "@openbot-build/domain/Identity"
+import { Chat, Plugin, type Turn } from "@openbot-build/core"
+import { Execution } from "@openbot-build/domain"
+import { PlanApproval } from "@openbot-build/domain"
+import type * as Todos from "../work/Todos.ts"
 import { Option, Schema, String as Str } from "effect"
 
 /** The OpenBot plugin that adds the host toolkit, the user plugin and the execution services. */
-const chatHostKey = "@openbot-build/openbot/chat-host"
-export const chatHostId = Schema.Literal(chatHostKey)
-	.pipe(Schema.brand("@openbot-build/core/PluginId"))
-	.make(chatHostKey)
+const chatHostKey = "openbot.chat-host"
+// `make` checks the id. The cast keeps its literal text in the type, so a
+// store record can use it as a key.
+export const chatHostId = Plugin.Id.make(chatHostKey) as Plugin.Id<
+	typeof chatHostKey
+>
 
 /**
  * Who the work in a Chat is for, and through which Bots it came.
@@ -32,14 +32,14 @@ export const Chain = Schema.Struct({
 	 * the Chats belong to the actor of the Channel, and each Turn works for its speaker.
 	 */
 	owner: Schema.optionalKey(Schema.String),
-	bots: Schema.Array(BotsApi.BotId),
+	bots: Schema.Array(BotId),
 	chats: Schema.Array(Chat.Id),
 })
 export type Chain = typeof Chain.Type
 
 /** OpenBot data for one Chat. */
 export const ChatHostState = Schema.Struct({
-	bot: BotsApi.BotId,
+	bot: BotId,
 	kind: ChatKind,
 	parent: Schema.optionalKey(ChatParent),
 	/** The workflow that owns this Chat and all accepted follow-up work. */
@@ -57,13 +57,13 @@ export const ChatHostState = Schema.Struct({
 	trigger: Schema.optionalKey(Schema.String),
 	/**
 	 * The chat of a Channel that a channel Chat belongs to. `group` is true for a chat
-	 * with many people. Chats from before it was kept count as groups, because that is safer.
+	 * with many people.
 	 */
 	channel: Schema.optionalKey(
 		Schema.Struct({
 			channel: Schema.String,
 			conversation: Schema.String,
-			group: Schema.optionalKey(Schema.Boolean),
+			group: Schema.Boolean,
 		}),
 	),
 	/** The name of the chat on the platform of a Channel. */

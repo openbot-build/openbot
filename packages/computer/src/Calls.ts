@@ -1,5 +1,8 @@
+import type {
+	ConnectorCall,
+	ConnectorReply,
+} from "@openbot-build/domain/Computers"
 import { homedir } from "node:os"
-import type { ComputersApi } from "@openbot-build/api"
 import {
 	Effect,
 	FileSystem,
@@ -28,8 +31,8 @@ const failed = (error: PlatformError.PlatformError) =>
 		reason: error.reason._tag === "NotFound" ? "NotFound" : "Failed",
 	})
 
-type Call = ComputersApi.ConnectorCall
-type Reply = ComputersApi.ConnectorReply
+type Call = ConnectorCall
+type Reply = ConnectorReply
 type Operation = Call["operation"]
 
 export interface Options {

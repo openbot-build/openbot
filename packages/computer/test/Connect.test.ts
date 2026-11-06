@@ -1,5 +1,10 @@
+import {
+	FromConnector,
+	ToConnector,
+	connectorProtocolVersion,
+	ConnectorSessionId,
+} from "@openbot-build/domain/Computers"
 import { NodeServices, NodeSocketServer, NodeWS } from "@effect/platform-node"
-import { ComputersApi } from "@openbot-build/api"
 import { assert, layer } from "@effect/vitest"
 import {
 	Deferred,
@@ -17,19 +22,17 @@ import type { Socket } from "effect/socket"
 import * as Connect from "../src/Connect.ts"
 
 const decodeMessage = Schema.decodeUnknownEffect(
-	Schema.fromJsonString(ComputersApi.FromConnector),
+	Schema.fromJsonString(FromConnector),
 )
-const encodeMessage = Schema.encodeEffect(
-	Schema.fromJsonString(ComputersApi.ToConnector),
-)
+const encodeMessage = Schema.encodeEffect(Schema.fromJsonString(ToConnector))
 
 /** One connection of the connector to the fake OpenBot. */
 interface Connection {
 	readonly send: (
-		message: ComputersApi.ToConnector,
+		message: ToConnector,
 	) => Effect.Effect<void, Schema.SchemaError | Socket.SocketError>
 	/** Takes the next message of the connector. The messages come in order. */
-	readonly next: Effect.Effect<ComputersApi.FromConnector, Schema.SchemaError>
+	readonly next: Effect.Effect<FromConnector, Schema.SchemaError>
 	/** Closes the connection from the side of OpenBot. */
 	readonly drop: Effect.Effect<void>
 }
@@ -134,7 +137,7 @@ layer(Layer.merge(NodeWS.layerWebSocketConstructor, NodeServices.layer), {
 				assert.deepStrictEqual(yield* connection.next, {
 					_tag: "Hello",
 					hello: {
-						version: ComputersApi.connectorProtocolVersion,
+						version: connectorProtocolVersion,
 						os: process.platform,
 						arch: process.arch,
 						desktop: false,
@@ -158,19 +161,19 @@ layer(Layer.merge(NodeWS.layerWebSocketConstructor, NodeServices.layer), {
 
 				yield* connection.send({
 					_tag: "Start",
-					session: ComputersApi.ConnectorSessionId.make("s-1"),
+					session: ConnectorSessionId.make("s-1"),
 					command: "echo hi; sh -c 'exit 2'",
 					tty: false,
 				})
 				assert.deepStrictEqual(yield* connection.next, {
 					_tag: "Output",
-					session: ComputersApi.ConnectorSessionId.make("s-1"),
+					session: ConnectorSessionId.make("s-1"),
 					seq: 0,
 					data: Base64.encode("hi\n"),
 				})
 				assert.deepStrictEqual(yield* connection.next, {
 					_tag: "Exit",
-					session: ComputersApi.ConnectorSessionId.make("s-1"),
+					session: ConnectorSessionId.make("s-1"),
 					code: 2,
 					signal: null,
 				})

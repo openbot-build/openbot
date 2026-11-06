@@ -1,6 +1,11 @@
+import { BotId } from "@openbot-build/domain/BotId"
+import {
+	type Grant,
+	GrantId,
+	type Capability,
+} from "@openbot-build/domain/Bots"
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { BotsApi } from "@openbot-build/api"
 import { Chat } from "@openbot-build/core"
 import {
 	Array as Arr,
@@ -20,7 +25,7 @@ import { Grants } from "@openbot-build/conversation-contract/capabilities/Grants
 import { make } from "../src/Grants.ts"
 import { decidingGrant } from "@openbot-build/conversation-contract/capabilities/Policy"
 
-const bot = BotsApi.BotId.make("bot_1")
+const bot = BotId.make("bot_1")
 const here = Chat.Id.make("chat_here")
 const there = Chat.Id.make("chat_there")
 
@@ -92,11 +97,11 @@ const grant = (
 		readonly effect: "allow" | "deny"
 		readonly target?: string
 		readonly arguments?: Record<string, string>
-		readonly scope?: BotsApi.Grant["scope"]
+		readonly scope?: Grant["scope"]
 		readonly chat?: Chat.Id
 	},
-): BotsApi.Grant => ({
-	id: BotsApi.GrantId.make(id),
+): Grant => ({
+	id: GrantId.make(id),
 	bot,
 	capability: {
 		action: "tools.call",
@@ -112,8 +117,8 @@ const grant = (
 })
 
 const decide = (
-	grants: ReadonlyArray<BotsApi.Grant>,
-	capability: BotsApi.Capability = { action: "tools.call", target: "search" },
+	grants: ReadonlyArray<Grant>,
+	capability: Capability = { action: "tools.call", target: "search" },
 	chat: Chat.Id = here,
 ) =>
 	Effect.map(decidingGrant({ grants, bot, capability, chat }), (found) =>
@@ -159,7 +164,7 @@ describe("The Grants of a Bot", () => {
 				arguments: { query: "rome" },
 			})
 			const free = grant("grt_free", { effect: "allow" })
-			const asking = (query: string): BotsApi.Capability => ({
+			const asking = (query: string): Capability => ({
 				action: "tools.call",
 				target: "search",
 				arguments: { query },

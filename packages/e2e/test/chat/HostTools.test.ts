@@ -1,3 +1,5 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -8,9 +10,10 @@ import {
 	Ref,
 	Schema,
 	Stream,
+	Layer,
 } from "effect"
 import { LanguageModel, type Prompt, Response, Tool, Toolkit } from "effect/ai"
-import { HostTools } from "@openbot-build/openbot"
+import * as HostTools from "@openbot-build/tools-contract/HostTools"
 
 const usage = {
 	inputTokens: { total: 1, uncached: 1, cacheRead: 0, cacheWrite: 0 },
@@ -77,10 +80,13 @@ const model = LanguageModel.make({
 })
 
 // The database is a real server, so the test runs on the real clock.
-layer(BrowserHost.layerPlatform, {
-	excludeTestServices: true,
-	timeout: "60 seconds",
-})((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+		timeout: "60 seconds",
+	},
+)((it) => {
 	it.effect(
 		"each execution gets the tools of the host and closes their handlers for its own Chat",
 		() =>

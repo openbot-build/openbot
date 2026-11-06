@@ -1,3 +1,4 @@
+import { BotId } from "@openbot-build/domain/BotId"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import { Config, Model, Provider } from "@openbot-build/core"
@@ -8,18 +9,18 @@ import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import { Grants } from "@openbot-build/conversation-contract/capabilities/Grants"
 import { Requests } from "@openbot-build/conversation-contract/capabilities/Requests"
 import { Rules } from "@openbot-build/conversation-contract/capabilities/Rules"
-import { Store } from "@openbot-build/server-execution/execution/Store"
+import { Store } from "@openbot-build/server-execution/Store"
 import {
 	AnyModel,
 	ModelRegistry,
-} from "@openbot-build/models-contract/models/ModelRegistry"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+} from "@openbot-build/models-contract/ModelRegistry"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import { bot } from "./BotFixture.ts"
 import * as Fixture from "./GateFixture.ts"
 
 const boss: BotDomain.Bot = {
 	...bot,
-	id: BotDomain.BotId.make("bot_boss"),
+	id: BotId.make("bot_boss"),
 	name: "Lead",
 	role: "Leads other Bots",
 }

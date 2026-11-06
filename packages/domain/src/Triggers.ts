@@ -1,8 +1,7 @@
+import { BotId } from "./BotId.ts"
 import * as Execution from "./Execution.ts"
 import { Schema } from "effect"
-import { BotId } from "./Bots.ts"
 import { TriggerId } from "./TriggerId.ts"
-export { TriggerId } from "./TriggerId.ts"
 
 /** A member owns their own triggers. The organization owns shared triggers. */
 export const TriggerOwner = Schema.TaggedUnion({
@@ -38,8 +37,6 @@ export const Trigger = Schema.Struct({
 	 */
 	actor: Schema.String,
 	enabled: Schema.Boolean,
-	/** True when a saved change must set a caller before this trigger can fire. */
-	needsAuthorization: Schema.Boolean,
 	/** The next time that the schedule fires. `null` without a schedule, or when disabled. */
 	nextRunAt: Schema.NullOr(Schema.Finite),
 	executionId: Schema.NullOr(Execution.Id),

@@ -1,3 +1,4 @@
+import type { BotId } from "@openbot-build/domain/BotId"
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { Context, Effect } from "effect"
 
@@ -22,7 +23,7 @@ export class Rules extends Context.Service<
 		readonly create: (
 			organizationId: string,
 			input: {
-				readonly bot: BotsApi.BotId
+				readonly bot: BotId
 				readonly author: BotsApi.Decider
 				readonly text: string
 				readonly status: "active" | "proposed"
@@ -38,7 +39,6 @@ export class Rules extends Context.Service<
 			BotsApi.RuleNotFound | BotsApi.BotConflict | BotsApi.BotStorageUnavailable
 		>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/conversation-contract/capabilities/Rules") {}
+>()("@openbot-build/conversation-contract/capabilities/Rules") {}
 
 export { type Rule }

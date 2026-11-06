@@ -4,7 +4,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import {
 	imageKey,
 	transformClient,
-} from "@openbot-build/model-providers/providers/ToolImages"
+} from "@openbot-build/model-providers/ToolImages"
 
 /** A client that keeps the body of the last request, and reads it as JSON with a schema. */
 const capture = Effect.gen(function* () {

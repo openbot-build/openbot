@@ -1,3 +1,7 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import type { ExecutionIdentity } from "@openbot-build/domain/Identity"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import {
 	Chat,
@@ -7,11 +11,7 @@ import {
 	Turn,
 	TurnState,
 } from "@openbot-build/core"
-import {
-	Authorization,
-	Execution,
-	type ExecutionIdentity,
-} from "@openbot-build/domain"
+import { Authorization, Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Effect,
@@ -21,7 +21,7 @@ import {
 	String as Str,
 } from "effect"
 import { Prompt } from "effect/ai"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import { Billing } from "@openbot-build/server-billing/Billing"
 import * as BotRecords from "@openbot-build/plugin-bots/BotRecords"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as Delegations from "@openbot-build/plugin-bots/Delegations"
@@ -36,24 +36,22 @@ import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredC
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import { TurnContext } from "@openbot-build/conversation-contract/chats/TurnContext"
 import * as Db from "@openbot-build/server-database/Database"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
-import * as Calls from "@openbot-build/server-execution/execution/Calls"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
+import * as Records from "@openbot-build/server-kernel/Records"
+import * as Calls from "@openbot-build/server-execution/Calls"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Store from "@openbot-build/server-execution/Store"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 import { bot } from "./BotFixture.ts"
-import * as OrganizationFixture from "./OrganizationFixture.ts"
-import * as PostgresTest from "./PostgresTest.ts"
+import * as OrganizationFixture from "../src/OrganizationFixture.ts"
 
-const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(PostgresTest.start, (db) =>
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),

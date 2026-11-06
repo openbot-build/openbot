@@ -1,12 +1,12 @@
+import { LimitControl } from "@openbot-build/domain/Delegations"
+import type { Caller } from "@openbot-build/domain/Identity"
 import {
 	type MemberExecution,
 	type Key,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
-import * as PolicyOrigin from "./PolicyOrigin.ts"
+} from "@openbot-build/server-execution/Store"
 import {
 	Bots as BotDomain,
-	Caller,
 	Execution,
 	Requests as RequestDomain,
 } from "@openbot-build/domain"
@@ -14,7 +14,7 @@ import { Context, Effect, Option, Schema } from "effect"
 import {
 	type Authorize,
 	type DecisionCommand,
-} from "@openbot-build/server-execution/execution/Engine"
+} from "@openbot-build/server-execution/Engine"
 import { Stored } from "./Requests.ts"
 
 export const workflowName = "openbot.capability-request"
@@ -32,7 +32,7 @@ export const Details = Schema.Struct({
 
 /** The saved Turn supplies identity and the Bot owner chain. */
 export const Input = Schema.Struct({
-	control: Schema.optionalKey(PolicyOrigin.Control),
+	control: Schema.optionalKey(LimitControl),
 	/** A workflow consumes its own result. Other requests send a Chat reply. */
 	continuation: Continuation,
 	capability: RequestDomain.CapabilityRequest.fields.capability,
@@ -124,7 +124,7 @@ export interface Service {
 			execution: MemberExecution
 			sourceKey: { namespace: string; id: Execution.Id }
 			originKey: Key | { namespace: string; id: Execution.Id }
-			control: PolicyOrigin.Control | undefined
+			control: LimitControl | undefined
 			stored: Stored
 			continuation: "chat" | "workflow"
 		},
@@ -187,7 +187,4 @@ export interface Service {
 export class RequestCommands extends Context.Service<
 	RequestCommands,
 	Service
->()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/conversation-contract/capabilities/RequestCommands",
-) {}
+>()("@openbot-build/conversation-contract/capabilities/RequestCommands") {}

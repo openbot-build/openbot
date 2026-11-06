@@ -12,8 +12,7 @@
 	"exports": {
 		".": "./dist/index.js",
 		"./Layer": "./dist/Layer.js",
-		"./Load": "./dist/Load.js",
-		"./RolesPostgres": "./dist/RolesPostgres.js"
+		"./Load": "./dist/Load.js"
 	},
 	"scripts": {
 		"build": "tsdown",

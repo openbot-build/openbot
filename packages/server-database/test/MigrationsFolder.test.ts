@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Array as Arr, Effect, FileSystem, Order, Path } from "effect"
-import { migrationsFolder } from "../src/folders/MigrationsFolder.ts"
+import { migrationsFolder } from "../src/MigrationsFolder.ts"
 
 layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 	it.effect("the migrations folder is the folder of the package", () =>

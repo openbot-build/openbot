@@ -1,15 +1,17 @@
-import { ConfigProvider, Effect, Redacted, Result, String as Str } from "effect"
-import { assert, it } from "@effect/vitest"
-import { Prompt } from "effect/ai"
-import { NodeCrypto } from "@effect/platform-node"
 import {
-	EnvironmentConfiguration,
-	TimeLimiter,
-	TokenLimiter,
-	TurnLimiter,
-} from "@openbot-build/openbot"
-
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+	Array as Arr,
+	ConfigProvider,
+	Effect,
+	Record as Rec,
+	Redacted,
+	Result,
+	String as Str,
+} from "effect"
+import { assert, it } from "@effect/vitest"
+import { NodeCrypto } from "@effect/platform-node"
+import * as OpenBot from "@openbot-build/openbot"
+import * as EnvironmentConfiguration from "@openbot-build/server-kernel/EnvironmentConfiguration"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 
 it.effect("an instance reads only its own settings and the secret keys", () =>
 	Effect.gen(function* () {
@@ -38,25 +40,35 @@ it.effect("an instance reads only its own settings and the secret keys", () =>
 	}),
 )
 
-it("the Turn limit plugins keep their names and plugin ids", () => {
-	assert.strictEqual(
-		TurnLimiter.make({ maxSteps: 1 }).id,
-		"@openbot-build/openbot/turn-limiter",
-	)
-	assert.strictEqual(
-		TokenLimiter.make({ maxTokens: 1 }).id,
-		"@openbot-build/openbot/token-limiter",
-	)
-	assert.strictEqual(
-		TimeLimiter.make({ maxDuration: "1 minute" }).id,
-		"@openbot-build/openbot/time-limiter",
-	)
-	assert.strictEqual(
-		TurnLimiter.ModelStepLimitExceeded.make({
-			maxSteps: 1,
-			history: Prompt.empty,
-		})._tag,
-		"ModelStepLimitExceeded",
+it("the package gives only Host, Preset, Launch and Wallets", () => {
+	assert.deepStrictEqual(Arr.sort(Rec.keys(OpenBot), Str.Order), [
+		"Host",
+		"Launch",
+		"Preset",
+		"Wallets",
+	])
+})
+
+it("the Turn limit plugins are preset entries that are off, with their package names", () => {
+	assert.deepStrictEqual(
+		Arr.filter(OpenBot.Preset.entries, (entry) => entry.disabled === true),
+		[
+			{
+				id: "turn-limiter",
+				name: "@openbot-build/plugin-turn-limiter",
+				disabled: true,
+			},
+			{
+				id: "time-limiter",
+				name: "@openbot-build/plugin-time-limiter",
+				disabled: true,
+			},
+			{
+				id: "token-limiter",
+				name: "@openbot-build/plugin-token-limiter",
+				disabled: true,
+			},
+		],
 	)
 })
 

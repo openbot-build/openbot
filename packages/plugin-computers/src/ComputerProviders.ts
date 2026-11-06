@@ -1,8 +1,8 @@
+import type { ExecutionIdentity, Caller } from "@openbot-build/domain/Identity"
 import { Redacted } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Computers as ComputerData } from "@openbot-build/domain"
 
-import { type Caller, type ExecutionIdentity } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -14,7 +14,7 @@ import {
 	Schema,
 } from "effect"
 import { Hex } from "effect/encoding"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { computerProviderResource } from "@openbot-build/identity-contract/authorization/Resources"
 import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
@@ -23,7 +23,7 @@ import {
 	computerProviders,
 	computers,
 } from "@openbot-build/server-database/Schema"
-import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { hint, Secrets } from "@openbot-build/server-kernel/Secrets"
 
 type ComputerProvider = ComputerData.ComputerProvider
 type Credentials = ComputerData.ComputerProviderCredentials
@@ -165,8 +165,7 @@ export class ComputerProviders extends Context.Service<
 			ComputerData.ComputerProviderNotFound | ComputerData.ComputersUnavailable
 		>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-computers/ComputerProviders") {}
+>()("@openbot-build/plugin-computers/ComputerProviders") {}
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make

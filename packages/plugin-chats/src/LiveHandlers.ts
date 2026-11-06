@@ -1,0 +1,106 @@
+import { LiveUnavailable } from "@openbot-build/domain/Live"
+import { Identity } from "@openbot-build/domain/Identity"
+import { OpenBotApi } from "@openbot-build/api"
+import { Turn } from "@openbot-build/core"
+import { Cause, Effect, Result } from "effect"
+import { HttpServerResponse } from "effect/http"
+import { HttpApiBuilder } from "effect/http-api"
+import * as Background from "@openbot-build/server-kernel/Background"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import * as Report from "@openbot-build/server-kernel/Report"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
+import * as ChatCommands from "@openbot-build/conversation-contract/chats/ChatCommands"
+import * as ChatQueries from "@openbot-build/conversation-contract/chats/ChatQueries"
+import * as ChatViews from "./ChatViews.ts"
+import * as ChatErrors from "@openbot-build/conversation-contract/chats/ChatErrors"
+import * as LiveSession from "./LiveSession.ts"
+
+export const layer = HttpApiBuilder.group(OpenBotApi, "live", (handlers) =>
+	Effect.gen(function* () {
+		const background = yield* Background.make
+		const report = yield* Report.make
+		const commands = yield* ChatCommands.make
+		const queries = yield* ChatQueries.make
+		const registry = yield* ModelRegistry
+		const sessions = yield* LiveSession.make
+		return handlers
+			.handle("createLiveChat", ({ params, payload }) =>
+				Effect.gen(function* () {
+					const caller = yield* Identity
+					const view = yield* commands.createLive(
+						caller,
+						params.botId,
+						payload.model,
+					)
+					return ChatViews.project(yield* queries.describe(caller, view))
+				}).pipe(
+					ChatErrors.map,
+					Effect.catchTag("ChatModelInvalid", (error) =>
+						Effect.fail(LiveUnavailable.make({ message: error.message })),
+					),
+				),
+			)
+			.handleRaw("connectLive", ({ params, query, request }) =>
+				Effect.gen(function* () {
+					const caller = yield* Identity
+					// The Chat must be a live Chat of the caller. Its model is the Live model.
+					const view = yield* queries
+						.read(caller, params.chatId)
+						.pipe(ChatErrors.map)
+					const selection =
+						view.chat.turn !== undefined &&
+						!Turn.isTerminal(view.chat.turn.status)
+							? view.chat.turn.settings.model
+							: view.chat.settings.model
+					if (
+						ChatHost.hostState(view.chat).kind !== "live" ||
+						selection === undefined
+					)
+						return yield* LiveUnavailable.make({
+							message: "Only a live Chat has a Live session.",
+						})
+					const live = yield* registry
+						.resolveLive(caller.organizationId, selection)
+						.pipe(
+							Effect.mapError((error) =>
+								LiveUnavailable.make({ message: error.message }),
+							),
+						)
+					const chosen = LiveSession.plan(live.model.capabilities, query)
+					if (Result.isFailure(chosen))
+						return yield* LiveUnavailable.make({
+							message: chosen.failure,
+						})
+					// A request that is not a WebSocket is a mistake of the client.
+					const socket = yield* request.upgrade.pipe(
+						Effect.tapCause((cause) =>
+							Cause.hasInterruptsOnly(cause)
+								? Effect.void
+								: report("live.upgrade", cause),
+						),
+						Failures.replace("live.upgrade", () =>
+							LiveUnavailable.make({
+								message: "Open this address as a WebSocket.",
+							}),
+						),
+					)
+					yield* sessions
+						.run({
+							socket,
+							chat: params.chatId,
+							identity: {
+								owner: caller,
+								actor: caller,
+								botId: ChatHost.hostState(view.chat).bot,
+							},
+							selection,
+							live,
+							plan: chosen.success,
+						})
+						.pipe(background.logFailure("A Live session ended with an error."))
+					return HttpServerResponse.empty()
+				}),
+			)
+	}),
+)

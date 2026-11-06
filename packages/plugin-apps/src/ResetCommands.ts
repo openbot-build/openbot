@@ -1,15 +1,12 @@
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
+import { Caller } from "@openbot-build/domain/Identity"
 import {
 	type MemberExecution,
 	Store,
 	storage,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
-import {
-	type Developers,
-	Caller,
-	ConnectionId,
-	Execution,
-} from "@openbot-build/domain"
+} from "@openbot-build/server-execution/Store"
+import { type Developers, Execution } from "@openbot-build/domain"
 import { Array as Arr, Context, Effect, Layer, Schema } from "effect"
 import { and, asc, eq, inArray } from "drizzle-orm"
 import * as Db from "@openbot-build/server-database/Database"
@@ -18,7 +15,7 @@ import {
 	appDrafts,
 	appSecrets,
 } from "@openbot-build/server-database/Schema"
-import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
+import type { Authorize } from "@openbot-build/server-execution/Engine"
 import { AuthorizationCommands } from "./AuthorizationCommands.ts"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
@@ -59,8 +56,7 @@ export interface Service {
 }
 
 export class ResetCommands extends Context.Service<ResetCommands, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-apps/ResetCommands",
+	"@openbot-build/plugin-apps/ResetCommands",
 ) {}
 
 const make = Effect.gen(function* () {

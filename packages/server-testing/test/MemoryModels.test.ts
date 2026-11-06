@@ -1,9 +1,13 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { BotId } from "@openbot-build/domain/BotId"
+import { MemoryBot as MemoryBotModel } from "@openbot-build/conversation-contract/bots/MemoryBot"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { PgClient } from "@effect/sql-pg"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { Chat, Item, Turn, Config, Model, Provider } from "@openbot-build/core"
-import { Authorization, Bots, Execution } from "@openbot-build/domain"
+import { Authorization, Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Deferred,
@@ -20,7 +24,7 @@ import {
 } from "effect"
 import { LanguageModel, Prompt, Response } from "effect/ai"
 import { TestClock } from "effect/testing"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import { Billing } from "@openbot-build/server-billing/Billing"
 import * as MemoryBot from "@openbot-build/plugin-bots/MemoryBot"
 import { textOf } from "@openbot-build/plugin-bots/MemoryEvidence"
 import * as MemoryModels from "@openbot-build/plugin-bots/MemoryModels"
@@ -30,21 +34,19 @@ import {
 	make as makeMemories,
 } from "@openbot-build/plugin-bots/BotMemories"
 import * as MemoryRules from "@openbot-build/plugin-bots/MemoryRules"
-import * as Audience from "@openbot-build/plugin-bots/memory/Audience"
-import type * as Memory from "@openbot-build/plugin-bots/memory/BotMemory"
+import * as Audience from "@openbot-build/plugin-bots/Audience"
+import type * as Memory from "@openbot-build/plugin-bots/BotMemory"
 import { chatHostId } from "@openbot-build/conversation-contract/chats/ChatHost"
 import * as BotFixture from "./BotFixture.ts"
 import * as BotRecords from "@openbot-build/plugin-bots/BotRecords"
 import * as MemoryLogs from "@openbot-build/plugin-bots/MemoryLogs"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
-import * as Calls from "@openbot-build/server-execution/execution/Calls"
-import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
-import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as PostgresTest from "./PostgresTest.ts"
+import * as Records from "@openbot-build/server-kernel/Records"
+import * as Calls from "@openbot-build/server-execution/Calls"
+import { Workflows } from "@openbot-build/server-execution/Workflows"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Observation from "@openbot-build/server-execution/Observation"
+import { ModelRegistry } from "@openbot-build/models-contract/ModelRegistry"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 
 const actor = { kind: "member", organizationId: "org", userId: "user" } as const
 const selection = Config.Selection.make({
@@ -55,11 +57,11 @@ const usage = {
 	inputTokens: { total: 1, uncached: 1, cacheRead: 0, cacheWrite: 0 },
 	outputTokens: { total: 1, text: 1, reasoning: 0 },
 }
-const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(PostgresTest.start, (db) =>
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),
@@ -168,7 +170,7 @@ const setup = Effect.gen(function* () {
 		count: Ref.get(count),
 		run: (
 			fence: Store.Fence,
-			home: { organizationId: string; bot: Bots.BotId },
+			home: { organizationId: string; bot: BotId },
 			name: string,
 		) =>
 			Effect.flatMap(MemoryModels.MemoryModels, (models) =>
@@ -198,10 +200,10 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		"a spent memory budget gives a calm confession without sending to the model",
 		() =>
 			Effect.gen(function* () {
-				const memory = yield* MemoryBot.MemoryBot
+				const memory = yield* MemoryBotModel
 				const home = {
 					organizationId: actor.organizationId,
-					bot: Bots.BotId.make("spent-budget"),
+					bot: BotId.make("spent-budget"),
 				}
 				yield* memory.update(home, {
 					expected: 0,
@@ -293,7 +295,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			Effect.gen(function* () {
 				const home = {
 					organizationId: actor.organizationId,
-					bot: Bots.BotId.make("replay-context"),
+					bot: BotId.make("replay-context"),
 				}
 				const memories = yield* makeMemories.pipe(
 					Effect.provide(
@@ -427,8 +429,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		"a memory timeout includes permit wait and releases a stopped model permit",
 		() =>
 			Effect.gen(function* () {
-				const memory = yield* MemoryBot.MemoryBot
-				const home = { organizationId: "org", bot: Bots.BotId.make("timeout") }
+				const memory = yield* MemoryBotModel
+				const home = { organizationId: "org", bot: BotId.make("timeout") }
 				yield* memory.update(home, { expected: 0, concurrency: 1 })
 				const models = yield* setup
 				const learning = yield* models
@@ -471,8 +473,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 	)
 	it.effect("a changed memory limit counts models that already run", () =>
 		Effect.gen(function* () {
-			const memory = yield* MemoryBot.MemoryBot
-			const home = { organizationId: "org", bot: Bots.BotId.make("resize") }
+			const memory = yield* MemoryBotModel
+			const home = { organizationId: "org", bot: BotId.make("resize") }
 			yield* memory.update(home, { expected: 0, concurrency: 2 })
 			const models = yield* setup
 			const learning = yield* models
@@ -505,8 +507,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 	)
 	it.effect("a saved memory answer needs no new model place", () =>
 		Effect.gen(function* () {
-			const memory = yield* MemoryBot.MemoryBot
-			const home = { organizationId: "org", bot: Bots.BotId.make("replay") }
+			const memory = yield* MemoryBotModel
+			const home = { organizationId: "org", bot: BotId.make("replay") }
 			yield* memory.update(home, { expected: 0, concurrency: 1 })
 			const models = yield* setup
 			const saved = yield* start("memory-replay-saved")

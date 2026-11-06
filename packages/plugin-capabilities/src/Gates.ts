@@ -1,4 +1,6 @@
-import { Execution, ExecutionIdentity } from "@openbot-build/domain"
+import type { LimitControl } from "@openbot-build/domain/Delegations"
+import { ExecutionIdentity } from "@openbot-build/domain/Identity"
+import { Execution } from "@openbot-build/domain"
 import {
 	Cause,
 	Context,
@@ -24,9 +26,9 @@ import {
 } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
 import type { Stored } from "@openbot-build/conversation-contract/capabilities/Requests"
 import { TurnContext } from "@openbot-build/conversation-contract/chats/TurnContext"
-import { type Fence } from "@openbot-build/server-execution/execution/Store"
-import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
-import { toolJson } from "@openbot-build/tools-contract/plugins/ToolJson"
+import { type Fence } from "@openbot-build/server-execution/Store"
+import * as Recovery from "@openbot-build/server-execution/Recovery"
+import { toolJson } from "@openbot-build/tools-contract/ToolJson"
 import * as CapabilityPolicy from "./CapabilityAccess.ts"
 import * as Judge from "./Judge.ts"
 
@@ -43,7 +45,7 @@ const durable = (
 	fence: Fence,
 	work: Frame,
 	continuation?: "chat" | "workflow",
-	control?: PolicyOrigin.Control,
+	control?: LimitControl,
 ) =>
 	Effect.gen(function* () {
 		const frame = yield* PolicyOrigin.make

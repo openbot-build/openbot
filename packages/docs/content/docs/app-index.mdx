@@ -34,7 +34,3 @@ requests may share one pending check. A server restart keeps its saved progress.
 A temporary network failure keeps the last confirmed entry and schedules another
 check. A confirmed withdrawal, `noindex`, or robots denial removes the entry.
 Private App connections stay in place. A platform restriction still blocks use.
-
-The data move keeps old entries, check results, and the next check time. It puts
-each old Index job under the shared platform execution. An unfinished public
-read may run again after startup. The data move itself sends no network request.

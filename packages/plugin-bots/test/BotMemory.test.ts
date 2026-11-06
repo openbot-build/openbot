@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest"
 import { Chat, Item } from "@openbot-build/core"
-import * as BotMemory from "../src/memory/BotMemory.ts"
-import * as Audience from "../src/memory/Audience.ts"
+import * as BotMemory from "../src/BotMemory.ts"
+import * as Audience from "../src/Audience.ts"
 import { Array as Arr, Option } from "effect"
 
 const changedMetadata = (result: BotMemory.Applied) =>

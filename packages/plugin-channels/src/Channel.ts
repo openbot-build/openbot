@@ -1,8 +1,6 @@
 import type { Channels as ChannelsApi } from "@openbot-build/domain"
 import { Data, type Effect, Schema } from "effect"
 import { ConversationKind } from "@openbot-build/conversation-contract/channels/Channel"
-export { ConversationKind } from "@openbot-build/conversation-contract/channels/Channel"
-
 /** One chat on a platform. Each chat of a Channel is one Chat. */
 export const Conversation = Schema.Struct({
 	/** The ID of the chat on the platform, such as a Slack channel ID. */

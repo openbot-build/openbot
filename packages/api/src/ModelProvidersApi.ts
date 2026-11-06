@@ -1,3 +1,8 @@
+import {
+	ModelPrices,
+	SetModelPriceRequest,
+	ModelPrice,
+} from "@openbot-build/domain/Billing"
 import * as ProviderOAuth from "@openbot-build/domain/ProviderOAuth"
 import { Model as CoreModel, Provider } from "@openbot-build/core"
 import { Schema } from "effect"
@@ -7,7 +12,6 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import { ModelPrice, ModelPrices, SetModelPriceRequest } from "./BillingApi.ts"
 import { AuthorizationErrors, Required } from "./Authorization.ts"
 import {
 	Model,
@@ -26,36 +30,6 @@ import {
 	ModelInUse,
 	ModelProvidersUnavailable,
 } from "@openbot-build/domain/Models"
-export {
-	ProviderKind,
-	ModelType,
-	Endpoint,
-	Availability,
-	ProviderOwner,
-	ModelOwner,
-	Model,
-	CreateModelRequest,
-	UpdateModelRequest,
-	CreatePlatformModelRequest,
-	UpdatePlatformModelRequest,
-	ProviderModel,
-	ProviderModels,
-	ModelProvider,
-	CreateModelProviderRequest,
-	UpdateModelProviderRequest,
-	CreatePlatformModelProviderRequest,
-	UpdatePlatformModelProviderRequest,
-	ModelCatalog,
-	ModelProviderNotFound,
-	ModelProviderConflict,
-	ModelProviderInvalid,
-	ModelProviderInUse,
-	ModelNotFound,
-	ModelConflict,
-	ModelInUse,
-	ModelProvidersUnavailable,
-} from "@openbot-build/domain/Models"
-
 export const ModelProviderErrors = [
 	ProviderOAuth.ModelProviderLoginRequired.pipe(HttpApiSchema.status(409)),
 	ProviderOAuth.ModelProviderAuthorizationInvalid.pipe(

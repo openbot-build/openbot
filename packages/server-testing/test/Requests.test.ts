@@ -1,7 +1,15 @@
+import { BotId } from "@openbot-build/domain/BotId"
+import { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import {
+	type Ask,
+	Requests as RequestsModel,
+} from "@openbot-build/conversation-contract/capabilities/Requests"
+import { Grants as GrantsModel } from "@openbot-build/conversation-contract/capabilities/Grants"
+import { Rules as RulesModel } from "@openbot-build/conversation-contract/capabilities/Rules"
+import { BotStorageUnavailable } from "@openbot-build/domain/Bots"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { BotsApi, Settings as SettingsApi } from "@openbot-build/api"
 import { Chat, Turn } from "@openbot-build/core"
 import { Requests as RequestDomain } from "@openbot-build/domain"
 import {
@@ -25,12 +33,12 @@ import {
 import * as Grants from "@openbot-build/plugin-capabilities/Grants"
 import * as Requests from "@openbot-build/plugin-capabilities/Requests"
 import * as Rules from "@openbot-build/plugin-capabilities/Rules"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 
 const organizationId = "org_1"
 const userId = "user_1"
-const top = BotsApi.BotId.make("bot_top")
-const worker = BotsApi.BotId.make("bot_worker")
+const top = BotId.make("bot_top")
+const worker = BotId.make("bot_worker")
 
 interface Row {
 	readonly kind: string
@@ -109,8 +117,7 @@ const layerOf = (records: BotRecords["Service"]) =>
 				Layer.succeed(BotRecords, records),
 				Layer.succeed(Settings, {
 					...({} as Settings["Service"]),
-					organization: () =>
-						Effect.fail(SettingsApi.SettingsUnavailable.make({})),
+					organization: () => Effect.fail(SettingsUnavailable.make({})),
 				}),
 			),
 		),
@@ -118,8 +125,8 @@ const layerOf = (records: BotRecords["Service"]) =>
 	)
 
 /** A request of `worker`, whose owner chain is `top`, then `worker`. */
-const create = (ask?: Requests.Ask) =>
-	Effect.flatMap(Requests.Requests, (requests) =>
+const create = (ask?: Ask) =>
+	Effect.flatMap(RequestsModel, (requests) =>
 		requests.create(organizationId, {
 			bot: worker,
 			chain: {
@@ -203,7 +210,7 @@ describe("The Chat of a Bot", () => {
 					bots: [top, worker],
 					chats: [Chat.Id.make("chat_parent")],
 				},
-				bot: BotsApi.BotId.make("bot_other"),
+				bot: BotId.make("bot_other"),
 				current,
 			}),
 			current,
@@ -243,8 +250,8 @@ describe("The requests of Bots", () => {
 			Effect.gen(function* () {
 				const records = yield* memoryRecords
 				yield* Effect.gen(function* () {
-					const requests = yield* Requests.Requests
-					const grants = yield* Grants.Grants
+					const requests = yield* RequestsModel
+					const grants = yield* GrantsModel
 					const stored = yield* create({ timeoutMs: 1000 })
 					const id = stored.request.id
 					assert.deepStrictEqual(stored.request.approver, {
@@ -299,9 +306,9 @@ describe("The requests of Bots", () => {
 						),
 				}
 				yield* Effect.gen(function* () {
-					const requests = yield* Requests.Requests
-					const grants = yield* Grants.Grants
-					const rules = yield* Rules.Rules
+					const requests = yield* RequestsModel
+					const grants = yield* GrantsModel
+					const rules = yield* RulesModel
 					const stored = yield* create({ person: true, timeoutMs: 1000 })
 					const id = stored.request.id
 					const holder = yield* records.service
@@ -349,7 +356,7 @@ describe("The requests of Bots", () => {
 		Effect.gen(function* () {
 			const records = yield* memoryRecords
 			yield* Effect.gen(function* () {
-				const requests = yield* Requests.Requests
+				const requests = yield* RequestsModel
 				const stored = yield* create({ timeoutMs: 1000, onExpire: "allow" })
 				yield* TestClock.adjust("2 seconds")
 				const [first, second] = yield* Effect.all(
@@ -379,12 +386,12 @@ describe("The requests of Bots", () => {
 					transaction: (key, operation) =>
 						Effect.flatMap(Ref.get(broken), (id) =>
 							key === "request:" + organizationId + ":" + id
-								? Effect.fail(BotsApi.BotStorageUnavailable.make({}))
+								? Effect.fail(BotStorageUnavailable.make({}))
 								: records.service.transaction(key, operation),
 						),
 				}
 				yield* Effect.gen(function* () {
-					const requests = yield* Requests.Requests
+					const requests = yield* RequestsModel
 					const first = yield* create({ timeoutMs: 1000 })
 					const second = yield* create({ timeoutMs: 1000 })
 					yield* Ref.set(broken, second.request.id)
@@ -396,7 +403,7 @@ describe("The requests of Bots", () => {
 					const failure = yield* requests
 						.expireOne(organizationId, second.request.id)
 						.pipe(Effect.flip)
-					assert.isTrue(Schema.is(BotsApi.BotStorageUnavailable)(failure))
+					assert.isTrue(Schema.is(BotStorageUnavailable)(failure))
 					assert.equal(
 						Option.getOrThrow(
 							yield* requests.find(organizationId, second.request.id),

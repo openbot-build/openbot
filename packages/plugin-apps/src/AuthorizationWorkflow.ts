@@ -1,6 +1,7 @@
-import { GrantCleanup, scopeOf } from "./GrantCleanup.ts"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { scopeOf } from "@openbot-build/apps-contract/apps/GrantUses"
+import { GrantCleanup } from "./GrantCleanup.ts"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import * as Platform from "@openbot-build/server-kernel/Platform"
 import * as ClientMetadata from "./ClientMetadata.ts"
 import { AppAuthorizations } from "@openbot-build/domain"
 import {
@@ -12,17 +13,11 @@ import {
 } from "@openbot-build/protocol"
 import { Array as Arr, Effect, Layer, Option, Redacted, Schema } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import {
-	Policy,
-	Workflows,
-} from "@openbot-build/server-execution/execution/Workflows"
-import * as Program from "@openbot-build/server-execution/execution/Program"
-import {
-	Store,
-	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
+import { Calls } from "@openbot-build/server-execution/Calls"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import { Policy, Workflows } from "@openbot-build/server-execution/Workflows"
+import * as Program from "@openbot-build/server-execution/Program"
+import { Store, type Fence } from "@openbot-build/server-execution/Store"
 import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import { AppHost } from "./AppHost.ts"
 import {

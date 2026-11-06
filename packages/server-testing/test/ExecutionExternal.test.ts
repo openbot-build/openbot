@@ -1,3 +1,5 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
@@ -20,10 +22,8 @@ import {
 	HttpServerResponse,
 } from "effect/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as PostgresTest from "./PostgresTest.ts"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 
 const actor = { kind: "member", organizationId: "org", userId: "user" } as const
 
@@ -44,10 +44,10 @@ layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 			`a second process takes over ${retry} HTTP work at ${point} with ${action}`,
 			() =>
 				Effect.gen(function* () {
-					const database = yield* PostgresTest.start
+					const database = yield* TestDatabase.start
 					const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 					const run = Effect.gen(function* () {
-						yield* DatabasePostgres.migrate
+						yield* Migrations.migrate
 						const sql = yield* PgClient.PgClient
 						const store = yield* Store.Store
 						yield* sql`create table execution_external_nodes (runner integer primary key)`
@@ -346,8 +346,8 @@ layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 									Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 								),
 								Layer.provideMerge(
-									DatabasePostgres.layer({
-										databaseUrl: Redacted.make(database.url),
+									PgClient.layer({
+										url: Redacted.make(database.url),
 									}),
 								),
 							),

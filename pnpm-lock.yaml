@@ -186,6 +186,9 @@ importers:
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
+      "@openbot-build/domain":
+        specifier: workspace:*
+        version: link:../domain
       effect:
         specifier: 4.1.2
         version: 4.1.2
@@ -337,6 +340,9 @@ importers:
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
+      "@openbot-build/apps-contract":
+        specifier: workspace:*
+        version: link:../apps-contract
       "@openbot-build/cli":
         specifier: workspace:*
         version: link:../cli
@@ -355,21 +361,36 @@ importers:
       "@openbot-build/domain":
         specifier: workspace:*
         version: link:../domain
+      "@openbot-build/identity-contract":
+        specifier: workspace:*
+        version: link:../identity-contract
+      "@openbot-build/models-contract":
+        specifier: workspace:*
+        version: link:../models-contract
       "@openbot-build/openbot":
         specifier: workspace:*
         version: link:../openbot
+      "@openbot-build/plugin-apps":
+        specifier: workspace:*
+        version: link:../plugin-apps
       "@openbot-build/protocol":
         specifier: workspace:*
         version: link:../protocol
       "@openbot-build/protocol-test":
         specifier: workspace:*
         version: link:../../protocol-test
+      "@openbot-build/server-database":
+        specifier: workspace:*
+        version: link:../server-database
       "@openbot-build/server-development":
         specifier: workspace:*
         version: link:../server-development
       "@openbot-build/server-testing":
         specifier: workspace:*
         version: link:../server-testing
+      "@openbot-build/tools-contract":
+        specifier: workspace:*
+        version: link:../tools-contract
       effect:
         specifier: 4.1.2
         version: 4.1.2
@@ -416,6 +437,9 @@ importers:
       "@effect/vitest":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      "@openbot-build/server-database":
+        specifier: workspace:*
+        version: link:../server-database
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -456,12 +480,18 @@ importers:
       "@effect/platform-node":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(redis@6.3.0)
+      "@effect/sql-pg":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)
       "@effect/vitest":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
       "@openbot-build/server-billing":
         specifier: workspace:*
         version: link:../server-billing
+      "@openbot-build/server-database":
+        specifier: workspace:*
+        version: link:../server-database
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -580,9 +610,6 @@ importers:
       "@openbot-build/plugin-files":
         specifier: workspace:*
         version: link:../plugin-files
-      "@openbot-build/plugin-imported":
-        specifier: workspace:*
-        version: link:../plugin-imported
       "@openbot-build/plugin-mail":
         specifier: workspace:*
         version: link:../plugin-mail
@@ -625,6 +652,9 @@ importers:
       "@openbot-build/server-billing":
         specifier: workspace:*
         version: link:../server-billing
+      "@openbot-build/server-database":
+        specifier: workspace:*
+        version: link:../server-database
       "@openbot-build/server-execution":
         specifier: workspace:*
         version: link:../server-execution
@@ -634,9 +664,6 @@ importers:
       "@openbot-build/server-plugin":
         specifier: workspace:*
         version: link:../server-plugin
-      "@openbot-build/server-upgrade":
-        specifier: workspace:*
-        version: link:../server-upgrade
       "@openbot-build/tools-contract":
         specifier: workspace:*
         version: link:../tools-contract
@@ -754,6 +781,9 @@ importers:
       "@effect/vitest":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      "@openbot-build/server-billing":
+        specifier: workspace:*
+        version: link:../server-billing
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -1194,6 +1224,9 @@ importers:
       "@effect/vitest":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      "@nmnmcc/ability":
+        specifier: 3.2.0
+        version: 3.2.0(effect@4.1.2)
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -1337,6 +1370,9 @@ importers:
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
+      "@openbot-build/apps-contract":
+        specifier: workspace:*
+        version: link:../apps-contract
       "@openbot-build/conversation-contract":
         specifier: workspace:*
         version: link:../conversation-contract
@@ -1429,43 +1465,9 @@ importers:
       "@effect/vitest":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
-      vitest:
-        specifier: 5.0.5
-        version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
-
-  packages/plugin-imported:
-    dependencies:
-      "@graftland/graft":
-        specifier: 0.4.0
-        version: 0.4.0(effect@4.1.2)
-      "@openbot-build/apps-contract":
-        specifier: workspace:*
-        version: link:../apps-contract
-      "@openbot-build/conversation-contract":
-        specifier: workspace:*
-        version: link:../conversation-contract
-      "@openbot-build/domain":
-        specifier: workspace:*
-        version: link:../domain
-      "@openbot-build/identity-contract":
-        specifier: workspace:*
-        version: link:../identity-contract
-      "@openbot-build/server-execution":
-        specifier: workspace:*
-        version: link:../server-execution
-      "@openbot-build/server-plugin":
-        specifier: workspace:*
-        version: link:../server-plugin
-      effect:
-        specifier: 4.1.2
-        version: 4.1.2
-    devDependencies:
-      "@effect/platform-node":
-        specifier: 4.1.2
-        version: 4.1.2(effect@4.1.2)(redis@6.3.0)
-      "@effect/vitest":
-        specifier: 4.1.2
-        version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      "@nmnmcc/ability":
+        specifier: 3.2.0
+        version: 3.2.0(effect@4.1.2)
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -1576,6 +1578,9 @@ importers:
       "@effect/vitest":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      "@nmnmcc/ability":
+        specifier: 3.2.0
+        version: 3.2.0(effect@4.1.2)
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -1674,6 +1679,9 @@ importers:
       "@effect/vitest":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      "@nmnmcc/ability":
+        specifier: 3.2.0
+        version: 3.2.0(effect@4.1.2)
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -1766,6 +1774,9 @@ importers:
       "@openbot-build/core":
         specifier: workspace:*
         version: link:../core
+      "@openbot-build/domain":
+        specifier: workspace:*
+        version: link:../domain
       "@openbot-build/server-plugin":
         specifier: workspace:*
         version: link:../server-plugin
@@ -1779,9 +1790,6 @@ importers:
       "@effect/vitest":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
-      "@openbot-build/domain":
-        specifier: workspace:*
-        version: link:../domain
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -1797,6 +1805,9 @@ importers:
       "@openbot-build/core":
         specifier: workspace:*
         version: link:../core
+      "@openbot-build/domain":
+        specifier: workspace:*
+        version: link:../domain
       "@openbot-build/server-plugin":
         specifier: workspace:*
         version: link:../server-plugin
@@ -1810,9 +1821,6 @@ importers:
       "@effect/vitest":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
-      "@openbot-build/domain":
-        specifier: workspace:*
-        version: link:../domain
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -1880,6 +1888,9 @@ importers:
       "@openbot-build/core":
         specifier: workspace:*
         version: link:../core
+      "@openbot-build/domain":
+        specifier: workspace:*
+        version: link:../domain
       "@openbot-build/server-plugin":
         specifier: workspace:*
         version: link:../server-plugin
@@ -1893,9 +1904,6 @@ importers:
       "@effect/vitest":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
-      "@openbot-build/domain":
-        specifier: workspace:*
-        version: link:../domain
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -2062,6 +2070,9 @@ importers:
 
   packages/server-database:
     dependencies:
+      "@effect/platform-node":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0)
       "@effect/sql-pg":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
@@ -2075,12 +2086,12 @@ importers:
         specifier: 4.1.2
         version: 4.1.2
     devDependencies:
-      "@effect/platform-node":
-        specifier: 4.1.2
-        version: 4.1.2(effect@4.1.2)(redis@6.3.0)
       "@effect/vitest":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      "@nmnmcc/ability":
+        specifier: 3.2.0
+        version: 3.2.0(effect@4.1.2)
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -2168,6 +2179,9 @@ importers:
       "@openbot-build/server-billing":
         specifier: workspace:*
         version: link:../server-billing
+      "@openbot-build/server-database":
+        specifier: workspace:*
+        version: link:../server-database
       "@openbot-build/server-execution":
         specifier: workspace:*
         version: link:../server-execution
@@ -2224,6 +2238,9 @@ importers:
       "@effect/vitest":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      "@openbot-build/core":
+        specifier: workspace:*
+        version: link:../core
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -2409,9 +2426,6 @@ importers:
       "@openbot-build/server-kernel":
         specifier: workspace:*
         version: link:../server-kernel
-      "@openbot-build/server-upgrade":
-        specifier: workspace:*
-        version: link:../server-upgrade
       "@openbot-build/tools-contract":
         specifier: workspace:*
         version: link:../tools-contract
@@ -2428,6 +2442,9 @@ importers:
       "@graftland/graft":
         specifier: 0.4.0
         version: 0.4.0(effect@4.1.2)
+      "@graftland/loader":
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/client":
         specifier: workspace:*
         version: link:../client
@@ -2437,88 +2454,9 @@ importers:
       "@openbot-build/plugin-audit":
         specifier: workspace:*
         version: link:../plugin-audit
-      "@openbot-build/plugin-imported":
-        specifier: workspace:*
-        version: link:../plugin-imported
       "@openbot-build/server-plugin":
         specifier: workspace:*
         version: link:../server-plugin
-      vitest:
-        specifier: 5.0.5
-        version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
-
-  packages/server-upgrade:
-    dependencies:
-      "@effect/sql-pg":
-        specifier: 4.1.2
-        version: 4.1.2(effect@4.1.2)
-      "@openbot-build/apps-contract":
-        specifier: workspace:*
-        version: link:../apps-contract
-      "@openbot-build/core":
-        specifier: workspace:*
-        version: link:../core
-      "@openbot-build/domain":
-        specifier: workspace:*
-        version: link:../domain
-      "@openbot-build/plugin-apps":
-        specifier: workspace:*
-        version: link:../plugin-apps
-      "@openbot-build/protocol":
-        specifier: workspace:*
-        version: link:../protocol
-      "@openbot-build/server-database":
-        specifier: workspace:*
-        version: link:../server-database
-      "@openbot-build/server-execution":
-        specifier: workspace:*
-        version: link:../server-execution
-      "@openbot-build/server-kernel":
-        specifier: workspace:*
-        version: link:../server-kernel
-      drizzle-orm:
-        specifier: 1.0.0-rc.5
-        version: 1.0.0-rc.5(@effect/sql-pg@4.1.2(effect@4.1.2))(@effect/sql-sqlite-node@4.0.5(effect@4.1.2))(@types/pg@8.23.1)(effect@4.1.2)(pg@8.23.1)(zod@4.6.7)
-      effect:
-        specifier: 4.1.2
-        version: 4.1.2
-    devDependencies:
-      "@effect/platform-node":
-        specifier: 4.1.2
-        version: 4.1.2(effect@4.1.2)(redis@6.3.0)
-      "@effect/vitest":
-        specifier: 4.1.2
-        version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
-      "@nmnmcc/ability":
-        specifier: 3.2.0
-        version: 3.2.0(effect@4.1.2)
-      "@openbot-build/conversation-contract":
-        specifier: workspace:*
-        version: link:../conversation-contract
-      "@openbot-build/models-contract":
-        specifier: workspace:*
-        version: link:../models-contract
-      "@openbot-build/plugin-bots":
-        specifier: workspace:*
-        version: link:../plugin-bots
-      "@openbot-build/plugin-capabilities":
-        specifier: workspace:*
-        version: link:../plugin-capabilities
-      "@openbot-build/plugin-channels":
-        specifier: workspace:*
-        version: link:../plugin-channels
-      "@openbot-build/plugin-chats":
-        specifier: workspace:*
-        version: link:../plugin-chats
-      "@openbot-build/plugin-code":
-        specifier: workspace:*
-        version: link:../plugin-code
-      "@openbot-build/plugin-imported":
-        specifier: workspace:*
-        version: link:../plugin-imported
-      "@openbot-build/plugin-triggers":
-        specifier: workspace:*
-        version: link:../plugin-triggers
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))

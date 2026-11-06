@@ -1,5 +1,5 @@
+import type { Caller } from "@openbot-build/domain/Identity"
 import type { Organizations as OrganizationsModel } from "@openbot-build/domain"
-import type { Caller } from "@openbot-build/domain"
 import { Context, type Effect, Schema } from "effect"
 
 export class AuditUnavailable extends Schema.TaggedError<
@@ -38,5 +38,4 @@ export class AuditLog extends Context.Service<
 			AuditUnavailable
 		>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/identity-contract/audit/AuditLog") {}
+>()("@openbot-build/identity-contract/audit/AuditLog") {}

@@ -1,0 +1,1069 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "45ca822c-8667-46b7-b4e5-c49613d9c2b7",
+	"prevIds": [
+		"025613a8-5e46-4843-bcfd-880d151e4973",
+		"3a61f2d7-0fba-4125-a8fd-a0ef67a51abb"
+	],
+	"footprints": [
+		{
+			"statementType": "drop_fk",
+			"statementTarget": ["table", "public", "openbot_data_upgrade_failures"],
+			"writes": [
+				"s|fk|public.openbot_data_upgrade_failures.openbot_data_upgrade_failures_21rHCd6gLK50_fkey",
+				"n|fk|public.openbot_data_upgrade_failures.openbot_data_upgrade_failures_21rHCd6gLK50_fkey",
+				"e|fk|public.openbot_data_upgrade_failures.openbot_data_upgrade_failures_21rHCd6gLK50_fkey",
+				"n|con|public.openbot_data_upgrade_failures.openbot_data_upgrade_failures_21rHCd6gLK50_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_data_upgrade_failures",
+				"n|sch|public",
+				"e|col|public.openbot_data_upgrade_failures.version"
+			]
+		},
+		{
+			"statementType": "drop_fk",
+			"statementTarget": ["table", "public", "openbot_data_upgrade_records"],
+			"writes": [
+				"s|fk|public.openbot_data_upgrade_records.openbot_data_upgrade_records_BNsODMFwq7a5_fkey",
+				"n|fk|public.openbot_data_upgrade_records.openbot_data_upgrade_records_BNsODMFwq7a5_fkey",
+				"e|fk|public.openbot_data_upgrade_records.openbot_data_upgrade_records_BNsODMFwq7a5_fkey",
+				"n|con|public.openbot_data_upgrade_records.openbot_data_upgrade_records_BNsODMFwq7a5_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_data_upgrade_records",
+				"n|sch|public",
+				"e|col|public.openbot_data_upgrade_records.version"
+			]
+		},
+		{
+			"statementType": "drop_fk",
+			"statementTarget": ["table", "public", "openbot_data_upgrade_steps"],
+			"writes": [
+				"s|fk|public.openbot_data_upgrade_steps.openbot_data_upgrade_steps_lqAdPZ2AiNMO_fkey",
+				"n|fk|public.openbot_data_upgrade_steps.openbot_data_upgrade_steps_lqAdPZ2AiNMO_fkey",
+				"e|fk|public.openbot_data_upgrade_steps.openbot_data_upgrade_steps_lqAdPZ2AiNMO_fkey",
+				"n|con|public.openbot_data_upgrade_steps.openbot_data_upgrade_steps_lqAdPZ2AiNMO_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_data_upgrade_steps",
+				"n|sch|public",
+				"e|col|public.openbot_data_upgrade_steps.version"
+			]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_app_invocations"],
+			"writes": [
+				"s|tbl|public.openbot_app_invocations",
+				"n|tbl|public.openbot_app_invocations",
+				"e|tbl|public.openbot_app_invocations",
+				"n|rel|public.openbot_app_invocations",
+				"n|type|public.openbot_app_invocations"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_code_runs"],
+			"writes": [
+				"s|tbl|public.openbot_code_runs",
+				"n|tbl|public.openbot_code_runs",
+				"e|tbl|public.openbot_code_runs",
+				"n|rel|public.openbot_code_runs",
+				"n|type|public.openbot_code_runs"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_computer_calls"],
+			"writes": [
+				"s|tbl|public.openbot_computer_calls",
+				"n|tbl|public.openbot_computer_calls",
+				"e|tbl|public.openbot_computer_calls",
+				"n|rel|public.openbot_computer_calls",
+				"n|type|public.openbot_computer_calls"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_operations"],
+			"writes": [
+				"s|tbl|public.openbot_operations",
+				"n|tbl|public.openbot_operations",
+				"e|tbl|public.openbot_operations",
+				"n|rel|public.openbot_operations",
+				"n|type|public.openbot_operations"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_data_upgrade_failures"],
+			"writes": [
+				"s|tbl|public.openbot_data_upgrade_failures",
+				"n|tbl|public.openbot_data_upgrade_failures",
+				"e|tbl|public.openbot_data_upgrade_failures",
+				"n|rel|public.openbot_data_upgrade_failures",
+				"n|type|public.openbot_data_upgrade_failures"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_data_upgrade_records"],
+			"writes": [
+				"s|tbl|public.openbot_data_upgrade_records",
+				"n|tbl|public.openbot_data_upgrade_records",
+				"e|tbl|public.openbot_data_upgrade_records",
+				"n|rel|public.openbot_data_upgrade_records",
+				"n|type|public.openbot_data_upgrade_records"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_data_upgrade_steps"],
+			"writes": [
+				"s|tbl|public.openbot_data_upgrade_steps",
+				"n|tbl|public.openbot_data_upgrade_steps",
+				"e|tbl|public.openbot_data_upgrade_steps",
+				"n|rel|public.openbot_data_upgrade_steps",
+				"n|type|public.openbot_data_upgrade_steps"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_data_upgrades"],
+			"writes": [
+				"s|tbl|public.openbot_data_upgrades",
+				"n|tbl|public.openbot_data_upgrades",
+				"e|tbl|public.openbot_data_upgrades",
+				"n|rel|public.openbot_data_upgrades",
+				"n|type|public.openbot_data_upgrades"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_channel_inbox",
+				"openbot_channel_inbox_open"
+			],
+			"writes": [
+				"s|idx|public.openbot_channel_inbox_open",
+				"n|idx|public.openbot_channel_inbox_open",
+				"e|idx|public.openbot_channel_inbox_open",
+				"n|rel|public.openbot_channel_inbox_open"
+			],
+			"reads": [
+				"e|tbl|public.openbot_channel_inbox",
+				"n|sch|public",
+				"e|col|public.openbot_channel_inbox.channel_id",
+				"e|col|public.openbot_channel_inbox.conversation_key",
+				"e|col|public.openbot_channel_inbox.received_at"
+			],
+			"sharedWrites": []
+		},
+		{
+			"statementType": "drop_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_channel_deliveries",
+				"openbot_channel_deliveries_turn"
+			],
+			"writes": [
+				"s|idx|public.openbot_channel_deliveries_turn",
+				"n|idx|public.openbot_channel_deliveries_turn",
+				"e|idx|public.openbot_channel_deliveries_turn",
+				"n|rel|public.openbot_channel_deliveries_turn"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_deliveries",
+				"n|sch|public",
+				"e|col|public.openbot_channel_deliveries.chat",
+				"e|col|public.openbot_channel_deliveries.turn"
+			],
+			"sharedWrites": [
+				"e|uniqueness|public.openbot_channel_deliveries.chat.turn"
+			]
+		},
+		{
+			"statementType": "drop_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_channel_deliveries",
+				"openbot_channel_deliveries_due"
+			],
+			"writes": [
+				"s|idx|public.openbot_channel_deliveries_due",
+				"n|idx|public.openbot_channel_deliveries_due",
+				"e|idx|public.openbot_channel_deliveries_due",
+				"n|rel|public.openbot_channel_deliveries_due"
+			],
+			"reads": [
+				"e|tbl|public.openbot_channel_deliveries",
+				"n|sch|public",
+				"e|col|public.openbot_channel_deliveries.next_at"
+			],
+			"sharedWrites": []
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_deliveries",
+				"target"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_deliveries.target",
+				"n|col|public.openbot_channel_deliveries.target",
+				"e|col|public.openbot_channel_deliveries.target"
+			],
+			"reads": ["n|tbl|public.openbot_channel_deliveries", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_deliveries",
+				"chat"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_deliveries.chat",
+				"n|col|public.openbot_channel_deliveries.chat",
+				"e|col|public.openbot_channel_deliveries.chat"
+			],
+			"reads": ["n|tbl|public.openbot_channel_deliveries", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_deliveries",
+				"turn"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_deliveries.turn",
+				"n|col|public.openbot_channel_deliveries.turn",
+				"e|col|public.openbot_channel_deliveries.turn"
+			],
+			"reads": ["n|tbl|public.openbot_channel_deliveries", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_deliveries",
+				"body"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_deliveries.body",
+				"n|col|public.openbot_channel_deliveries.body",
+				"e|col|public.openbot_channel_deliveries.body"
+			],
+			"reads": ["n|tbl|public.openbot_channel_deliveries", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_deliveries",
+				"state"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_deliveries.state",
+				"n|col|public.openbot_channel_deliveries.state",
+				"e|col|public.openbot_channel_deliveries.state"
+			],
+			"reads": ["n|tbl|public.openbot_channel_deliveries", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_deliveries",
+				"attempts"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_deliveries.attempts",
+				"n|col|public.openbot_channel_deliveries.attempts",
+				"e|col|public.openbot_channel_deliveries.attempts"
+			],
+			"reads": ["n|tbl|public.openbot_channel_deliveries", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_deliveries",
+				"next_at"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_deliveries.next_at",
+				"n|col|public.openbot_channel_deliveries.next_at",
+				"e|col|public.openbot_channel_deliveries.next_at"
+			],
+			"reads": ["n|tbl|public.openbot_channel_deliveries", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_deliveries",
+				"claim"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_deliveries.claim",
+				"n|col|public.openbot_channel_deliveries.claim",
+				"e|col|public.openbot_channel_deliveries.claim"
+			],
+			"reads": ["n|tbl|public.openbot_channel_deliveries", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_deliveries",
+				"lease_until"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_deliveries.lease_until",
+				"n|col|public.openbot_channel_deliveries.lease_until",
+				"e|col|public.openbot_channel_deliveries.lease_until"
+			],
+			"reads": ["n|tbl|public.openbot_channel_deliveries", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": ["column", "public", "openbot_channel_inbox", "event"],
+			"writes": [
+				"s|col|public.openbot_channel_inbox.event",
+				"n|col|public.openbot_channel_inbox.event",
+				"e|col|public.openbot_channel_inbox.event"
+			],
+			"reads": ["n|tbl|public.openbot_channel_inbox", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_inbox",
+				"received_at"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_inbox.received_at",
+				"n|col|public.openbot_channel_inbox.received_at",
+				"e|col|public.openbot_channel_inbox.received_at"
+			],
+			"reads": ["n|tbl|public.openbot_channel_inbox", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_inbox",
+				"attempts"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_inbox.attempts",
+				"n|col|public.openbot_channel_inbox.attempts",
+				"e|col|public.openbot_channel_inbox.attempts"
+			],
+			"reads": ["n|tbl|public.openbot_channel_inbox", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_inbox",
+				"next_at"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_inbox.next_at",
+				"n|col|public.openbot_channel_inbox.next_at",
+				"e|col|public.openbot_channel_inbox.next_at"
+			],
+			"reads": ["n|tbl|public.openbot_channel_inbox", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": ["column", "public", "openbot_channel_inbox", "claim"],
+			"writes": [
+				"s|col|public.openbot_channel_inbox.claim",
+				"n|col|public.openbot_channel_inbox.claim",
+				"e|col|public.openbot_channel_inbox.claim"
+			],
+			"reads": ["n|tbl|public.openbot_channel_inbox", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_inbox",
+				"lease_until"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_inbox.lease_until",
+				"n|col|public.openbot_channel_inbox.lease_until",
+				"e|col|public.openbot_channel_inbox.lease_until"
+			],
+			"reads": ["n|tbl|public.openbot_channel_inbox", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_usage_events",
+				"reservation_known"
+			],
+			"writes": [
+				"s|col|public.openbot_usage_events.reservation_known",
+				"n|col|public.openbot_usage_events.reservation_known",
+				"e|col|public.openbot_usage_events.reservation_known"
+			],
+			"reads": ["n|tbl|public.openbot_usage_events", "n|sch|public"]
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_usage_events",
+				"started_at"
+			],
+			"writes": ["s|colprop|public.openbot_usage_events.started_at.notNull"],
+			"reads": [
+				"n|tbl|public.openbot_usage_events",
+				"n|sch|public",
+				"n|col|public.openbot_usage_events.started_at"
+			],
+			"sqlHash": "a1b86d7040bab9dd"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_inbox",
+				"execution_id"
+			],
+			"writes": ["s|colprop|public.openbot_channel_inbox.execution_id.notNull"],
+			"reads": [
+				"n|tbl|public.openbot_channel_inbox",
+				"n|sch|public",
+				"n|col|public.openbot_channel_inbox.execution_id"
+			],
+			"sqlHash": "2cc0d266661f84c7"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_deliveries",
+				"execution_id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_channel_deliveries.execution_id.notNull"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_deliveries",
+				"n|sch|public",
+				"n|col|public.openbot_channel_deliveries.execution_id"
+			],
+			"sqlHash": "5b3789091ffb2d7e"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channels",
+				"execution_id"
+			],
+			"writes": ["s|colprop|public.openbot_channels.execution_id.notNull"],
+			"reads": [
+				"n|tbl|public.openbot_channels",
+				"n|sch|public",
+				"n|col|public.openbot_channels.execution_id"
+			],
+			"sqlHash": "c35a7bdcb431bd60"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_developer_index_requests",
+				"execution_id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_developer_index_requests.execution_id.notNull"
+			],
+			"reads": [
+				"n|tbl|public.openbot_developer_index_requests",
+				"n|sch|public",
+				"n|col|public.openbot_developer_index_requests.execution_id"
+			],
+			"sqlHash": "ad7cc3ce89815c59"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_app_authorizations",
+				"actor"
+			],
+			"writes": ["s|colprop|public.openbot_app_authorizations.actor.notNull"],
+			"reads": [
+				"n|tbl|public.openbot_app_authorizations",
+				"n|sch|public",
+				"n|col|public.openbot_app_authorizations.actor"
+			],
+			"sqlHash": "c246112a0b947881"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_app_authorizations",
+				"execution_id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_app_authorizations.execution_id.notNull"
+			],
+			"reads": [
+				"n|tbl|public.openbot_app_authorizations",
+				"n|sch|public",
+				"n|col|public.openbot_app_authorizations.execution_id"
+			],
+			"sqlHash": "56ed023fc5436f8b"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_usage_events",
+				"estimated_micros"
+			],
+			"writes": [
+				"s|colprop|public.openbot_usage_events.estimated_micros.notNull"
+			],
+			"reads": [
+				"n|tbl|public.openbot_usage_events",
+				"n|sch|public",
+				"n|col|public.openbot_usage_events.estimated_micros"
+			],
+			"sqlHash": "20049bce52dbd5e3"
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_channel_inbox",
+				"openbot_channel_inbox_conversation"
+			],
+			"writes": [
+				"s|idx|public.openbot_channel_inbox_conversation",
+				"n|idx|public.openbot_channel_inbox_conversation",
+				"e|idx|public.openbot_channel_inbox_conversation",
+				"n|rel|public.openbot_channel_inbox_conversation"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_inbox",
+				"n|sch|public",
+				"n|col|public.openbot_channel_inbox.channel_id",
+				"n|col|public.openbot_channel_inbox.conversation_key",
+				"n|col|public.openbot_channel_inbox.position"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "openbot_channel_inbox_conversation",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "channel_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "conversation_key",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "position",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_app_invocations\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_code_runs\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_computer_calls\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_operations\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_data_upgrade_failures\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_data_upgrade_records\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_data_upgrade_steps\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_data_upgrades\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_app_invocations\",\"owner\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_app_invocations\",\"id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_app_invocations\",\"chat\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_app_invocations\",\"status\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_app_invocations\",\"body\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_deliveries\",\"target\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_deliveries\",\"chat\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_deliveries\",\"turn\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_deliveries\",\"body\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_deliveries\",\"state\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_deliveries\",\"attempts\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_deliveries\",\"next_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_deliveries\",\"claim\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_deliveries\",\"lease_until\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_inbox\",\"event\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_inbox\",\"received_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_inbox\",\"attempts\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_inbox\",\"next_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_inbox\",\"claim\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_channel_inbox\",\"lease_until\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_code_runs\",\"owner\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_code_runs\",\"id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_code_runs\",\"chat\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_code_runs\",\"call_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_code_runs\",\"status\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_code_runs\",\"lease_until\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_code_runs\",\"body\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_computer_calls\",\"id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_computer_calls\",\"computer_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_computer_calls\",\"call\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_computer_calls\",\"reply\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_computer_calls\",\"created_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_operations\",\"namespace\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_operations\",\"id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_operations\",\"chat\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_operations\",\"status\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_operations\",\"body\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_operations\",\"heartbeat_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_operations\",\"started_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_usage_events\",\"reservation_known\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_failures\",\"id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_failures\",\"version\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_failures\",\"step\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_failures\",\"cause\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_failures\",\"created_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_records\",\"version\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_records\",\"collection\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_records\",\"key\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_records\",\"state\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_records\",\"body\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_records\",\"updated_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_steps\",\"version\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_steps\",\"step\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_steps\",\"cursor\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_steps\",\"rows\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_steps\",\"complete\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_steps\",\"updated_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrades\",\"version\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrades\",\"source\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrades\",\"state\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrades\",\"counts\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrades\",\"started_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrades\",\"updated_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrades\",\"checked_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_app_invocations_chat\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_channel_deliveries_turn\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_channel_deliveries_due\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_channel_inbox_open\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_code_runs_chat\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_computer_calls_created\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_operations_chat\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_operations_running\"]"
+		},
+		{
+			"op": "drop",
+			"key": "fks\u0000[\"public\",\"openbot_data_upgrade_failures\",\"openbot_data_upgrade_failures_21rHCd6gLK50_fkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "fks\u0000[\"public\",\"openbot_data_upgrade_records\",\"openbot_data_upgrade_records_BNsODMFwq7a5_fkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "fks\u0000[\"public\",\"openbot_data_upgrade_steps\",\"openbot_data_upgrade_steps_lqAdPZ2AiNMO_fkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_app_invocations\",\"openbot_app_invocations_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_code_runs\",\"openbot_code_runs_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_computer_calls\",\"openbot_computer_calls_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_operations\",\"openbot_operations_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_data_upgrade_records\",\"openbot_data_upgrade_records_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_data_upgrade_steps\",\"openbot_data_upgrade_steps_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_data_upgrade_failures\",\"openbot_data_upgrade_failures_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_data_upgrades\",\"openbot_data_upgrades_pkey\"]"
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_usage_events\",\"started_at\"]",
+			"set": {
+				"notNull": true
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_channel_inbox\",\"execution_id\"]",
+			"set": {
+				"notNull": true
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_channel_deliveries\",\"execution_id\"]",
+			"set": {
+				"notNull": true
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_channels\",\"execution_id\"]",
+			"set": {
+				"notNull": true
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_developer_index_requests\",\"execution_id\"]",
+			"set": {
+				"notNull": true
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_app_authorizations\",\"actor\"]",
+			"set": {
+				"notNull": true
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_app_authorizations\",\"execution_id\"]",
+			"set": {
+				"notNull": true
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_usage_events\",\"estimated_micros\"]",
+			"set": {
+				"notNull": true
+			}
+		}
+	]
+}

@@ -1,5 +1,5 @@
 import { Execution } from "@openbot-build/domain"
-import type { Fence } from "@openbot-build/server-execution/execution/Store"
+import type { Fence } from "@openbot-build/server-execution/Store"
 import { Bot, type Chat, type ChatStore } from "@openbot-build/core"
 import {
 	Array as Arr,
@@ -22,12 +22,11 @@ import { Target } from "./Channel.ts"
 import { ChannelQueue } from "./ChannelQueue.ts"
 import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
-import { toolJson } from "@openbot-build/tools-contract/plugins/ToolJson"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
+import { toolJson } from "@openbot-build/tools-contract/ToolJson"
+import * as Report from "@openbot-build/server-kernel/Report"
 
 /** The Channel tools. Their parameters are JSON Schema, like App tools. */
-export type Tools =
-	import("@openbot-build/tools-contract/plugins/ToolEntry").Tools
+export type Tools = import("@openbot-build/tools-contract/ToolEntry").Tools
 
 export const names = { send: "openbot_channel_send" } as const
 
@@ -61,8 +60,7 @@ export class ChannelTools extends Context.Service<
 			input: ForOwnerInput,
 		) => Effect.Effect<Bot.ToolRegistration, never, Bot.Context | Work>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-channels/ChannelTools") {}
+>()("@openbot-build/plugin-channels/ChannelTools") {}
 
 const makeWith = (fence?: Fence) =>
 	Effect.gen(function* () {

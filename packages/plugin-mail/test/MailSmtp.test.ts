@@ -16,7 +16,7 @@ import {
 	String as Str,
 } from "effect"
 import { TestClock } from "effect/testing"
-import * as Smtp from "../src/Smtp.ts"
+import * as Smtp from "../src/Outside.ts"
 import {
 	Transport,
 	type Message,

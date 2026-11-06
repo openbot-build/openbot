@@ -41,9 +41,8 @@ devenv shell -- pnpm dev:setup
 ```
 
 `dev:setup` makes `.env.development` with a new random secret key in
-`OPENBOT_SECRET_KEYS`. If your `.env.development` is from an older version,
-delete it and run `dev:setup` again. You can also reset the development
-database. See [Configuration](/configuration#development).
+`OPENBOT_SECRET_KEYS`. You can also reset the development database. See
+[Configuration](/configuration#development).
 
 </Step>
 <Step>
@@ -283,6 +282,12 @@ its set of inputs, outputs, errors, and needs.
 4. Check the implementation with `Service.of`, then build its Layer. Local
    helper functions may use type inference. Shared types may use another
    declared contract, but must not depend on a constructor's inferred result.
+5. The key of a service, a reference, or a symbol is the path of its module, as
+   the `deterministicKeys` check of the Effect language service computes it:
+   `@openbot-build/<package>/<module path>`, plus `/<Name>` when the name is not
+   the module name. Do not turn the check off. A value that is saved in the
+   database or in a journal, such as a store key, is an `openbot.<name>` name or
+   a package name, never a module path.
 
 The `service-contract` check follows imported type aliases too. It stops a
 service whose type comes from `make`. The compiler also rejects `any` or
@@ -387,8 +392,9 @@ repository. When you send a change, you agree that it uses the same license.
 
 The client package uses MIT. This also covers the OpenBot code bundled with it,
 as set out in `packages/client/LICENSE`. Other packages keep AGPL. Client builds
-include the API contract at `@openbot-build/client/Api` and chat schemas at
-`@openbot-build/client/Core`. Apps do not need the other OpenBot packages.
+include the API contract at `@openbot-build/client/Api`, chat schemas at
+`@openbot-build/client/Core`, and the domain models at
+`@openbot-build/client/Domain`. Apps do not need the other OpenBot packages.
 
 ## Package releases
 

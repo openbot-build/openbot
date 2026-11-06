@@ -1,9 +1,10 @@
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
 import { AppConnections, Execution } from "@openbot-build/domain"
 import { errors as ExecutionErrors } from "./ExecutionsApi.ts"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { Document } from "@openbot-build/protocol"
-import { ConnectionDraft, ConnectionId } from "./ConnectionsApi.ts"
+import { ConnectionDraft } from "./ConnectionsApi.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
 export const Entry = Schema.Struct({
 	...AppConnections.Entry.fields,

@@ -1,3 +1,7 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import type { TestAuthorization } from "@openbot-build/domain/Developers"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import * as TestCleanup from "@openbot-build/plugin-apps/TestCleanup"
 import * as TestCleanupWorkflow from "@openbot-build/plugin-apps/TestCleanupWorkflow"
 import * as GrantCleanup from "@openbot-build/plugin-apps/GrantCleanup"
@@ -6,18 +10,18 @@ import { DeveloperTestRuntime } from "@openbot-build/plugin-apps/DeveloperTestRu
 import { Authorization, Execution } from "@openbot-build/domain"
 import * as TestCommands from "@openbot-build/plugin-apps/TestCommands"
 import * as TestWorkflow from "@openbot-build/plugin-apps/TestWorkflow"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
-import * as EngineHost from "@openbot-build/server-execution/execution/EngineHost"
-import * as Calls from "@openbot-build/server-execution/execution/Calls"
-import * as Runner from "@openbot-build/server-execution/execution/Runner"
-import * as RunScope from "@openbot-build/server-execution/execution/RunScope"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
+import * as EngineHost from "@openbot-build/server-execution/EngineHost"
+import * as Calls from "@openbot-build/server-execution/Calls"
+import * as Runner from "@openbot-build/server-execution/Runner"
+import * as RunScope from "@openbot-build/server-execution/RunScope"
+import { Billing } from "@openbot-build/server-billing/Billing"
 import { WorkflowEngine } from "effect/workflow"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
-import { TokensPostgres } from "@openbot-build/plugin-auth/Auth"
-import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
-import * as ExecutionStorage from "@openbot-build/server-execution/execution/Store"
-import * as ExecutionObservation from "@openbot-build/server-execution/execution/Observation"
+import * as Records from "@openbot-build/server-kernel/Records"
+import * as TokensPostgres from "@openbot-build/plugin-auth/TokensPostgres"
+import * as IndexCommandsFixture from "../src/IndexCommandsFixture.ts"
+import * as ExecutionStorage from "@openbot-build/server-execution/Store"
+import * as ExecutionObservation from "@openbot-build/server-execution/Observation"
 import { assert, it } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { DeveloperApi as Api } from "@openbot-build/api"
@@ -50,14 +54,13 @@ import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { eq } from "drizzle-orm"
 import { TestClock } from "effect/testing"
 import { Fixture } from "@openbot-build/protocol/testing"
-import { DatabasePostgres as Database } from "@openbot-build/openbot"
 import * as DeveloperLayers from "@openbot-build/plugin-apps/DeveloperLayers"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 import * as IndexStore from "@openbot-build/plugin-apps/IndexStore"
 import * as Governance from "@openbot-build/plugin-apps/Governance"
-import * as OrganizationFixture from "./OrganizationFixture.ts"
+import * as OrganizationFixture from "../src/OrganizationFixture.ts"
 import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
-import * as DomainControl from "@openbot-build/server-kernel/apps/DomainControl"
+import * as DomainControl from "@openbot-build/server-kernel/DomainControl"
 import { DeveloperAccess } from "@openbot-build/plugin-apps/DeveloperAccess"
 import { DeveloperTests } from "@openbot-build/plugin-apps/DeveloperTests"
 import { DeveloperMonitor } from "@openbot-build/plugin-apps/DeveloperMonitor"
@@ -67,7 +70,6 @@ import {
 	developerTests,
 } from "@openbot-build/server-database/Schema"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
-import * as Postgres from "./PostgresTest.ts"
 import * as Db from "@openbot-build/server-database/Database"
 
 const Wire = Schema.Struct({
@@ -321,11 +323,11 @@ it.layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 					Layer.provide(CatalogDiscovery.layerRules),
 					Layer.provide(network("public-fixture")),
 				)
-				const database = yield* Postgres.start
-				const databaseLayer = Database.layer({
-					databaseUrl: Redacted.make(database.url),
+				const database = yield* TestDatabase.start
+				const databaseLayer = PgClient.layer({
+					url: Redacted.make(database.url),
 				})
-				yield* Effect.provide(Database.migrate, databaseLayer)
+				yield* Effect.provide(Migrations.migrate, databaseLayer)
 				// The outbox starts after every workflow is in, so it is built on top of them.
 				const layer = EngineHost.layerLocal.pipe(
 					Layer.provide(Layer.succeed(Clock.Clock, liveClock)),
@@ -393,6 +395,7 @@ it.layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 						Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 					),
 					Layer.provideMerge(databaseLayer),
+					Layer.provideMerge(IndexCommandsFixture.layerPublicInstance),
 					Layer.provideMerge(TestClock.layer()),
 				)
 				/**
@@ -777,7 +780,7 @@ it.layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 							Effect.gen(function* () {
 								const db = yield* Db.make
 								const record = yield* Rows.getTest(db, "public", exchanging.id)
-								const authorization: Api.TestAuthorization = {
+								const authorization: TestAuthorization = {
 									flowId: yield* crypto.uuidV4(),
 									status: "Received",
 									issuer: fixture.ipOrigin,

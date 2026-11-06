@@ -8,8 +8,8 @@ import {
 	Redacted,
 	Schema,
 } from "effect"
-import * as Client from "../src/connections/Client.ts"
-import * as McpClient from "../src/connections/McpClient.ts"
+import * as Client from "../src/Client.ts"
+import * as McpClient from "../src/McpClient.ts"
 
 const publicError = () =>
 	Client.ClientError.make({

@@ -11,13 +11,13 @@ import {
 	String as Str,
 } from "effect"
 import { LanguageModel, Prompt } from "effect/ai"
-import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import { Calls } from "@openbot-build/server-execution/Calls"
 import {
 	Store,
 	storage,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
-import { Records, category } from "@openbot-build/server-kernel/errors/Records"
+} from "@openbot-build/server-execution/Store"
+import { Records, category } from "@openbot-build/server-kernel/Records"
 import type { Bots } from "@openbot-build/domain"
 import { type Home } from "@openbot-build/conversation-contract/bots/BotMemories"
 import { BotMemories } from "./BotMemories.ts"
@@ -52,8 +52,7 @@ export interface Service {
 }
 
 export class MemoryTasks extends Context.Service<MemoryTasks, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-bots/MemoryTasks",
+	"@openbot-build/plugin-bots/MemoryTasks",
 ) {}
 
 const make = Effect.gen(function* () {

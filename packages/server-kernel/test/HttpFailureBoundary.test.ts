@@ -11,11 +11,11 @@ import {
 	HttpApiGroup,
 	HttpApiSchema,
 } from "effect/http-api"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import * as Boundary from "@openbot-build/server-kernel/errors/HttpBoundary"
-import * as Reporting from "@openbot-build/server-kernel/errors/Reporting"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
-import { codec, snapshot } from "@openbot-build/server-kernel/errors/Snapshot"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import * as Boundary from "@openbot-build/server-kernel/HttpBoundary"
+import * as Reporting from "@openbot-build/server-kernel/Reporting"
+import { Records } from "@openbot-build/server-kernel/Records"
+import { codec, snapshot } from "@openbot-build/server-kernel/Snapshot"
 
 class Inside extends Schema.TaggedError<
 	Inside,

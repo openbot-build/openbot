@@ -4,7 +4,6 @@ import { Execution } from "@openbot-build/domain"
 import { Cause, Effect, Exit, Schema } from "effect"
 import { Prompt } from "effect/ai"
 import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
-import * as TurnLimiter from "../src/TurnLimiter.ts"
 import * as TurnLimiterFeature from "../src/TurnLimiterFeature.ts"
 
 const fence = {
@@ -65,11 +64,17 @@ it.effect("a Turn keeps the limit of its pin when the config changes", () =>
 				id: TurnLimiterFeature.id,
 				version: 1,
 				settings: { maxSteps: 5 },
+				missing: BotFeatures.skip,
 			},
 		])
 		// The pin of a Turn that started when the limit was 1.
 		const [held] = yield* features.hold([
-			{ id: TurnLimiterFeature.id, version: 1, settings: { maxSteps: 1 } },
+			{
+				id: TurnLimiterFeature.id,
+				version: 1,
+				settings: { maxSteps: 1 },
+				missing: BotFeatures.skip,
+			},
 		])
 		assert.deepStrictEqual(held!.pin.settings, { maxSteps: 1 })
 		const feature = yield* TurnLimiterFeature.contribution({
@@ -80,8 +85,9 @@ it.effect("a Turn keeps the limit of its pin when the config changes", () =>
 		const stopped = yield* registration.beforeStep!(step(2)).pipe(Effect.flip)
 		assert.ok(Schema.is(BotFeatures.FeatureStopped)(stopped))
 		assert.strictEqual(stopped.feature, TurnLimiterFeature.id)
+		assert.strictEqual(stopped.category, "limited")
 		const cause = stopped.cause
-		assert.ok(Schema.is(TurnLimiter.ModelStepLimitExceeded)(cause))
+		assert.ok(Schema.is(TurnLimiterFeature.ModelStepLimitExceeded)(cause))
 		assert.strictEqual(cause.maxSteps, 1)
 	}).pipe(Effect.scoped),
 )

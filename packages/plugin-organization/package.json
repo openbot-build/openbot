@@ -11,7 +11,6 @@
 	],
 	"exports": {
 		".": "./dist/index.js",
-		"./HttpMounts": "./dist/HttpMounts.js",
 		"./OrganizationPostgres": "./dist/OrganizationPostgres.js"
 	},
 	"scripts": {

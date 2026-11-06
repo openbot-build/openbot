@@ -1,3 +1,4 @@
+import { transactionFailures } from "@openbot-build/server-execution/Store"
 import { Developers } from "@openbot-build/domain"
 import { Discovery } from "@openbot-build/protocol"
 import { and, eq, gt, inArray, ne } from "drizzle-orm"
@@ -7,7 +8,6 @@ import {
 	developerProofs,
 } from "@openbot-build/server-database/Schema"
 import * as Rows from "./DeveloperRows.ts"
-import { IndexNamespace } from "./IndexNamespace.ts"
 import * as Db from "@openbot-build/server-database/Database"
 
 /** A proof in these states still gives access. */
@@ -38,7 +38,7 @@ const covers = (
 /** Current App grants use only saved records. No outside check runs here. */
 export const authorization = Effect.gen(function* () {
 	const db = yield* Db.make
-	const namespace = yield* IndexNamespace
+	const namespace = yield* Rows.instanceNamespace
 	/** The grants of the owner: the usable proofs they hold, and the usable proofs they are a member of. */
 	const grants = Effect.fn("DeveloperAccess.grants")(function* (owner: string) {
 		const now = yield* Clock.currentTimeMillis
@@ -47,13 +47,13 @@ export const authorization = Effect.gen(function* () {
 			inArray(developerProofs.status, [...usableStatus]),
 			gt(developerProofs.validUntil, now),
 		)
-		const held = yield* Rows.stored(
+		const held = yield* transactionFailures(
 			db
 				.select()
 				.from(developerProofs)
 				.where(and(usableProof, eq(developerProofs.owner, owner))),
 		)
-		const shared = yield* Rows.stored(
+		const shared = yield* transactionFailures(
 			db
 				.select({
 					proof: developerProofs,

@@ -1,17 +1,18 @@
-import { assert, it } from "@effect/vitest"
+import type { Source } from "@openbot-build/domain/AppCalls"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
 import {
-	type AppExecution,
-	ConnectionsApi,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
-} from "@openbot-build/api"
+} from "@openbot-build/domain/ExperienceErrors"
+import { ConnectionConflict } from "@openbot-build/domain/AppConnections"
+import { assert, it } from "@effect/vitest"
 import { Client, Store } from "@openbot-build/protocol"
 import { Effect } from "effect"
 import { failed } from "@openbot-build/apps-contract/apps/AppResults"
 import { toStoreError } from "../src/ProtocolStores.ts"
 
-const source: AppExecution.Source = {
-	connectionId: ConnectionsApi.ConnectionId.make("connection-1"),
+const source: Source = {
+	connectionId: ConnectionId.make("connection-1"),
 	connectionName: "Documents",
 	cardUrl: "https://apps.example.com/card",
 	appName: "Documents",
@@ -50,7 +51,7 @@ it.effect(
 			const unavailable = toError(storage)
 			assert.strictEqual(unavailable.reason, "Unavailable")
 			assert.strictEqual(unavailable.cause, storage)
-			const conflict = ConnectionsApi.ConnectionConflict.make({
+			const conflict = ConnectionConflict.make({
 				reason: "LimitReached",
 				message: "The account has too many connections.",
 			})

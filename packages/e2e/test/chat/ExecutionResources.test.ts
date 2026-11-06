@@ -1,11 +1,13 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import * as Read from "./Read.ts"
 import {
 	BrowserHost,
 	Caller,
-	Messages,
-	Wait,
 	Chats,
 	Failures,
+	Messages,
+	Wait,
 } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
 import { Operation } from "@openbot-build/core"
@@ -23,7 +25,7 @@ import {
 	Stream,
 } from "effect"
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
-import { HostTools } from "@openbot-build/openbot"
+import * as HostTools from "@openbot-build/tools-contract/HostTools"
 
 const usage = {
 	inputTokens: { total: 1, uncached: 1, cacheRead: 0, cacheWrite: 0 },
@@ -165,10 +167,13 @@ const start = (
 		return { host, member, bot, send, chat }
 	})
 
-layer(BrowserHost.layerPlatform, {
-	excludeTestServices: true,
-	timeout: "60 seconds",
-})((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+		timeout: "60 seconds",
+	},
+)((it) => {
 	it.effect("Chat reads do not open tool resources", () =>
 		Effect.gen(function* () {
 			const count = yield* counters

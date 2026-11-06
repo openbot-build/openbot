@@ -1,5 +1,12 @@
+import { transactionFailures } from "@openbot-build/server-execution/Store"
+import {
+	decodeProof,
+	findApp,
+	Json,
+	decodeApp,
+} from "@openbot-build/apps-contract/apps/DeveloperRows"
 import * as Models from "./DeveloperModels.ts"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { Records } from "@openbot-build/server-kernel/Records"
 import { DeveloperWatches } from "./DeveloperWatches.ts"
 import * as DeveloperNotices from "./DeveloperNotices.ts"
 import { isIP } from "node:net"
@@ -32,17 +39,16 @@ import {
 import { AppInspections } from "./AppInspections.ts"
 import * as Rows from "./DeveloperRows.ts"
 import type { ProofRecord } from "@openbot-build/apps-contract/apps/DeveloperRows"
-import { DomainControl } from "@openbot-build/server-kernel/apps/DomainControl"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { DomainControl } from "@openbot-build/server-kernel/DomainControl"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
+import type { InstanceSettings } from "@openbot-build/server-kernel/InstanceSettings"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import {
 	usableStatus,
 	covers,
 	authorization,
 } from "@openbot-build/apps-contract/apps/DeveloperAuthorization"
-export { authorization } from "@openbot-build/apps-contract/apps/DeveloperAuthorization"
-
 export const scopeKey = (scope: Developers.ManagementScope): string =>
 	Match.value(scope).pipe(
 		Match.tagsExhaustive({
@@ -180,8 +186,7 @@ export class DeveloperAccess extends Context.Service<
 			| Developers.DeveloperForbidden
 		>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/DeveloperAccess") {}
+>()("@openbot-build/plugin-apps/DeveloperAccess") {}
 
 const Marker = Schema.fromJsonString(
 	Schema.Struct({
@@ -212,13 +217,14 @@ export const make: Effect.Effect<
 	| Digest.Digest
 	| DeveloperWatches
 	| Records
+	| InstanceSettings
 > = Effect.gen(function* () {
 	const watches = yield* DeveloperWatches
 	const errors = yield* Records
 	const notices = yield* DeveloperNotices.make
 	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
-	const namespace = yield* IndexNamespace
+	const namespace = yield* instanceNamespace
 	const domains = yield* DomainControl
 	const network = yield* Network.PublicNetwork
 	const robots = yield* Robots.Robots
@@ -239,15 +245,17 @@ export const make: Effect.Effect<
 	) {
 		if (!isUuid(id)) return yield* Developers.DeveloperNotFound.make({})
 		const query = db.select().from(developerProofs).where(proofWhere(id))
-		const row = (yield* Rows.stored(lock ? query.for("update") : query))[0]
+		const row = (yield* transactionFailures(
+			lock ? query.for("update") : query,
+		))[0]
 		if (row === undefined) return yield* Developers.DeveloperNotFound.make({})
-		return yield* Rows.decodeProof(row)
+		return yield* decodeProof(row)
 	})
 	const writeProof = Effect.fn("DeveloperAccess.writeProof")(function* (
 		value: Developers.Proof,
 	) {
 		const { id: _, ...row } = yield* Rows.encodeProof(value)
-		yield* Rows.stored(
+		yield* transactionFailures(
 			db
 				.update(developerProofs)
 				.set({ ...row, scopeKey: scopeKey(value.scope) })
@@ -262,7 +270,7 @@ export const make: Effect.Effect<
 		const proof = yield* readProof(id, lock)
 		if (proof.owner !== owner) {
 			const now = yield* Clock.currentTimeMillis
-			const member = yield* Rows.stored(
+			const member = yield* transactionFailures(
 				db
 					.select({ id: developerMembers.id })
 					.from(developerMembers)
@@ -288,13 +296,15 @@ export const make: Effect.Effect<
 	) {
 		if (!isUuid(id)) return yield* Developers.DeveloperNotFound.make({})
 		const query = db.select().from(developerClaims).where(claimWhere(id))
-		const row = (yield* Rows.stored(lock ? query.for("update") : query))[0]
+		const row = (yield* transactionFailures(
+			lock ? query.for("update") : query,
+		))[0]
 		if (row === undefined || row.owner !== owner)
 			return yield* Developers.DeveloperNotFound.make({})
 		return yield* Rows.decodeClaim(row)
 	})
 	const setClaimStatus = (id: string, status: Developers.Challenge["status"]) =>
-		Rows.stored(
+		transactionFailures(
 			db.update(developerClaims).set({ status }).where(claimWhere(id)),
 		)
 	const evidence = (scope: Developers.ManagementScope, token: string) =>
@@ -353,12 +363,7 @@ export const make: Effect.Effect<
 	): Effect.Effect<void, Developers.Failure> =>
 		inTransaction(
 			Effect.gen(function* () {
-				const previous = yield* Rows.findApp(
-					db,
-					namespace,
-					observed.cardUrl,
-					true,
-				)
+				const previous = yield* findApp(db, namespace, observed.cardUrl, true)
 				const combined = Arr.appendAll(
 					observed.sources,
 					Option.match(previous, {
@@ -386,15 +391,15 @@ export const make: Effect.Effect<
 							{ kind: "App", id: candidate.cardUrl },
 							previous.value.nextCheckAt,
 						)
-						.pipe(Rows.stored)
+						.pipe(transactionFailures)
 					return true
 				}
 				const now = yield* Clock.currentTimeMillis
-				const encoded = yield* Rows.encodeRow(Rows.Json(Discovery.Candidate))(
+				const encoded = yield* Rows.encodeRow(Json(Discovery.Candidate))(
 					candidate,
 				)
 				// Another request may add the same App first. Then read it again and merge.
-				const inserted = yield* Rows.stored(
+				const inserted = yield* transactionFailures(
 					db
 						.insert(developerApps)
 						.values({
@@ -409,7 +414,7 @@ export const make: Effect.Effect<
 				if (inserted.length === 1)
 					yield* watches
 						.ensure({ kind: "App", id: candidate.cardUrl }, now + 3600000)
-						.pipe(Rows.stored)
+						.pipe(transactionFailures)
 				return inserted.length === 1
 			}),
 		).pipe(
@@ -466,7 +471,7 @@ export const make: Effect.Effect<
 								result.success ? { _tag: "Matched" } : { _tag: "Missing" },
 							)
 						: errors.record(Cause.fail(result.failure), "external").pipe(
-								Rows.stored,
+								transactionFailures,
 								Effect.map((failure) => ({ _tag: "Unavailable", failure })),
 							),
 			),
@@ -487,7 +492,7 @@ export const make: Effect.Effect<
 				const value = Developers.assessProof(current.value, evidence, now)
 				yield* writeProof(value)
 				if (value.status !== current.value.status) {
-					const members = yield* Rows.stored(
+					const members = yield* transactionFailures(
 						db
 							.select({ owner: developerMembers.owner })
 							.from(developerMembers)
@@ -534,14 +539,14 @@ export const make: Effect.Effect<
 		claim,
 		overview: Effect.fn("DeveloperAccess.overview")(function* (owner) {
 			const access = yield* grants(owner)
-			const rows = yield* Rows.stored(
+			const rows = yield* transactionFailures(
 				db
 					.select()
 					.from(developerApps)
 					.where(eq(developerApps.namespace, namespace)),
 			)
 			const apps = Arr.flatMap(
-				yield* Effect.forEach(rows, Rows.decodeApp),
+				yield* Effect.forEach(rows, decodeApp),
 				(app) => {
 					const applicable = Arr.filter(access, (grant) =>
 						covers(grant.scope, app.candidate),
@@ -557,7 +562,7 @@ export const make: Effect.Effect<
 							]
 				},
 			)
-			const proofs = yield* Rows.stored(
+			const proofs = yield* transactionFailures(
 				db
 					.select()
 					.from(developerProofs)
@@ -572,7 +577,7 @@ export const make: Effect.Effect<
 			return {
 				apps,
 				proofs: yield* Effect.forEach(proofs, (row) =>
-					Rows.decodeProof(row).pipe(Effect.map((proof) => proof.value)),
+					decodeProof(row).pipe(Effect.map((proof) => proof.value)),
 				),
 				grants: access,
 			}
@@ -591,7 +596,7 @@ export const make: Effect.Effect<
 				status: "Pending",
 			}
 			const row = yield* Rows.encodeClaim(challenge)
-			yield* Rows.stored(
+			yield* transactionFailures(
 				db
 					.insert(developerClaims)
 					.values({ namespace, owner, scopeKey: scopeKey(scope), ...row }),
@@ -634,7 +639,7 @@ export const make: Effect.Effect<
 							reason: null,
 						}
 						const row = yield* Rows.encodeProof(proof)
-						yield* Rows.stored(
+						yield* transactionFailures(
 							db.insert(developerProofs).values({
 								namespace,
 								owner,
@@ -646,7 +651,7 @@ export const make: Effect.Effect<
 						yield* setClaimStatus(id, "Confirmed")
 						yield* watches
 							.ensure({ kind: "Proof", id }, proof.nextVerificationAt)
-							.pipe(Rows.stored)
+							.pipe(transactionFailures)
 						if (report !== null) yield* rememberReport(proof.scope, report)
 						return proof
 					}),
@@ -666,7 +671,7 @@ export const make: Effect.Effect<
 						reason: "Relinquished",
 					}
 					yield* writeProof(value)
-					const members = yield* Rows.stored(
+					const members = yield* transactionFailures(
 						db
 							.select({ owner: developerMembers.owner })
 							.from(developerMembers)

@@ -16,9 +16,7 @@
 		".": "./dist/index.js",
 		"./CodeCommands": "./dist/CodeCommands.js",
 		"./CodeProgram": "./dist/CodeProgram.js",
-		"./CodeQueries": "./dist/CodeQueries.js",
 		"./CodeWorkflow": "./dist/CodeWorkflow.js",
-		"./HttpMounts": "./dist/HttpMounts.js",
 		"./Sandbox": "./dist/Sandbox.js"
 	},
 	"scripts": {

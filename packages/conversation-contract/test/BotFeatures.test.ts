@@ -15,9 +15,14 @@ import {
 	BotFeatures,
 	type Contribution,
 	DuplicateFeature,
+	FeatureMissing,
 	FeatureVersionChanged,
 	layer,
 	make,
+	type Missing,
+	type Pin,
+	skip,
+	wait,
 } from "@openbot-build/conversation-contract/chats/BotFeatures"
 
 const feature = (
@@ -26,6 +31,7 @@ const feature = (
 		readonly order?: number
 		readonly version?: number
 		readonly settings?: Effect.Effect<Schema.Json>
+		readonly missing?: Missing
 	} = {},
 ): Contribution => ({
 	id,
@@ -34,6 +40,7 @@ const feature = (
 	build: "normal",
 	review: true,
 	restores: [],
+	missing: options.missing ?? wait(),
 	settings: options.settings ?? Effect.succeed(null),
 	prepare: () =>
 		Effect.succeed({
@@ -49,6 +56,14 @@ const contributeIn = (contribution: Contribution) =>
 		yield* features.contribute(contribution).pipe(Scope.provide(scope))
 		return scope
 	})
+
+/** A pin of version 1 with no settings. */
+const pin = (id: string, missing: Missing = wait()): Pin => ({
+	id,
+	version: 1,
+	settings: null,
+	missing,
+})
 
 const ids = (held: ReadonlyArray<{ readonly contribution: Contribution }>) =>
 	Arr.map(held, (entry) => entry.contribution.id)
@@ -104,13 +119,20 @@ it.effect(
 				}),
 			)
 			yield* features.contribute(feature("b-middle", { order: 30 }))
-			yield* features.contribute(feature("a-middle", { order: 30 }))
+			yield* features.contribute(
+				feature("a-middle", { order: 30, missing: skip }),
+			)
 			yield* Ref.set(limit, 5)
 			assert.deepStrictEqual(yield* features.snapshot, [
-				{ id: "early", version: 2, settings: { limit: 5 } },
-				{ id: "a-middle", version: 1, settings: null },
-				{ id: "b-middle", version: 1, settings: null },
-				{ id: "late", version: 1, settings: null },
+				{
+					id: "early",
+					version: 2,
+					settings: { limit: 5 },
+					missing: { _tag: "wait", millis: 30_000 },
+				},
+				pin("a-middle", skip),
+				pin("b-middle"),
+				pin("late"),
 			])
 		}).pipe(Effect.scoped, Effect.provide(layer)),
 )
@@ -142,9 +164,7 @@ it.effect(
 		Effect.gen(function* () {
 			const features = yield* BotFeatures
 			yield* features.contribute(feature("tools", { version: 2 }))
-			const failure = yield* features
-				.hold([{ id: "tools", version: 1, settings: null }])
-				.pipe(Effect.flip)
+			const failure = yield* features.hold([pin("tools")]).pipe(Effect.flip)
 			assert.ok(Schema.is(FeatureVersionChanged)(failure))
 			assert.deepStrictEqual(
 				{
@@ -163,7 +183,7 @@ it.effect(
 		Effect.gen(function* () {
 			const features = yield* BotFeatures
 			const waiting = yield* features
-				.hold([{ id: "later", version: 1, settings: null }])
+				.hold([pin("later")])
 				.pipe(Effect.forkScoped)
 			yield* Effect.yieldNow
 			assert.isUndefined(waiting.pollUnsafe())
@@ -173,16 +193,66 @@ it.effect(
 		}).pipe(Effect.scoped, Effect.provide(layer)),
 )
 
+it.effect(
+	"a hold fails with BotFeatureMissing when an absent feature does not come back in time",
+	() =>
+		Effect.gen(function* () {
+			const features = yield* BotFeatures
+			yield* features.contribute(feature("present"))
+			const waiting = yield* features
+				.hold([pin("present"), pin("gone", wait("10 seconds"))])
+				.pipe(Effect.flip, Effect.forkScoped)
+			yield* TestClock.adjust("9 seconds")
+			assert.isUndefined(waiting.pollUnsafe())
+			yield* TestClock.adjust("1 second")
+			const failure = yield* Fiber.join(waiting)
+			assert.ok(Schema.is(FeatureMissing)(failure))
+			assert.deepStrictEqual(failure.ids, ["gone"])
+			// The wait held nothing.
+			assert.deepStrictEqual(ids(yield* features.holdPresent), ["present"])
+		}).pipe(Effect.scoped, Effect.provide(layer)),
+)
+
+it.effect(
+	"a hold leaves out an absent feature whose pin says skip, and holds the others",
+	() =>
+		Effect.gen(function* () {
+			const features = yield* BotFeatures
+			yield* features.contribute(feature("tools"))
+			const held = yield* features.hold([pin("limit", skip), pin("tools")])
+			assert.deepStrictEqual(ids(held), ["tools"])
+			// A pin with skip still holds its feature when it is there.
+			yield* features.contribute(feature("limit", { order: 5, missing: skip }))
+			assert.deepStrictEqual(
+				ids(yield* features.hold([pin("limit", skip), pin("tools")])),
+				["limit", "tools"],
+			)
+		}).pipe(Effect.scoped, Effect.provide(layer)),
+)
+
+it.effect(
+	"the policy of the pin counts, not the policy of the feature that is there now",
+	() =>
+		Effect.gen(function* () {
+			const features = yield* BotFeatures
+			// The feature now says skip, but the Turn pinned it with wait.
+			const scope = yield* contributeIn(feature("tools", { missing: skip }))
+			yield* Scope.close(scope, Exit.void)
+			const failure = yield* features
+				.hold([pin("tools", wait("1 second"))])
+				.pipe(Effect.flip, Effect.forkScoped)
+			yield* TestClock.adjust("1 second")
+			assert.ok(Schema.is(FeatureMissing)(yield* Fiber.join(failure)))
+		}).pipe(Effect.scoped, Effect.provide(layer)),
+)
+
 it.effect("a hold that waits takes no lease", () =>
 	Effect.gen(function* () {
 		const features = yield* make({ drain: "30 seconds" })
 		const scope = yield* Scope.make()
 		yield* features.contribute(feature("present")).pipe(Scope.provide(scope))
 		const waiting = yield* features
-			.hold([
-				{ id: "absent", version: 1, settings: null },
-				{ id: "present", version: 1, settings: null },
-			])
+			.hold([pin("absent"), pin("present")])
 			.pipe(Effect.forkScoped)
 		yield* Effect.yieldNow
 		// No clock moves: the release must not wait for the hold that waits.
@@ -249,9 +319,7 @@ it.effect("a release waits only until the last holder leaves", () =>
 		const first = yield* Scope.make()
 		const second = yield* Scope.make()
 		yield* features.holdPresent.pipe(Scope.provide(first))
-		yield* features
-			.hold([{ id: "held", version: 1, settings: null }])
-			.pipe(Scope.provide(second))
+		yield* features.hold([pin("held")]).pipe(Scope.provide(second))
 		const release = yield* Scope.close(contribution, Exit.void).pipe(
 			Effect.forkScoped,
 		)

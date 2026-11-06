@@ -1,18 +1,18 @@
+import { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import { Source } from "@openbot-build/domain/AppIndex"
+import { SourceIssue } from "@openbot-build/domain/AppIndex"
+import { Check } from "@openbot-build/domain/AppIndex"
+import { IndexInputInvalid } from "@openbot-build/domain/AppIndex"
+import { IndexUnavailable } from "@openbot-build/domain/AppIndex"
+import { IndexNotFound } from "@openbot-build/domain/AppIndex"
+import { IndexRestricted } from "@openbot-build/domain/AppIndex"
+import { IndexStore } from "@openbot-build/protocol"
 import { AppIndex } from "@openbot-build/domain"
-import { SettingsUnavailable } from "./SettingsErrors.ts"
-import { Document, Index } from "@openbot-build/protocol"
+import { Document } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { Limit } from "./Page.ts"
 
-export const Source = AppIndex.Source
-export type Source = typeof Source.Type
-
-export const SourceIssue = AppIndex.SourceIssue
-export type SourceIssue = typeof SourceIssue.Type
-
-export const Check = AppIndex.Check
-export type Check = AppIndex.Check
 export const Restriction = Schema.Struct({
 	...AppIndex.Restriction.fields,
 	cardUrl: Document.Link,
@@ -22,7 +22,7 @@ export const Restriction = Schema.Struct({
 export type Restriction = typeof Restriction.Type
 
 export const App = Schema.Struct({
-	entry: Index.Entry,
+	entry: IndexStore.Entry,
 	sources: Schema.Array(Source),
 	matches: Schema.Array(AppIndex.Match),
 	check: Schema.optionalKey(Check),
@@ -42,15 +42,6 @@ export const Query = Schema.Struct({
 	limit: Schema.optionalKey(Limit(50)),
 })
 export type Query = typeof Query.Type
-
-export const IndexInputInvalid = AppIndex.IndexInputInvalid
-export type IndexInputInvalid = AppIndex.IndexInputInvalid
-export const IndexUnavailable = AppIndex.IndexUnavailable
-export type IndexUnavailable = AppIndex.IndexUnavailable
-export const IndexNotFound = AppIndex.IndexNotFound
-export type IndexNotFound = AppIndex.IndexNotFound
-export const IndexRestricted = AppIndex.IndexRestricted
-export type IndexRestricted = AppIndex.IndexRestricted
 
 const errors = [
 	IndexRestricted.pipe(HttpApiSchema.status(403)),

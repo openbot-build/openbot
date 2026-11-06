@@ -9,6 +9,7 @@ import {
 	Layer,
 	Option,
 	Ref,
+	Schema,
 	Scope,
 	Stream,
 } from "effect"
@@ -23,6 +24,9 @@ class Second extends Context.Service<Second, { readonly value: string }>()(
 ) {}
 class Missing extends Context.Service<Missing, { readonly value: string }>()(
 	"@openbot-build/server-plugin/test/Feature.test/Missing",
+) {}
+class Limit extends Context.Service<Limit, { readonly max: number }>()(
+	"@openbot-build/server-plugin/test/Feature.test/Limit",
 ) {}
 
 /** Lets the other fibers run until the check gives a value. */
@@ -101,6 +105,54 @@ it.effect("a consumer sees a service only after its build ends", () =>
 			assert.deepStrictEqual(yield* Ref.get(seen), Option.some("first"))
 		}),
 	),
+)
+
+it.effect(
+	"a feature gives its config to every step, and a new config starts the feature again",
+	() =>
+		inGraft(
+			Effect.gen(function* () {
+				const seen = yield* Ref.make<ReadonlyArray<string>>([])
+				const feature = Feature.make("limited", {
+					config: { schema: Schema.Struct({ max: Schema.Int }), key: Limit },
+				})
+					.stage({
+						inject: [],
+						services: Layer.effect(
+							First,
+							Effect.map(Limit, (limit) => ({ value: `stage ${limit.max}` })),
+						),
+						publishes: [First],
+					})
+					.start({
+						inject: [],
+						layer: Layer.effectDiscard(
+							Effect.gen(function* () {
+								const first = yield* First
+								const limit = yield* Limit
+								yield* Ref.update(
+									seen,
+									Arr.append(`${first.value}, start ${limit.max}`),
+								)
+							}),
+						),
+					})
+				const fork = yield* Graft.plugin(feature, { max: 1 })
+				const runs = (count: number) =>
+					until(
+						Effect.map(Ref.get(seen), (all) =>
+							Option.liftPredicate(all, (all) => all.length === count),
+						),
+					)
+				yield* runs(1)
+				yield* fork.update({ max: 2 })
+				yield* runs(2)
+				assert.deepStrictEqual(yield* Ref.get(seen), [
+					"stage 1, start 1",
+					"stage 2, start 2",
+				])
+			}),
+		),
 )
 
 it.effect("a stage publishes all of its keys in one step", () =>

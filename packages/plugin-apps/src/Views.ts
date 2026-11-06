@@ -1,13 +1,17 @@
-import { type Ui, AppUi, Client } from "@openbot-build/protocol"
 import {
+	ChatConflict,
 	type ChatNotFound,
 	type ChatStorageUnavailable,
-	type AppIndex,
-	ExperienceInputInvalid,
-	ExperienceNotFound,
+} from "@openbot-build/domain/Chats"
+import {
 	ExperienceStorageUnavailable,
-	ChatConflict,
-	Identity,
+	ExperienceNotFound,
+	ExperienceInputInvalid,
+} from "@openbot-build/domain/ExperienceErrors"
+import type { Identity } from "@openbot-build/domain/Identity"
+import { type Ui, AppUi, Client } from "@openbot-build/protocol"
+import {
+	type AppIndex,
 	Execution,
 	AppCalls,
 	AppViews,
@@ -36,16 +40,16 @@ import * as TaskMessages from "@openbot-build/conversation-contract/chats/TaskMe
 import {
 	Store,
 	transactionFailures,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import { ActionPolicy } from "./ActionPolicy.ts"
 import * as Hex from "effect/encoding/Hex"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import * as Capabilities from "./Capabilities.ts"
 import { ConnectionSessions, type Opened } from "./ConnectionSessions.ts"
 import { appSecrets } from "@openbot-build/server-database/Schema"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as StoredViews from "./StoredViews.ts"
@@ -237,8 +241,7 @@ export interface Service {
 }
 
 export class Views extends Context.Service<Views, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-apps/Views",
+	"@openbot-build/plugin-apps/Views",
 ) {}
 
 export const make = Effect.gen(function* () {

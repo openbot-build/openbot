@@ -1,13 +1,9 @@
+import type { ExecutionIdentity } from "@openbot-build/domain/Identity"
+import { BotId } from "@openbot-build/domain/BotId"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
 import { Authorizer } from "@nmnmcc/ability"
 import { assert, it } from "@effect/vitest"
-import {
-	AppCalls,
-	BotId,
-	ConnectionId,
-	Execution,
-	ExecutionIdentity,
-	Vaults as Domain,
-} from "@openbot-build/domain"
+import { AppCalls, Execution, Vaults as Domain } from "@openbot-build/domain"
 import {
 	Deferred,
 	Effect,

@@ -1,8 +1,10 @@
+import type { Tools } from "@openbot-build/tools-contract/ToolEntry"
+import type { Identity } from "@openbot-build/domain/Identity"
 import { MemoryTasks } from "./MemoryTasks.ts"
 import { MemoryLearning } from "./MemoryLearning.ts"
 import * as DelegationTools from "./WorkflowTools.ts"
-import type { Fence } from "@openbot-build/server-execution/execution/Store"
-import * as Registration from "@openbot-build/tools-contract/plugins/Registration"
+import type { Fence } from "@openbot-build/server-execution/Store"
+import * as Registration from "@openbot-build/tools-contract/Registration"
 import { names as reviewNames } from "@openbot-build/conversation-contract/capabilities/ReviewTools"
 import {
 	Bot,
@@ -13,7 +15,6 @@ import {
 	type Plugin,
 } from "@openbot-build/core"
 import { Bots as BotsApi } from "@openbot-build/domain"
-import { type Identity } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
@@ -29,7 +30,7 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import { describe } from "@openbot-build/conversation-contract/capabilities/Capability"
 import { Gate } from "@openbot-build/conversation-contract/capabilities/Gate"
 import { Requests } from "@openbot-build/conversation-contract/capabilities/Requests"
@@ -40,14 +41,11 @@ import { homeOf } from "./BotMemories.ts"
 import { confideTool } from "./MemoryBot.ts"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as ChatWork from "./ChatWork.ts"
-import { toolJson } from "@openbot-build/tools-contract/plugins/ToolJson"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { toolJson } from "@openbot-build/tools-contract/ToolJson"
+import * as Report from "@openbot-build/server-kernel/Report"
+import { Records } from "@openbot-build/server-kernel/Records"
 
-/** The Bot tools. Their parameters are JSON Schema, like App tools. */
-import * as ToolEntry from "@openbot-build/tools-contract/plugins/ToolEntry"
-export type Tools = ToolEntry.Tools
-
+import * as ToolEntry from "@openbot-build/tools-contract/ToolEntry"
 /** What a handler knows about its tool call. */
 type CallContext = Toolkit.HandlerContext<Tools[string]>
 type Entry = ToolEntry.Entry
@@ -204,8 +202,7 @@ export class BotTools extends Context.Service<
 			input: ForOwnerInput,
 		) => Effect.Effect<Bot.ToolRegistration, never, Bot.Context | Work>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-bots/BotTools") {}
+>()("@openbot-build/plugin-bots/BotTools") {}
 
 const json = toolJson
 

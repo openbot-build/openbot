@@ -22,23 +22,6 @@ import {
 	SsoConnectionInvalid,
 	SsoUnavailable,
 } from "@openbot-build/domain/Sso"
-export {
-	EmailDomain,
-	Domain,
-	AddDomainRequest,
-	SsoConnection,
-	CreateSsoConnectionRequest,
-	UpdateSsoConnectionRequest,
-	DomainNotFound,
-	DomainTaken,
-	DomainNotVerified,
-	DomainInUse,
-	SsoConnectionNotFound,
-	SsoConnectionConflict,
-	SsoConnectionInvalid,
-	SsoUnavailable,
-} from "@openbot-build/domain/Sso"
-
 const errors = [
 	...AuthorizationErrors,
 	DomainNotFound.pipe(HttpApiSchema.status(404)),

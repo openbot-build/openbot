@@ -23,18 +23,17 @@ import {
 } from "effect"
 import { RunnerAddress, ShardingConfig } from "effect/cluster"
 import { HttpClient, HttpRouter, HttpServer } from "effect/http"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
-import * as CallRecovery from "@openbot-build/server-execution/execution/CallRecovery"
-import * as Calls from "@openbot-build/server-execution/execution/Calls"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
-import * as EngineHost from "@openbot-build/server-execution/execution/EngineHost"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
-import * as RunScope from "@openbot-build/server-execution/execution/RunScope"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as PrivateRpc from "@openbot-build/server-execution/transport/PrivateRpc"
+import * as Records from "@openbot-build/server-kernel/Records"
+import * as CallRecovery from "@openbot-build/server-execution/CallRecovery"
+import * as Calls from "@openbot-build/server-execution/Calls"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import * as Workflows from "@openbot-build/server-execution/Workflows"
+import * as EngineHost from "@openbot-build/server-execution/EngineHost"
+import * as Observation from "@openbot-build/server-execution/Observation"
+import * as RunScope from "@openbot-build/server-execution/RunScope"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as PrivateRpc from "@openbot-build/server-execution/PrivateRpc"
 
 /** A real cluster node used only by ExecutionExternal.test.ts. */
 const work = Engine.define("test-external-write")
@@ -205,7 +204,7 @@ const app = Layer.unwrap(
 			Layer.provide(
 				Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 			),
-			Layer.provideMerge(DatabasePostgres.layer({ databaseUrl: url })),
+			Layer.provideMerge(PgClient.layer({ url: url })),
 			// The engine generation reads the same config.
 			Layer.provideMerge(
 				ShardingConfig.layer({

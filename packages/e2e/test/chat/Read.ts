@@ -1,4 +1,4 @@
-import { ChatResponse } from "@openbot-build/api"
+import { ChatsApi } from "@openbot-build/api"
 import { Item, Turn } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
 import { Caller, type Messages } from "@openbot-build/server-testing"
@@ -19,7 +19,7 @@ export const turns = (send: Messages.Send, chat: string) =>
 /** Reads the saved output of one Turn. */
 export const turn = (send: Messages.Send, chat: string, turn: string) =>
 	Caller.read(
-		Schema.Struct({ turn: TurnState, response: ChatResponse }),
+		Schema.Struct({ turn: TurnState, response: ChatsApi.ChatResponse }),
 		send(`/v1/chats/${chat}/turns/${turn}`, "GET"),
 	)
 

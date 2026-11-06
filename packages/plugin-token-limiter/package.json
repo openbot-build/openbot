@@ -10,8 +10,7 @@
 		"src"
 	],
 	"exports": {
-		".": "./dist/index.js",
-		"./TokenLimiter": "./dist/TokenLimiter.js"
+		".": "./dist/index.js"
 	},
 	"scripts": {
 		"build": "tsdown",
@@ -21,13 +20,13 @@
 		"@graftland/graft": "0.4.0",
 		"@openbot-build/conversation-contract": "workspace:*",
 		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
 		"@openbot-build/server-plugin": "workspace:*",
 		"effect": "4.1.2"
 	},
 	"devDependencies": {
 		"@effect/platform-node": "4.1.2",
 		"@effect/vitest": "4.1.2",
-		"@openbot-build/domain": "workspace:*",
 		"vitest": "5.0.5"
 	},
 	"repository": {

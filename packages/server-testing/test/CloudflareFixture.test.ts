@@ -1,11 +1,11 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
 import { assert, layer } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import { SqlClient } from "effect/sql"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Effect, Layer, Redacted, Result, String as Str } from "effect"
 import { FetchHttpClient } from "effect/http"
-import * as PostgresTest from "./PostgresTest.ts"
-import { browser } from "./DevelopmentLogin.ts"
+import { browser } from "../src/DevelopmentLogin.ts"
 import {
 	origin,
 	keepPrivate,
@@ -13,7 +13,7 @@ import {
 	migrate,
 	seedSession,
 	start,
-} from "./testing/Cloudflare.ts"
+} from "../src/Cloudflare.ts"
 
 // The database and servers use real time.
 layer(
@@ -46,7 +46,7 @@ layer(
 		"session setup leaves no index work for the production server",
 		() =>
 			Effect.gen(function* () {
-				const database = yield* PostgresTest.start
+				const database = yield* TestDatabase.start
 				const env = environment(database.url)
 				yield* migrate(env)
 				const session = yield* seedSession(env)

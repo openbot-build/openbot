@@ -1,6 +1,6 @@
 import { Execution } from "@openbot-build/domain"
 import { Array as Arr, Cause, Effect, Layer, Ref } from "effect"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { Records } from "@openbot-build/server-kernel/Records"
 
 /** Unit tests keep full failures in memory and log only their safe reference. */
 export const make = Effect.gen(function* () {

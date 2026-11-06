@@ -3,8 +3,6 @@ import { Bots, Execution } from "@openbot-build/domain"
 import { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
 import { Array as Arr, Cause, Effect, Schema } from "effect"
 import { SqlError } from "effect/sql"
-export { databaseError } from "@openbot-build/server-kernel/database/DatabaseError"
-
 /** Keep database failures retryable at the execution boundary. Codec errors stay failures. */
 export const inExecution = <A, E, R>(work: Effect.Effect<A, E, R>) =>
 	work.pipe(

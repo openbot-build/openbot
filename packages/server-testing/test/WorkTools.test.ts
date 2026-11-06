@@ -1,3 +1,4 @@
+import type { Tools } from "@openbot-build/tools-contract/ToolEntry"
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Bot, Chat, ChatStore, Turn } from "@openbot-build/core"
@@ -22,9 +23,9 @@ import { OpenWork } from "@openbot-build/conversation-contract/chats/OpenWork"
 import { ReminderCommands } from "@openbot-build/plugin-work/ReminderCommands"
 import { Execution } from "@openbot-build/domain"
 import * as ToolApprovals from "./ToolApprovals.ts"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { Records } from "@openbot-build/server-kernel/Records"
 import * as WorkTools from "@openbot-build/plugin-work/WorkTools"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import { bot } from "./BotFixture.ts"
 
 const chat = Chat.Id.make("chat_1")
@@ -115,7 +116,7 @@ const inTurn = <A, E>(
 			read: () => Effect.succeed(view),
 			store,
 		})
-		const tools: WorkTools.Tools = registration.tools
+		const tools: Tools = registration.tools
 		return yield* use(Toolkit.make(...Rec.values(tools))).pipe(
 			Effect.provideContext(registration.handlers),
 		)
@@ -219,11 +220,7 @@ describe("reminder tool", () => {
 			const results = yield* inTurn(work, unused, (toolkit) =>
 				// The plugin gives the handlers of its tools to the rest of the Turn, so the
 				// toolkit finds them there. Its type cannot say so.
-				(
-					toolkit as unknown as Effect.Effect<
-						Toolkit.WithHandler<WorkTools.Tools>
-					>
-				).pipe(
+				(toolkit as unknown as Effect.Effect<Toolkit.WithHandler<Tools>>).pipe(
 					Effect.flatMap((handled) =>
 						handled.handle(
 							WorkTools.names.remind,

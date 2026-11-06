@@ -1,8 +1,10 @@
+import { SecretInput, SecretState } from "./Secret.ts"
+import { Version } from "./Version.ts"
 import { Array as Arr, Schema, Struct } from "effect"
 import * as Execution from "./Execution.ts"
 import { SecretOutput } from "./Secret.ts"
 import { BotId } from "./BotId.ts"
-import { PublicOrigin, SecretInput, SecretState, Version } from "./Settings.ts"
+import { PublicOrigin } from "./Settings.ts"
 
 /** A hidden Computer has the same result as a missing Computer. */
 export class ComputerNotFound extends Schema.TaggedError<

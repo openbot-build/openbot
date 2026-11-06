@@ -5,7 +5,7 @@ import {
 } from "drizzle-orm/effect-postgres"
 import type { Effect } from "effect"
 import type { PgClient } from "@effect/sql-pg"
-import * as Tables from "./folders/Tables.ts"
+import * as Tables from "./Tables.ts"
 
 /**
  * The Drizzle relations of every table. They follow the foreign keys in the

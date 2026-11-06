@@ -1,3 +1,5 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
@@ -14,22 +16,20 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Admission from "@openbot-build/server-execution/execution/Admission"
-import * as Engine from "@openbot-build/server-execution/execution/Engine"
-import * as RunScope from "@openbot-build/server-execution/execution/RunScope"
+import * as Admission from "@openbot-build/server-execution/Admission"
+import * as Engine from "@openbot-build/server-execution/Engine"
+import * as RunScope from "@openbot-build/server-execution/RunScope"
 import { WorkflowEngine } from "effect/workflow"
-import * as Permits from "@openbot-build/server-execution/execution/Permits"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as PostgresTest from "./PostgresTest.ts"
+import * as Permits from "@openbot-build/server-execution/Permits"
+import * as Store from "@openbot-build/server-execution/Store"
 import * as Fixture from "./ExecutionPermitFixture.ts"
 
 const { actor, pool, start } = Fixture
-const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(PostgresTest.start, (db) =>
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),

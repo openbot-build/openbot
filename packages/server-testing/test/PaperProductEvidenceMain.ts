@@ -1,7 +1,9 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { BotId } from "@openbot-build/domain/BotId"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Chat, Item, Model } from "@openbot-build/core"
-import { Bots } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
@@ -13,26 +15,21 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import {
-	Billing,
-	type Call,
-} from "@openbot-build/server-billing/billing/Billing"
-import * as BillingPostgres from "@openbot-build/server-billing/billing/BillingPostgres"
+import { Billing, type Call } from "@openbot-build/server-billing/Billing"
+import * as BillingPostgres from "@openbot-build/server-billing/BillingPostgres"
 import * as BotMemories from "@openbot-build/plugin-bots/BotMemories"
 import * as BotRecords from "@openbot-build/plugin-bots/BotRecords"
 import * as MemoryLogs from "@openbot-build/plugin-bots/MemoryLogs"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Audience from "@openbot-build/plugin-bots/memory/Audience"
-import * as Memory from "@openbot-build/plugin-bots/memory/BotMemory"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as PostgresTest from "./PostgresTest.ts"
+import * as Audience from "@openbot-build/plugin-bots/Audience"
+import * as Memory from "@openbot-build/plugin-bots/BotMemory"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 
 /** Run this file to check two paper claims against the real PostgreSQL services. */
 const memoryEvidence = Effect.gen(function* () {
 	const memories = yield* BotMemories.BotMemories
 	const home = {
 		organizationId: "paper-org",
-		bot: Bots.BotId.make("paper-bot"),
+		bot: BotId.make("paper-bot"),
 	}
 	const evidence = Arr.map(["Ana", "Bob"], (author): Memory.Evidence => ({
 		source: { chat: Chat.Id.make("group-chat"), item: Item.Id.make(author) },
@@ -285,11 +282,11 @@ class PaperChecksFailed extends Schema.TaggedError<
 }
 
 const main = Effect.gen(function* () {
-	const database = yield* PostgresTest.start
-	const databaseLayer = DatabasePostgres.layer({
-		databaseUrl: Redacted.make(database.url),
+	const database = yield* TestDatabase.start
+	const databaseLayer = PgClient.layer({
+		url: Redacted.make(database.url),
 	})
-	yield* DatabasePostgres.migrate.pipe(Effect.provide(databaseLayer))
+	yield* Migrations.migrate.pipe(Effect.provide(databaseLayer))
 	const services = Layer.mergeAll(
 		BotMemories.layer.pipe(
 			Layer.provide(Layer.mergeAll(BotRecords.layer, MemoryLogs.layer)),

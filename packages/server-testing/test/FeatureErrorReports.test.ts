@@ -1,3 +1,7 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import {
 	Client,
@@ -6,14 +10,7 @@ import {
 } from "@openbot-build/protocol"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
-import {
-	AppIndex,
-	AppViews,
-	Bots,
-	ConnectionId,
-	Execution,
-	Settings as SettingsModel,
-} from "@openbot-build/domain"
+import { AppIndex, AppViews, Bots, Execution } from "@openbot-build/domain"
 import {
 	Cause,
 	Effect,
@@ -27,11 +24,10 @@ import {
 	String as Str,
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Records from "@openbot-build/server-kernel/Records"
+import * as Report from "@openbot-build/server-kernel/Report"
+import * as Failures from "@openbot-build/server-kernel/Failures"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 import * as Judge from "@openbot-build/plugin-capabilities/Judge"
 import * as Db from "@openbot-build/server-database/Database"
 import * as Bindings from "@openbot-build/plugin-apps/Bindings"
@@ -39,18 +35,17 @@ import { ConnectionSessions } from "@openbot-build/plugin-apps/ConnectionSession
 import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
 import { ActionPolicy } from "@openbot-build/plugin-apps/ActionPolicy"
 import * as AppPolicy from "@openbot-build/plugin-apps/ActionPolicy"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { Settings } from "@openbot-build/server-kernel/Settings"
 import { Connections } from "@openbot-build/plugin-apps/Connections"
 import { PublicIndex } from "@openbot-build/plugin-apps/AppIndex"
 import * as Assistance from "@openbot-build/plugin-apps/Assistance"
 import { bot } from "./BotFixture.ts"
-import * as PostgresTest from "./PostgresTest.ts"
 
-const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(PostgresTest.start, (db) =>
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),
@@ -315,7 +310,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 									Effect.fail("private-settings-result").pipe(
 										Failures.replace(
 											"The test settings could not be read",
-											() => SettingsModel.SettingsUnavailable.make({}),
+											() => SettingsUnavailable.make({}),
 										),
 									),
 							}),

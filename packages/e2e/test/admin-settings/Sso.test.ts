@@ -1,11 +1,13 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { Domain, SsoConnection } from "@openbot-build/domain/Sso"
 import { BrowserHost, Caller, Outside } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
-import { SsoApi } from "@openbot-build/api"
-import { Effect, Ref, Schedule, Schema, String as Str } from "effect"
+import { Effect, Ref, Schedule, Schema, String as Str, Layer } from "effect"
 import {
 	HttpClient,
 	HttpClientRequest,
 	type HttpClientResponse,
+	FetchHttpClient,
 } from "effect/http"
 
 const publicOrigin = "https://api.example.com"
@@ -20,7 +22,12 @@ const decodeTagged = Schema.decodeUnknownEffect(
 const tagOf = (response: HttpClientResponse.HttpClientResponse) =>
 	Effect.map(Effect.flatMap(response.json, decodeTagged), (body) => body._tag)
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"SSO connections use only verified domains, hide their secrets and keep their domains",
 		() =>
@@ -57,7 +64,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					account(alice.session, "/v1/organization/domains", "POST", {
 						domain: "example.com",
 					}),
-					Caller.json(SsoApi.Domain),
+					Caller.json(Domain),
 				)
 				yield* Ref.set(records, [domain.recordValue])
 				yield* account(
@@ -72,7 +79,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					connection,
 				)
 				assert.strictEqual(created.status, 200, yield* created.text)
-				const value = yield* Caller.json(SsoApi.SsoConnection)(created)
+				const value = yield* Caller.json(SsoConnection)(created)
 				assert.deepStrictEqual(value.clientSecret, {
 					set: true,
 					hint: "…6789",

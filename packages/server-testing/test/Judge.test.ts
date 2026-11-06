@@ -1,6 +1,6 @@
+import { type Rule, RuleId } from "@openbot-build/domain/Bots"
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
-import { BotsApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Cause,
@@ -17,12 +17,12 @@ import { DecisionModel } from "effect/ai"
 import { TestClock } from "effect/testing"
 import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
 import * as Judge from "@openbot-build/plugin-capabilities/Judge"
-import { AnyModel } from "@openbot-build/models-contract/models/ModelRegistry"
-import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { AnyModel } from "@openbot-build/models-contract/ModelRegistry"
+import { Records } from "@openbot-build/server-kernel/Records"
 import { bot } from "./BotFixture.ts"
 
-const rule = (id: string, text: string): BotsApi.Rule => ({
-	id: BotsApi.RuleId.make(id),
+const rule = (id: string, text: string): Rule => ({
+	id: RuleId.make(id),
 	bot: bot.id,
 	author: { _tag: "Person", userId: "alice" },
 	text,
@@ -126,7 +126,7 @@ it.effect(
 			assert.strictEqual(verdict.decision, "allow")
 			assert.deepStrictEqual(verdict.citations, [
 				{
-					rule: BotsApi.RuleId.make("rule_read"),
+					rule: RuleId.make("rule_read"),
 					quote: "The Bot may call read_docs.",
 				},
 			])

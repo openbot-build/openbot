@@ -1,11 +1,11 @@
+import {
+	ExperienceNotFound,
+	ExperienceStorageUnavailable,
+} from "@openbot-build/domain/ExperienceErrors"
 import * as GrantUses from "./GrantUses.ts"
 import * as Models from "./ConnectionModels.ts"
 import type { IndexWork } from "./IndexWork.ts"
-import {
-	AppConnections,
-	ExperienceNotFound,
-	ExperienceStorageUnavailable,
-} from "@openbot-build/domain"
+import { AppConnections } from "@openbot-build/domain"
 
 import { Store } from "@openbot-build/protocol"
 import {
@@ -23,9 +23,9 @@ import {
 	appDrafts,
 	appRecords,
 } from "@openbot-build/server-database/Schema"
-import type { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import type { Secrets } from "@openbot-build/server-kernel/Secrets"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 
 /** An owner key is the JSON of `[organization id, user id]`. */
 const OwnerJson = Schema.fromJsonString(

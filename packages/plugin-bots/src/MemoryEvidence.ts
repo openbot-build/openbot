@@ -1,10 +1,10 @@
+import type { ExecutionIdentity } from "@openbot-build/domain/Identity"
 import type { Chat, Item } from "@openbot-build/core"
-import type { ExecutionIdentity } from "@openbot-build/domain"
 import { Array as Arr, HashSet, String as Str } from "effect"
 import type { Prompt } from "effect/ai"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
-import * as Audience from "./memory/Audience.ts"
-import type * as Memory from "./memory/BotMemory.ts"
+import * as Audience from "./Audience.ts"
+import type * as Memory from "./BotMemory.ts"
 
 export const textOf = (message: Prompt.Message): string => {
 	if (typeof message.content === "string") return message.content
@@ -20,7 +20,7 @@ export const viewer = (
 	identity: ExecutionIdentity,
 ): Audience.Viewer => {
 	const channel = ChatHost.hostState(chat).channel
-	return channel !== undefined && channel.group !== false
+	return channel !== undefined && channel.group
 		? {
 				organizationId: identity.actor.organizationId,
 				channel: channel.channel,
@@ -45,7 +45,7 @@ export const evidence = (
 		author: identity.actor.userId,
 		organizationId: identity.actor.organizationId,
 		audience:
-			channel !== undefined && channel.group !== false
+			channel !== undefined && channel.group
 				? Audience.channel(channel.channel)
 				: Audience.person(identity.actor.userId),
 		...(channel === undefined ? {} : { channel: channel.channel }),

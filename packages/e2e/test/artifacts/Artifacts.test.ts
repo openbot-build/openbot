@@ -1,12 +1,10 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { ChatItem } from "@openbot-build/domain/Artifacts"
+import { CreatedToken } from "@openbot-build/domain/Tokens"
 import { Digest } from "effect/crypto"
 import { assert, layer } from "@effect/vitest"
-import {
-	ArtifactsApi,
-	ChatItem,
-	ChatView,
-	ExecutionsApi,
-	UserTokensApi,
-} from "@openbot-build/api"
+import { ArtifactsApi, ExecutionsApi, ChatsApi } from "@openbot-build/api"
 import { Artifacts, Authorization, Execution } from "@openbot-build/domain"
 import * as Client from "@openbot-build/client"
 import {
@@ -17,7 +15,7 @@ import {
 	Policies,
 	Wait,
 } from "@openbot-build/server-testing"
-import { Array as Arr, Effect, Option, Schema, Stream } from "effect"
+import { Array as Arr, Effect, Option, Schema, Stream, Layer } from "effect"
 import { Hex } from "effect/encoding"
 import * as Fixtures from "./Fixtures.ts"
 
@@ -60,7 +58,12 @@ const events = (send: Send, receipt: Execution.Receipt) =>
 	)
 const Items = Schema.Struct({ items: Schema.Array(ChatItem) })
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"HTTP sources and files keep versions, citations, and Chat access after a new connection",
 		() =>
@@ -108,7 +111,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					}),
 				)
 				const token = yield* json(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					send("/v1/user/tokens", "POST", { name: "Artifacts" }),
 					201,
 				)
@@ -420,7 +423,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					),
 				)
 				const readToken = yield* json(
-					UserTokensApi.CreatedToken,
+					CreatedToken,
 					send("/v1/user/tokens", "POST", {
 						name: "Read the plan",
 						policy: yield* Policies.json(function* (_) {
@@ -586,7 +589,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					Arr.map(oldItem.value.artifacts, (entry) => entry.version),
 					[1, 1],
 				)
-				const output = yield* json(ChatView, send(path, "GET"))
+				const output = yield* json(ChatsApi.ChatView, send(path, "GET"))
 				assert.strictEqual(
 					Arr.flatMap(output.response?.output ?? [], (message) =>
 						Arr.filter(message.content, (part) => part.type === "output_file"),

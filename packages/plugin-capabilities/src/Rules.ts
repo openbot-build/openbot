@@ -7,11 +7,6 @@ import {
 	deciderKey,
 	Rules,
 } from "@openbot-build/conversation-contract/capabilities/Rules"
-export {
-	deciderKey,
-	Rules,
-} from "@openbot-build/conversation-contract/capabilities/Rules"
-
 export const make: Effect.Effect<
 	typeof Rules.Service,
 	never,

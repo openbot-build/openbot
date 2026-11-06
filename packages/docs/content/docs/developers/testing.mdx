@@ -98,40 +98,78 @@ component checks stay in the `core`, `domain`, `api`, `client`, `openbot`,
 ## Test servers in code
 
 The package `@openbot-build/server-testing` gives the test helpers of OpenBot.
-It is TypeScript source, not built code, so only a test that runs TypeScript can
-use it. Its parts can change in any version. The tests of the server that start
-a database or a whole server are in the same package, in
-`packages/server-testing/test`.
+It is a private package of TypeScript source, not built code, so only a test
+that runs TypeScript can use it. Its parts can change in any version. The
+helpers are in `packages/server-testing/src`. The root of the package gives each
+helper as a namespace with the name of its file, such as `TestHost`,
+`BrowserHost`, and `DevelopmentTesting`. The tests of the server that start a
+whole server or use more than one plugin are in the same package, in
+`packages/server-testing/test`. A test of one package is in the `test` folder of
+that package, also when it starts a database. It imports the modules of its own
+package by their source path. `@openbot-build/server-database/Testing` gives
+such a test a short-lived PostgreSQL database and folders of migrations.
 
-| Helper                          | What it does                                                                                                                                                  |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TestHost.makeSettings`         | Starts a new PostgreSQL database that stops with the scope. It gives the settings of a server on it: fixed secrets, the address `127.0.0.1`, and a free port. |
-| `TestHost.migrate(settings)`    | Makes the tables of a new database.                                                                                                                           |
-| `TestHost.layerPlatform`        | The platform services of a test server: the Node.js services, crypto, and the fetch HTTP client.                                                              |
-| `TestHost.layerOutside(fakes)`  | The services from outside. Each fake that the test gives takes the place of one real service. Give it to `Host.layer` as the `outside` option.                |
-| `TestHost.layer(settings)`      | The bare plugin host on its own HTTP server. It takes a changed list of plugin entries, and its start errors stay typed. It gives no service of a plugin.     |
-| `TestHost.launch(server)`       | Starts a server in a scope of its own. The test can stop it and start it again on the same database.                                                          |
-| `TestHost.layerShared(options)` | Only the shared services: the database pool, the secret keys, the shared settings, and the error records.                                                     |
-| `TestHost.layerApi`             | Every group of the contract with its sign-in and permission middleware, but no plugin host. The test gives the services of the groups, often as fakes.        |
-| `BrowserHost.start(options)`    | A full server with a test identity provider, simulated models, and test accounts that are signed in.                                                          |
-| `PostgresTest.start`            | A short-lived PostgreSQL database.                                                                                                                            |
+The HTTP routes and the middleware of a plugin have no public entry. A test of
+the routes of one plugin lives in that plugin. It gives the route middleware
+itself, for example a fake `BotAuth` that names the caller of each test token.
+The auth plugin tests the real sign-in middleware. A test that needs the real
+sign-in and the routes of many plugins starts a whole host with
+`BrowserHost.start`.
+
+The helpers use only the public host of `@openbot-build/openbot`. The control of
+the plugins of a test host is in this package only: it is not an option of
+`Host`.
+
+| Helper                             | What it does                                                                                                                                                                                                                                                                                                                                |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TestHost.outside(fakes)`          | A Layer with fakes for the services from outside, for the `outside` option of `Host.layer`. The host keeps the real service for each one that is not there.                                                                                                                                                                                 |
+| `TestHost.layer(options)`          | `Host.layerApp` on its own HTTP server at `127.0.0.1` and a free port, with fixed secrets and no check of the platform settings. It takes a database, plugin entries, plugins, fakes, and probes. With no database, it starts a new one with the tables, which stops with it. Its start errors stay typed. It gives no service of a plugin. |
+| `TestHost.services(keys)`          | A probe that gives the services of these keys, as the plugins give them now.                                                                                                                                                                                                                                                                |
+| `TestHost.control`                 | A probe that gives the control of the plugins: the loader, which turns plugins on and off and changes their config, the fork tree, and `stable`.                                                                                                                                                                                            |
+| `TestHost.startWith(keys, server)` | Starts a server with a probe of these keys, and gives a function that runs an Effect with the services of the server and of the keys.                                                                                                                                                                                                       |
+| `TestHost.launch(server)`          | Starts a server in a scope of its own. The test can stop it and start it again on the same database.                                                                                                                                                                                                                                        |
+| `BrowserHost.start(options)`       | A full server with a test identity provider, simulated models, and test accounts that are signed in. Its `run` gives the services of the kernel, and the services of plugins that `src/PluginServices.ts` lists.                                                                                                                            |
+| `TestDatabase.start`               | A short-lived PostgreSQL database, from `@openbot-build/server-database/Testing`.                                                                                                                                                                                                                                                           |
+| `TestDatabase.migrated`            | Like `TestDatabase.start`, and it makes the tables of OpenBot. Give it to `TestHost.layer` when two servers use the same database, or when the test reads the database.                                                                                                                                                                     |
+
+A probe is a small plugin that the test adds to the entries of the host. Give it
+to `TestHost.layer` in `probes`, or add its `entry` and `plugins` to the options
+of `Host.layer` yourself. A probe waits for the keys that it needs, like any
+plugin. Its value lives as long as its fork: when a plugin that it needs starts
+again, the probe starts again, and `value` gives the new services. When a test
+turns plugins off, it must also turn off every plugin that needs them. A probe
+that needs a key of a plugin that is off stops the start.
 
 For a server with a fixed sign-in configuration, use the public `Host.layer`
 with the `auth` option. See [Sign-in](/server#sign-in).
 
-This test starts the bare plugin host, and starts it again on the same database:
+This test starts a host, turns the `triggers` plugin off, and starts the host
+again on the same database:
 
 ```ts
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
+import * as TestDatabase from "@openbot-build/server-database/Testing"
 import { TestHost } from "@openbot-build/server-testing"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/http"
 
 const program = Effect.gen(function* () {
-	const settings = yield* TestHost.makeSettings
-	yield* TestHost.migrate(settings)
-	const server = yield* TestHost.launch(TestHost.layer(settings))
+	const database = yield* TestDatabase.migrated
+	const control = yield* TestHost.control
+	const server = yield* TestHost.launch(
+		TestHost.layer({ database, probes: [control] }),
+	)
+	const plugins = yield* control.value
+	yield* plugins.loader.update("triggers", { disabled: true })
+	yield* plugins.stable
 	yield* server.restart
 	return yield* server.address
-}).pipe(Effect.scoped, Effect.provide(TestHost.layerPlatform))
+}).pipe(
+	Effect.scoped,
+	Effect.provide(
+		Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	),
+)
 ```
 
 ## Real model check
@@ -227,8 +265,7 @@ run showed that each could read the result without access to the other person's
 source. The check now requires access to every source. Neither person may read
 the result alone. A group that can read both sources may read it. Other users
 and organizations stay blocked. This is the intersection of source readers: only
-readers shared by all sources may read the result. Old memory with no proof of
-its sources' access stays hidden until it is rebuilt.
+readers shared by all sources may read the result.
 
 The Paper 12 check sets a cap of 1,000 microUSD. A microUSD is one millionth of
 a US dollar. An early run released the first call's held estimate when its cost
@@ -236,9 +273,7 @@ became unknown. A second call spent the freed amount. A late receipt for the
 first call then took the final cost to 2,000 microUSD. The check now requires
 OpenBot to keep that hold and block the second call. A confirmed receipt
 replaces the hold with the actual cost. Sending the same receipt again must not
-add a charge. An old unknown call whose hold was lost must block new calls under
-the hard budgets it affects until its cost is confirmed. Held unknown costs must
-also survive a new budget period.
+add a charge. Held unknown costs must also survive a new budget period.
 
 These checks must pass before the repairs are treated as complete. They do not
 prove a hard bound on the provider's final charge. Paper 12's bound assumes that

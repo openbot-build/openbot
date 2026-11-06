@@ -9,7 +9,7 @@ import {
 	Path,
 	Redacted,
 } from "effect"
-import * as SecretFiles from "@openbot-build/server-kernel/configuration/SecretFiles"
+import * as SecretFiles from "@openbot-build/server-kernel/SecretFiles"
 
 layer(NodeServices.layer)((it) => {
 	it.effect(

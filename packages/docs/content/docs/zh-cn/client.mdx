@@ -83,9 +83,9 @@ const id = await Effect.runPromise(
 
 为了在页面重新加载后恢复，调用 `command.send`
 前应保存命令键、目标和完整输入。再次准备命令时，把原键作为 `commandKey`
-传入。新命令的有效消息回执包含 `inputId`。在 `ChatView.queuedInputs[].id`
-或已保存的 `ChatItem.id`
-中找到它后，再用服务端记录替换本地待发送副本。较早保存的命令可能没有这个字段。见
+传入。有效消息回执包含 `inputId`。在 `ChatView.queuedInputs[].id` 或已保存的
+`ChatItem.id`
+中找到它后，再用服务端记录替换本地待发送副本。发给任务 Chat 的消息可能没有这个字段。见
 [回答](/zh-cn/developers/chats#回答)。
 
 | 选项             | 必需 | 作用                                                                                                  |
@@ -106,9 +106,10 @@ const id = await Effect.runPromise(
 type）。品牌可以防止把一种记录的 ID 用在另一种记录上。例如，`ConnectionId`
 不能用作
 `AppViewId`。调用后续操作时，请保留并使用 API 应答中的 ID。读取程序外部的 ID 时，用
-`@openbot-build/api` 中的对应 schema 解码，例如
-`ConnectionsApi.ConnectionId`。模型和提供方 ID 使用 `@openbot-build/core` 的
-`Model.Id` 和 `Provider.Id`。JSON 和 URL 中的值仍是字符串。
+`@openbot-build/domain` 中的对应 schema 解码，例如
+`ConnectionId.ConnectionId`。客户端应用从 `@openbot-build/client/Domain`
+导入同样的 schema。模型和提供方 ID 使用 `@openbot-build/core` 的 `Model.Id` 和
+`Provider.Id`。JSON 和 URL 中的值仍是字符串。
 
 每个操作都位于 `client.api.<group>.<operation>`。名称和
 [API 参考](/api/)中的相同。每次调用接受一个对象，它有以下可选字段：
@@ -218,7 +219,19 @@ cookie。令牌加密留在服务器。平台提供方使用 `client.api.platfor
 命令回执包含 `executionId`、`commandKey` 和
 `sequence`。它表示命令已保存，不代表外部操作已经结束。使用
 `GET /v1/executions/:executionId` 读取 `status` 和 `failure`。失败只包含
-`category` 和 `errorId`。
+`category` 和 `errorId`。类别告诉你下一步做什么：
+
+| 类别              | 做什么                                   |
+| ----------------- | ---------------------------------------- |
+| `invalid`         | 修改输入，然后再试。                     |
+| `forbidden`       | 调用者不能做这件事。不要再试。           |
+| `not_found`       | 资源不存在。                             |
+| `conflict`        | 状态已改变。再次读取后再试。             |
+| `limited`         | 限制或预算停止了工作。只在它改变后再试。 |
+| `unavailable`     | OpenBot 现在不能完成工作。稍后再试。     |
+| `external`        | 外部服务失败。                           |
+| `outcome_unknown` | 外部操作可能发生了，也可能没有发生。     |
+| `interrupted`     | 工作在结束前停止了。                     |
 
 通过 `GET /v1/executions/:executionId/events?afterSequence=0`
 读取已保存的事件。分页结果包含 `events`、`afterSequence` 和

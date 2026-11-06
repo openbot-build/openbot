@@ -1,7 +1,7 @@
 import { Array as Arr, Match, pipe, Predicate, Record as Rec } from "effect"
 import { dual } from "effect/Function"
 import type { Chat, Item, Turn } from "@openbot-build/core"
-import type { ChatResponse } from "@openbot-build/api"
+import type { ChatsApi } from "@openbot-build/api"
 import type { Artifacts } from "@openbot-build/domain"
 
 import type { Response } from "effect/ai"
@@ -12,45 +12,51 @@ type LinkedItem = Item.Entry & {
 	readonly artifacts?: ReadonlyArray<Artifacts.ArtifactVersion>
 }
 const addUsage: {
-	(next: Response.Usage): (previous: ChatResponse["usage"]) => {
+	(next: Response.Usage): (previous: ChatsApi.ChatResponse["usage"]) => {
 		inputTokens: Record<string, number>
 		outputTokens: Record<string, number>
 	}
 	(
-		previous: ChatResponse["usage"],
+		previous: ChatsApi.ChatResponse["usage"],
 		next: Response.Usage,
 	): {
 		inputTokens: Record<string, number>
 		outputTokens: Record<string, number>
 	}
-} = dual(2, (previous: ChatResponse["usage"], next: Response.Usage) => {
-	const sum = (a: number | undefined, b: number | undefined) =>
-		a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0)
-	const clean = (values: Readonly<Record<string, number | undefined>>) =>
-		Rec.filter(values, Predicate.isNotUndefined)
-	return {
-		inputTokens: clean({
-			total: sum(previous?.inputTokens.total, next.inputTokens.total),
-			uncached: sum(previous?.inputTokens.uncached, next.inputTokens.uncached),
-			cacheRead: sum(
-				previous?.inputTokens.cacheRead,
-				next.inputTokens.cacheRead,
-			),
-			cacheWrite: sum(
-				previous?.inputTokens.cacheWrite,
-				next.inputTokens.cacheWrite,
-			),
-		}),
-		outputTokens: clean({
-			total: sum(previous?.outputTokens.total, next.outputTokens.total),
-			text: sum(previous?.outputTokens.text, next.outputTokens.text),
-			reasoning: sum(
-				previous?.outputTokens.reasoning,
-				next.outputTokens.reasoning,
-			),
-		}),
-	}
-})
+} = dual(
+	2,
+	(previous: ChatsApi.ChatResponse["usage"], next: Response.Usage) => {
+		const sum = (a: number | undefined, b: number | undefined) =>
+			a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0)
+		const clean = (values: Readonly<Record<string, number | undefined>>) =>
+			Rec.filter(values, Predicate.isNotUndefined)
+		return {
+			inputTokens: clean({
+				total: sum(previous?.inputTokens.total, next.inputTokens.total),
+				uncached: sum(
+					previous?.inputTokens.uncached,
+					next.inputTokens.uncached,
+				),
+				cacheRead: sum(
+					previous?.inputTokens.cacheRead,
+					next.inputTokens.cacheRead,
+				),
+				cacheWrite: sum(
+					previous?.inputTokens.cacheWrite,
+					next.inputTokens.cacheWrite,
+				),
+			}),
+			outputTokens: clean({
+				total: sum(previous?.outputTokens.total, next.outputTokens.total),
+				text: sum(previous?.outputTokens.text, next.outputTokens.text),
+				reasoning: sum(
+					previous?.outputTokens.reasoning,
+					next.outputTokens.reasoning,
+				),
+			}),
+		}
+	},
+)
 
 /** The text that the Bot wrote in some Items. */
 const textOf = (items: ReadonlyArray<Item.Entry>): string =>
@@ -68,21 +74,21 @@ export const response: {
 	(
 		turn: Turn.Record,
 		items: ReadonlyArray<LinkedItem>,
-	): (chat: Chat.Id) => ChatResponse
+	): (chat: Chat.Id) => ChatsApi.ChatResponse
 	(
 		chat: Chat.Id,
 		turn: Turn.Record,
 		items: ReadonlyArray<LinkedItem>,
-	): ChatResponse
+	): ChatsApi.ChatResponse
 } = dual(
 	3,
 	(
 		chat: Chat.Id,
 		turn: Turn.Record,
 		items: ReadonlyArray<LinkedItem>,
-	): ChatResponse => {
+	): ChatsApi.ChatResponse => {
 		const state = turn.status
-		const phase: ChatResponse["status"] = Match.value(state).pipe(
+		const phase: ChatsApi.ChatResponse["status"] = Match.value(state).pipe(
 			Match.tag("Running", () => "in_progress" as const),
 			Match.tag("Completed", ({ result }) =>
 				["stop", "tool-calls"].includes(result.finishReason)
@@ -142,7 +148,7 @@ export const response: {
 				]
 			}),
 		)
-		const usage = Arr.reduce<Response.Usage, ChatResponse["usage"]>(
+		const usage = Arr.reduce<Response.Usage, ChatsApi.ChatResponse["usage"]>(
 			turn.usage ?? [],
 			undefined,
 			(previous, next) => addUsage(previous, next),

@@ -1,11 +1,15 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
+import { TokenId } from "@openbot-build/domain/TokenId"
+import { PgClient } from "@effect/sql-pg"
+import * as Migrations from "@openbot-build/server-database/Migrations"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { Document } from "@openbot-build/protocol"
-import { Authorization, TokenId } from "@openbot-build/domain"
+import { Authorization } from "@openbot-build/domain"
 import { DeveloperAccess } from "@openbot-build/plugin-apps/DeveloperAccess"
 import * as DeveloperIndexing from "@openbot-build/plugin-apps/DeveloperIndexing"
 import * as Governance from "@openbot-build/plugin-apps/Governance"
-import * as OrganizationFixture from "./OrganizationFixture.ts"
-import * as Observation from "@openbot-build/server-execution/execution/Observation"
+import * as OrganizationFixture from "../src/OrganizationFixture.ts"
+import * as Observation from "@openbot-build/server-execution/Observation"
 import * as Db from "@openbot-build/server-database/Database"
 import { developerApps } from "@openbot-build/server-database/Schema"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
@@ -23,19 +27,17 @@ import {
 	String as Str,
 } from "effect"
 import { SqlClient } from "effect/sql"
-import { DatabasePostgres as Database } from "@openbot-build/openbot"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as ErrorRecords from "@openbot-build/server-kernel/errors/Records"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
+import * as Store from "@openbot-build/server-execution/Store"
+import * as ErrorRecords from "@openbot-build/server-kernel/Records"
 import { IndexWork } from "@openbot-build/apps-contract/apps/IndexWork"
-import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
-import * as Postgres from "./PostgresTest.ts"
+import * as IndexCommandsFixture from "../src/IndexCommandsFixture.ts"
 
-const database = Layer.effectDiscard(Database.migrate).pipe(
+const database = Layer.effectDiscard(Migrations.migrate).pipe(
 	Layer.provideMerge(
 		Layer.unwrap(
-			Effect.map(Postgres.start, (db) =>
-				Database.layer({ databaseUrl: Redacted.make(db.url) }),
+			Effect.map(TestDatabase.start, (db) =>
+				PgClient.layer({ url: Redacted.make(db.url) }),
 			),
 		),
 	),
@@ -44,6 +46,7 @@ const services = IndexCommandsFixture.layer.pipe(
 	Layer.provideMerge(Layer.merge(Store.layer, ErrorRecords.layer)),
 	Layer.provide(Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11")))),
 	Layer.provideMerge(database),
+	Layer.provideMerge(IndexCommandsFixture.layerPublicInstance),
 	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 layer(services, { excludeTestServices: true })((it) => {

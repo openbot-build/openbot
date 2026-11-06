@@ -1,14 +1,20 @@
+import { scopeOf } from "@openbot-build/apps-contract/apps/GrantUses"
+import {
+	Caller,
+	executionCallers,
+	type ExecutionIdentity,
+} from "@openbot-build/domain/Identity"
 import {
 	type MemberExecution,
 	Store,
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import {
 	type SecretStorageError,
 	Secrets,
-} from "@openbot-build/server-kernel/secrets/Secrets"
+} from "@openbot-build/server-kernel/Secrets"
 import { and, eq } from "drizzle-orm"
 import { developerTests } from "@openbot-build/server-database/Schema"
 import * as GrantCleanup from "./GrantCleanup.ts"
@@ -18,14 +24,7 @@ import {
 	Store as Protocol,
 } from "@openbot-build/protocol"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
-import {
-	Authorization,
-	Caller,
-	Developers,
-	Execution,
-	executionCallers,
-	type ExecutionIdentity,
-} from "@openbot-build/domain"
+import { Authorization, Developers, Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
@@ -40,12 +39,12 @@ import {
 import { SqlClient } from "effect/sql"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import * as Db from "@openbot-build/server-database/Database"
-import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
-import type { End } from "@openbot-build/server-execution/execution/Program"
+import type { Authorize } from "@openbot-build/server-execution/Engine"
+import { Observation } from "@openbot-build/server-execution/Observation"
+import type { End } from "@openbot-build/server-execution/Program"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 
 export const workflowName = "openbot.developer-test"
@@ -237,13 +236,12 @@ export interface Service {
 }
 
 export class TestCommands extends Context.Service<TestCommands, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/plugin-apps/TestCommands",
+	"@openbot-build/plugin-apps/TestCommands",
 ) {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
-	const namespace = yield* IndexNamespace
+	const namespace = yield* instanceNamespace
 	const sql = yield* SqlClient.SqlClient
 	const store = yield* Store
 	const observation = yield* Observation
@@ -709,9 +707,7 @@ const make = Effect.gen(function* () {
 						)
 					)
 						return yield* Execution.Conflict.make({ id: fence.id })
-					yield* grants.assertInstallable(
-						GrantCleanup.scopeOf(grant.credential),
-					)
+					yield* grants.assertInstallable(scopeOf(grant.credential))
 					yield* store.commit(
 						fence,
 						{
@@ -860,16 +856,6 @@ const make = Effect.gen(function* () {
 			)
 				return yield* Execution.Forbidden.make({})
 			if (Execution.isTerminal(linked.record.status)) return
-			if (
-				linked.workflow === "openbot.imported-record" &&
-				linked.identity.actor.kind === "service" &&
-				linked.identity.actor.serviceId === "data-upgrade" &&
-				linked.record.resource.kind === "DeveloperTest" &&
-				linked.record.resource.id === testId
-			) {
-				// An imported unknown send keeps its decision. Cleanup cannot invent its old caller.
-				return yield* observation.observe(key, 0).pipe(Stream.runDrain)
-			}
 			const { saved } = yield* load(key)
 			if (!Execution.isTerminal(saved.record.status))
 				yield* store

@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest"
 import { Array as Arr, Effect, Ref, Schema, Stream } from "effect"
 import { Prompt, Response, Tool, Toolkit } from "effect/ai"
-import * as ModelStep from "../src/chat/ModelStep.ts"
+import * as ModelStep from "../src/ModelStep.ts"
 import {
 	LanguageModelTest,
 	finish,

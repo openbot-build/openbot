@@ -1,7 +1,6 @@
 import { expectTypeOf, it } from "@effect/vitest"
 import { Discovery } from "@openbot-build/protocol"
 import { Host } from "../src/index.ts"
-import * as Outside from "../src/app/Outside.ts"
 import { Context, Effect, Layer, Redacted, Schema } from "effect"
 
 const settings = (databaseUrl: string) => ({
@@ -22,7 +21,7 @@ const settings = (databaseUrl: string) => ({
 	},
 })
 it.effect(
-	"discovery injection keeps construction failures and required services",
+	"an outside service of the caller keeps its construction failures and its required services",
 	() =>
 		Effect.sync(() => {
 			class DiscoveryConfiguration extends Context.Service<
@@ -44,7 +43,7 @@ it.effect(
 			)
 			const server = Host.layer({
 				...settings("postgresql://unused"),
-				outside: Layer.merge(Outside.layer, injected),
+				outside: injected,
 			})
 			expectTypeOf<DiscoveryConfiguration>().toExtend<
 				Layer.Services<typeof server>

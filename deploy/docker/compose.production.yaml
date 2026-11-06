@@ -38,10 +38,9 @@ services:
   migrate:
     <<: *server
     restart: "no"
-    command: [/app/dist/app/Migrate.mjs]
+    command: [/app/dist/Migrate.mjs]
     secrets:
       - OPENBOT_DATABASE_URL
-      - OPENBOT_SECRET_KEYS
     depends_on:
       postgres:
         condition: service_healthy

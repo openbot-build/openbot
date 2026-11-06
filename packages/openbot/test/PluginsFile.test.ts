@@ -1,12 +1,12 @@
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Entry } from "@graftland/loader"
-import { Array as Arr, ConfigProvider, Effect, Option, Result } from "effect"
-import * as PluginsFile from "../src/app/PluginsFile.ts"
-import * as Preset from "../src/app/Preset.ts"
-import * as PresetPlugins from "../src/app/PresetPlugins.ts"
+import { Array as Arr, Effect, Option, Record as Rec, Result } from "effect"
+import * as PluginsFile from "../src/PluginsFile.ts"
+import * as Preset from "../src/Preset.ts"
+import * as PresetPlugins from "../src/PresetPlugins.ts"
 
-const known = PluginsFile.presetKnown
+const known = PresetPlugins.known
 
 const parsed = (text: string) => Result.getOrThrow(PluginsFile.parse(text))
 
@@ -21,14 +21,9 @@ const merged = (text: string, with_: PluginsFile.Known = known) =>
 	PluginsFile.merge(with_, parsed(text))
 
 describe("parse", () => {
-	it("turns !env into the name of a variable, not its value", () => {
-		const [entry] = parsed(
-			"- id: probe\n  config:\n    token: !env OPENBOT_TOKEN\n",
-		)
-		assert.deepStrictEqual(entry, {
-			id: "probe",
-			config: { token: new Entry.Env({ name: "OPENBOT_TOKEN" }) },
-		})
+	it("reads plain values", () => {
+		const [entry] = parsed("- id: probe\n  config:\n    size: 3\n")
+		assert.deepStrictEqual(entry, { id: "probe", config: { size: 3 } })
 	})
 
 	it("gives the line and column of bad YAML, without the text of the line", () => {
@@ -45,9 +40,9 @@ describe("parse", () => {
 		assert.notInclude(JSON.stringify(found), "secret-value-1234")
 	})
 
-	it("takes an unknown tag as a problem", () => {
+	it("takes a tag as a problem, so no value comes from the environment", () => {
 		const found = problems(
-			PluginsFile.parse("- id: probe\n  config: !evn TOKEN\n"),
+			PluginsFile.parse("- id: probe\n  config: !env TOKEN\n"),
 		)
 		assert.match(found[0]!.reason, /^The YAML is not valid at line 2/)
 	})
@@ -59,13 +54,6 @@ describe("parse", () => {
 		assert.deepStrictEqual(parsed(""), [])
 		assert.deepStrictEqual(parsed("# Nothing to change.\n"), [])
 		assert.deepStrictEqual(parsed("[]"), [])
-	})
-
-	it("needs the name of a variable after !env", () => {
-		assert.deepStrictEqual(
-			problems(PluginsFile.parse("- id: probe\n  config: !env not-a-name\n")),
-			[{ reason: "!env needs the name of an environment variable." }],
-		)
 	})
 
 	it("refuses an alias that points to itself", () => {
@@ -85,26 +73,30 @@ describe("merge", () => {
 		)
 		assert.deepStrictEqual(
 			Arr.map(entries, (entry) => entry.id),
-			[...Preset.ids],
+			Rec.keys(Preset.plugins),
 		)
 		assert.deepStrictEqual(
 			Arr.filter(entries, (entry) => entry.disabled !== undefined),
 			[
-				{ id: "bots", name: Preset.nameOf("bots"), disabled: false },
-				{ id: "triggers", name: Preset.nameOf("triggers"), disabled: true },
+				{ id: "bots", name: Preset.plugins["bots"].name, disabled: false },
+				{
+					id: "triggers",
+					name: Preset.plugins["triggers"].name,
+					disabled: true,
+				},
 				{
 					id: "turn-limiter",
-					name: Preset.nameOf("turn-limiter"),
+					name: Preset.plugins["turn-limiter"].name,
 					disabled: true,
 				},
 				{
 					id: "time-limiter",
-					name: Preset.nameOf("time-limiter"),
+					name: Preset.plugins["time-limiter"].name,
 					disabled: true,
 				},
 				{
 					id: "token-limiter",
-					name: Preset.nameOf("token-limiter"),
+					name: Preset.plugins["token-limiter"].name,
 					disabled: true,
 				},
 			],
@@ -121,7 +113,7 @@ describe("merge", () => {
 			Arr.findFirst(entries, (entry) => entry.id === "turn-limiter"),
 			Option.some<Entry.Entry>({
 				id: "turn-limiter",
-				name: Preset.nameOf("turn-limiter"),
+				name: Preset.plugins["turn-limiter"].name,
 				disabled: false,
 				config: { maxSteps: 40 },
 			}),
@@ -153,23 +145,6 @@ describe("merge", () => {
 		)
 	})
 
-	it("refuses !env in the config of a limit plugin", () => {
-		assert.deepStrictEqual(
-			problems(
-				merged(
-					"- id: time-limiter\n  disabled: false\n  config:\n    maxDuration: !env OPENBOT_LIMIT\n",
-				),
-			),
-			[
-				{
-					entry: 1,
-					id: "time-limiter",
-					reason: "The config of this plugin can not use !env.",
-				},
-			],
-		)
-	})
-
 	it("still refuses config on a plugin that takes no config", () => {
 		assert.deepStrictEqual(
 			problems(merged("- id: triggers\n  config:\n    maxSteps: 40\n")),
@@ -197,7 +172,7 @@ describe("merge", () => {
 						"- id: outside",
 						"  name: outside-plugin",
 						"- id: second-bots",
-						`  name: "${Preset.nameOf("bots")}"`,
+						`  name: "${Preset.plugins["bots"].name}"`,
 						"- just text",
 						"- name: no-id",
 						"",
@@ -250,17 +225,17 @@ describe("merge", () => {
 		const extra = "@openbot-build/test-extra"
 		const entries = Result.getOrThrow(
 			merged(
-				`- id: probe\n  name: "${extra}"\n  config:\n    token: !env OPENBOT_TOKEN\n    size: 3\n`,
+				`- id: probe\n  name: "${extra}"\n  config:\n    token: a-token\n    size: 3\n`,
 				{ ...known, bundled: [...known.bundled, extra] },
 			),
 		)
-		assert.strictEqual(entries.length, Preset.ids.length + 1)
+		assert.strictEqual(entries.length, Rec.keys(Preset.plugins).length + 1)
 		assert.deepStrictEqual(
 			Arr.last(entries),
 			Option.some({
 				id: "probe",
 				name: extra,
-				config: { token: new Entry.Env({ name: "OPENBOT_TOKEN" }), size: 3 },
+				config: { token: "a-token", size: 3 },
 			}),
 		)
 	})
@@ -285,62 +260,48 @@ describe("manifest hash", () => {
 	const hash = (entries: ReadonlyArray<Entry.Entry>) =>
 		PluginsFile.manifestHash(entries).pipe(Effect.provide(NodeCrypto.layer))
 
-	it.effect(
-		"depends on the entries only, not on the order of keys or the values of !env",
-		() =>
-			Effect.gen(function* () {
-				const entry = {
-					id: "probe",
-					name: "probe-plugin",
-					config: { a: 1, token: new Entry.Env({ name: "TOKEN" }) },
-				}
-				const same = {
-					config: { token: new Entry.Env({ name: "TOKEN" }), a: 1 },
-					name: "probe-plugin",
-					disabled: false,
-					id: "probe",
-				}
-				const first = yield* hash([entry])
-				assert.match(first, /^sha256:[0-9a-f]{64}$/)
-				assert.strictEqual(yield* hash([same]), first)
-				assert.notStrictEqual(
-					yield* hash([{ ...entry, disabled: true }]),
-					first,
-				)
-				assert.notStrictEqual(
-					yield* hash([
-						{
-							...entry,
-							config: { a: 1, token: new Entry.Env({ name: "OTHER" }) },
-						},
-					]),
-					first,
-				)
-				const withValue = yield* hash([entry]).pipe(
-					Effect.provide(
-						ConfigProvider.layer(
-							ConfigProvider.fromUnknown({ TOKEN: "value-1" }),
-						),
-					),
-				)
-				assert.strictEqual(withValue, first)
-			}),
+	it.effect("depends on the entries only, not on the order of keys", () =>
+		Effect.gen(function* () {
+			const entry = {
+				id: "probe",
+				name: "probe-plugin",
+				config: { a: 1, token: "TOKEN" },
+			}
+			const same = {
+				config: { token: "TOKEN", a: 1 },
+				name: "probe-plugin",
+				disabled: false,
+				id: "probe",
+			}
+			const first = yield* hash([entry])
+			assert.match(first, /^sha256:[0-9a-f]{64}$/)
+			assert.strictEqual(yield* hash([same]), first)
+			assert.notStrictEqual(yield* hash([{ ...entry, disabled: true }]), first)
+			assert.notStrictEqual(
+				yield* hash([
+					{
+						...entry,
+						config: { a: 1, token: "OTHER" },
+					},
+				]),
+				first,
+			)
+		}),
 	)
 
 	it("uses the entries of the preset as the default", () => {
-		assert.deepStrictEqual(PresetPlugins.entries, PluginsFile.presetEntries)
+		assert.deepStrictEqual(PresetPlugins.known.base, Preset.entries)
 	})
 })
 
 describe("show", () => {
-	it("prints !env as its name and redacts every other string", () => {
+	it("redacts every string", () => {
 		assert.deepStrictEqual(
 			PluginsFile.show([
 				{
 					id: "probe",
 					name: "probe-plugin",
 					config: {
-						token: new Entry.Env({ name: "TOKEN" }),
 						key: "literal-secret",
 						size: 3,
 						on: true,
@@ -354,7 +315,6 @@ describe("show", () => {
 					name: "probe-plugin",
 					disabled: false,
 					config: {
-						token: { env: "TOKEN" },
 						key: "<redacted>",
 						size: 3,
 						on: true,
@@ -364,11 +324,8 @@ describe("show", () => {
 			],
 		)
 		assert.strictEqual(
-			PluginsFile.canonical({
-				b: new Entry.Env({ name: "TOKEN" }),
-				a: undefined,
-			}),
-			'{"b":{"env":"TOKEN"}}',
+			PluginsFile.canonical({ b: "TOKEN", a: undefined }),
+			'{"b":"TOKEN"}',
 		)
 	})
 })

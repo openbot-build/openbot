@@ -1,8 +1,8 @@
+import { ChatConflict } from "@openbot-build/domain/Chats"
 import { assert, it } from "@effect/vitest"
-import { ChatConflict } from "@openbot-build/domain"
 import { Chat, ChatStore } from "@openbot-build/core"
 import { Array as Arr, Cause, Effect, Exit, Logger, Schema } from "effect"
-import { codec, snapshot } from "@openbot-build/server-kernel/errors/Snapshot"
+import { codec, snapshot } from "@openbot-build/server-kernel/Snapshot"
 import * as ChatErrors from "@openbot-build/conversation-contract/chats/ChatErrors"
 
 it.effect(

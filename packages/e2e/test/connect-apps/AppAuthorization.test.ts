@@ -1,10 +1,8 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { State, Action } from "@openbot-build/domain/AppAuthorizations"
 import { Execution } from "@openbot-build/domain"
 import { assert, layer } from "@effect/vitest"
-import {
-	AppAuthorizationApi,
-	ConnectionsApi,
-	ExecutionsApi,
-} from "@openbot-build/api"
+import { ConnectionsApi, ExecutionsApi } from "@openbot-build/api"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import { Authorization } from "@openbot-build/protocol"
 import {
@@ -27,7 +25,7 @@ import {
 	HttpServerRequest,
 	HttpServerResponse,
 } from "effect/http"
-import { AppHost } from "@openbot-build/openbot"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import { SqlClient } from "effect/sql"
 import { Fixture as ProtocolFixture } from "@openbot-build/protocol/testing"
 import {
@@ -93,7 +91,12 @@ const proxyTo = (address: Effect.Effect<string>) =>
 		),
 	)
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"OpenBot completes real CIMD and PKCE flows once, resumes callbacks after login, and keeps accounts apart",
 		() =>
@@ -109,7 +112,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					publicOrigin: proxy.ipOrigin,
 					discovery: publisher.discovery,
 					appProbe: publisher.probe,
-					appNetwork: Layer.succeed(AppHost.AppNetwork, {
+					appNetwork: Layer.succeed(AppNetwork, {
 						layer: (owner, origins) =>
 							NodeHttpServer.layerUserNetwork({
 								owner,
@@ -174,17 +177,17 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const readFlow = (flowId: string) =>
 					Effect.flatMap(
 						call("/v1/app-authorizations/" + flowId),
-						HttpClientResponse.schemaBodyJson(AppAuthorizationApi.State),
+						HttpClientResponse.schemaBodyJson(State),
 					)
 
 				const action = (id: Execution.Id) =>
 					Effect.flatMap(
 						call(`/v1/app-authorization-actions/${id}`),
-						HttpClientResponse.schemaBodyJson(AppAuthorizationApi.Action),
+						HttpClientResponse.schemaBodyJson(Action),
 					)
 				const wait = (
 					id: Execution.Id,
-					ready: (value: AppAuthorizationApi.Action) => boolean = (value) =>
+					ready: (value: Action) => boolean = (value) =>
 						Execution.isTerminal(value.execution.status),
 				) =>
 					action(id).pipe(
@@ -432,29 +435,6 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					422,
 				)
 				assert.strictEqual(yield* publisher.exchanges, 3)
-				const abandoned = yield* begin
-				yield* host.run(
-					Effect.flatMap(
-						SqlClient.SqlClient,
-						(sql) =>
-							sql`UPDATE openbot_app_authorizations SET status='Processing', execution_id=NULL WHERE id=${abandoned.flowId}`,
-					),
-				)
-				assert.strictEqual(
-					(yield* readFlow(abandoned.flowId)).status,
-					"Processing",
-				)
-				yield* host.run(
-					Effect.flatMap(
-						SqlClient.SqlClient,
-						(sql) =>
-							sql`UPDATE openbot_app_authorizations SET expires_at=0 WHERE id=${abandoned.flowId}`,
-					),
-				)
-				const interrupted = yield* readFlow(abandoned.flowId)
-				// Reading an old row cannot invent a completed recovery.
-				assert.strictEqual(interrupted.status, "Processing")
-				assert.strictEqual(interrupted.executionId, null)
 				const rejected = yield* begin
 				const rejectedUrl = new URL(
 					yield* publisher.issueCode(rejected.authorizationUrl),

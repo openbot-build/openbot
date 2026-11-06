@@ -1,4 +1,5 @@
-import { AppCalls, AppConnections, ConnectionId } from "@openbot-build/domain"
+import { ConnectionId } from "@openbot-build/domain/ConnectionId"
+import { AppCalls, AppConnections } from "@openbot-build/domain"
 import { Document } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import * as Index from "./IndexModels.ts"

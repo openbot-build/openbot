@@ -1,15 +1,12 @@
 import type { Mail as MailModel } from "@openbot-build/domain"
 import { DateTime, Effect, Layer, Option, Redacted } from "effect"
-import * as Report from "@openbot-build/server-kernel/errors/Report"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import { bindings } from "@openbot-build/server-kernel/settings/Platform"
+import * as Report from "@openbot-build/server-kernel/Report"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
+import { Settings } from "@openbot-build/server-kernel/Settings"
+import { bindings } from "@openbot-build/server-kernel/Platform"
 import * as Templates from "./Templates.ts"
 import { Transport } from "@openbot-build/identity-contract/mail/Transport"
 import { Mail } from "@openbot-build/identity-contract/mail/Mail"
-export { Mail } from "@openbot-build/identity-contract/mail/Mail"
-export type { Invitation } from "@openbot-build/identity-contract/mail/Mail"
-
 export const layer = Layer.effect(
 	Mail,
 	Effect.gen(function* () {
@@ -26,8 +23,7 @@ export const layer = Layer.effect(
 			if (Option.isNone(platform)) return { status: "disabled" as const }
 			const { document } = platform.value
 			const mail = document.mail
-			if (mail === undefined || mail === null)
-				return { status: "disabled" as const }
+			if (mail === null) return { status: "disabled" as const }
 			const content = yield* render({
 				url: mail.invitationUrl ?? document.publicOrigin,
 			})

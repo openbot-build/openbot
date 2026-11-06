@@ -60,8 +60,7 @@ berechnet.
 Vor dem Senden hält OpenBot einen Schätzwert in `reservedMicros` frei. Es
 rechnet mit etwa vier Textzeichen pro Eingabe-Token und 1.024 Ausgabe-Tokens.
 Andere Eingaben bekommen eine grobe Größe. Die echten Kosten können höher sein.
-Der Schätzwert bleibt nach dem Ende in `estimatedMicros` stehen. Das Feld ist
-`null`, wenn ein alter Datensatz seinen Schätzwert nicht mehr hat.
+Der Schätzwert bleibt nach dem Ende in `estimatedMicros` stehen.
 
 Aufrufe mit `pending` oder `unknown` behalten ihre Reservierungen. Das Ende oder
 Stoppen einer Ausführung und ein neuer Besitzer geben eine unbekannte
@@ -339,16 +338,6 @@ Zeitraum, in dem der Beleg gespeichert wird. Die Endkosten können höher als de
 Schätzwert sein. Das Budget garantiert daher nicht, dass die Rechnung des
 Anbieters unter der Grenze bleibt.
 
-Ein alter `unknown`-Aufruf mit gespeichertem `estimatedMicros` zählt weiter als
-reservierter Betrag, auch wenn `reservedMicros` 0 ist. Fehlende alte Schätzwerte
-bleiben `null`. Hat ein alter unbekannter Aufruf keinen Schätzwert und kann er
-Kosten haben, stoppt OpenBot neue Aufrufe unter den passenden harten Budgets,
-bis seine Kosten bestätigt sind. Bei Platform-Aufrufen gilt dies auch für die
-betroffene Guthabengrenze. Ein gespeicherter Schätzwert von null löst diese
-Sperre wegen fehlender Schätzung nicht aus und fügt keine Reservierung hinzu.
-Auch ein bekannter kostenloser alter Aufruf löst diese Sperre nicht aus. Andere
-Budget- und Guthabengrenzen gelten weiter für neue Aufrufe.
-
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -425,11 +414,6 @@ Solange Credits an sind:
   nicht erneut genutzt werden. Ein später bestätigter Beleg bucht die echten
   Kosten einmal und gibt die Reservierung frei. Das kann das Guthaben unter 0
   senken.
-- Ein alter unbekannter Platform-Aufruf ohne Schätzwert und mit möglichen Kosten
-  stoppt neue Platform-Aufrufe, bis seine Kosten bestätigt sind. Ein
-  gespeicherter Schätzwert von null oder ein bekannter kostenloser alter Aufruf
-  löst diese Sperre wegen fehlender Schätzung nicht aus und fügt keine
-  Reservierung hinzu. Andere Guthabengrenzen gelten weiter für neue Aufrufe.
 
 Aufrufe mit dem eigenen Schlüssel der Organisation nehmen nie Credits, auch wenn
 Credits an sind.
@@ -465,7 +449,8 @@ Wenn ein Budget oder die Credits einen Aufruf stoppen, schlägt der Aufruf des
 Model mit einem `AiError` fehl. Sein Grund ist `QuotaExhaustedError`. Der Turn
 endet mit dem Status `Failed` und dem Code `model_error`. Die Metadaten des
 Fehlers sagen in `openbot.reason`, warum: `budget` oder `credits`. Bei einem
-Budget nennt `openbot.budgetId` das Budget.
+Budget nennt `openbot.budgetId` das Budget. Der gespeicherte Fehler des
+Model-Aufrufs hat die Kategorie `limited`.
 
 Wenn OpenBot die Budgets nicht lesen kann, zum Beispiel weil die Datenbank nicht
 läuft, stoppt es den Aufruf auch.

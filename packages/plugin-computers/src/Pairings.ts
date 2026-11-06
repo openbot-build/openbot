@@ -1,10 +1,10 @@
+import type { Caller } from "@openbot-build/domain/Identity"
 import { Redacted } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no API to compare secrets in constant time.
 import { timingSafeEqual } from "node:crypto"
 import { Computers as ComputerData } from "@openbot-build/domain"
 
-import { type Caller } from "@openbot-build/domain"
 import { PgClient } from "@effect/sql-pg"
 import { and, count, eq, gt } from "drizzle-orm"
 import {
@@ -18,10 +18,10 @@ import {
 	String as Str,
 } from "effect"
 import { Base64Url, Hex } from "effect/encoding"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import * as Db from "@openbot-build/server-database/Database"
 import { computerPairings } from "@openbot-build/server-database/Schema"
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
 import { Computers, type Failure, hashToken } from "./Computers.ts"
 
 /** A pairing code works this long. */
@@ -83,8 +83,7 @@ export class Pairings extends Context.Service<
 			ComputerData.PairingInvalid | ComputerData.ComputersUnavailable
 		>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-computers/Pairings") {}
+>()("@openbot-build/plugin-computers/Pairings") {}
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make

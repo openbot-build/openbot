@@ -1,3 +1,4 @@
+import * as TestDatabase from "@openbot-build/server-database/Testing"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
@@ -18,13 +19,12 @@ import {
 } from "effect"
 import { LanguageModel, Response } from "effect/ai"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import { meter } from "@openbot-build/server-billing/billing/MeteredModel"
-import { Billing } from "@openbot-build/server-billing/billing/Billing"
-import * as TokenThrottle from "@openbot-build/server-billing/billing/TokenThrottle"
+import { meter } from "@openbot-build/server-billing/MeteredModel"
+import { Billing } from "@openbot-build/server-billing/Billing"
+import * as TokenThrottle from "@openbot-build/server-billing/TokenThrottle"
 import * as Fixture from "./TokenThrottleFixture.ts"
-import * as PostgresTest from "./PostgresTest.ts"
 
-class Database extends Context.Service<Database, PostgresTest.Database>()(
+class Database extends Context.Service<Database, TestDatabase.Database>()(
 	"@openbot-build/server-testing/test/TokenThrottle.test/Database",
 ) {}
 
@@ -51,7 +51,7 @@ const tables = Layer.effectDiscard(
 )
 
 const services = tables.pipe(
-	Layer.provideMerge(Layer.effect(Database, PostgresTest.start)),
+	Layer.provideMerge(Layer.effect(Database, TestDatabase.start)),
 	Layer.provideMerge(NodeServices.layer),
 )
 

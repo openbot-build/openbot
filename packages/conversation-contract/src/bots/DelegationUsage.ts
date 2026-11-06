@@ -12,14 +12,11 @@ import {
 } from "effect"
 import { SqlClient } from "effect/sql"
 import * as ChatHost from "../chats/ChatHost.ts"
+import * as InputCommands from "../chats/InputCommands.ts"
 import * as Db from "@openbot-build/server-database/Database"
 import { delegationPeriods } from "@openbot-build/server-database/ExecutionSchema"
 import { usageEvents } from "@openbot-build/server-database/Schema"
-import {
-	Store,
-	storage,
-	type Key,
-} from "@openbot-build/server-execution/execution/Store"
+import { Store, storage, type Key } from "@openbot-build/server-execution/Store"
 
 const Task = Schema.Struct({ chat: Chat.Id, host: ChatHost.ChatHostState })
 type Owned = {
@@ -89,7 +86,7 @@ export const make = Effect.gen(function* () {
 		for (const row of owned) {
 			if (
 				row.kind !== "Turn" ||
-				row.workflow !== "openbot.chat-turn" ||
+				row.workflow !== InputCommands.workflowName ||
 				row.owner === null ||
 				!HashSet.has(delegations, row.owner)
 			)

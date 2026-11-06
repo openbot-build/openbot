@@ -1,12 +1,14 @@
+import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { ExecutionView } from "@openbot-build/domain/AppCalls"
+import { Binding } from "@openbot-build/domain/AppViews"
 import { Execution, ToolExecution } from "@openbot-build/domain"
 import { assert, layer } from "@effect/vitest"
 import {
 	AppViewsApi as Api,
-	AppExecution,
 	AppExperienceApi,
-	type ChatView,
 	ConnectionsApi,
 	RequestsApi,
+	type ChatsApi,
 } from "@openbot-build/api"
 import {
 	Array as Arr,
@@ -19,12 +21,12 @@ import {
 	String as Str,
 } from "effect"
 import { LanguageModel, Response } from "effect/ai"
-import type { HttpMethod } from "effect/http"
+import { type HttpMethod, FetchHttpClient } from "effect/http"
 import * as Network from "@openbot-build/protocol/NodeHttpServer"
-import { AppHost } from "@openbot-build/openbot"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import {
-	Apps,
 	AppFixture as Fixture,
+	Apps,
 	BrowserHost,
 	Caller,
 	Messages,
@@ -80,7 +82,12 @@ const itemsQuery = (before?: number) =>
 		...(before === undefined ? {} : { before: String(before) }),
 	}).toString()
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"App views bind to the real history and account, accept each exact host action once, keep confirmed state and survive view closure",
 		() =>
@@ -145,7 +152,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					model,
 					discovery: publisher.discovery,
 					appProbe: publisher.probe,
-					appNetwork: Layer.succeed(AppHost.AppNetwork, {
+					appNetwork: Layer.succeed(AppNetwork, {
 						layer: (owner, origins) =>
 							Network.layerUserNetwork({
 								owner,
@@ -202,7 +209,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const wait = settled(asAlice, id)
 				/** Waits until a Turn after `turn` has run, and the Chat is at rest. */
 				const after = (turn: string | undefined) => {
-					const isNew = (view: ChatView) =>
+					const isNew = (view: ChatsApi.ChatView) =>
 						view.turn !== null && view.turn.id !== turn
 					return wait.pipe(
 						Effect.repeat({
@@ -259,7 +266,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					})
 				const operations = Effect.flatMap(
 					request("/v1/chats/" + id + "/app-operations"),
-					json(Schema.Array(AppExecution.ExecutionView)),
+					json(Schema.Array(ExecutionView)),
 				)
 				yield* wait
 				yield* approve()
@@ -392,7 +399,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				}
 				assert.deepStrictEqual(
 					(yield* request("/v1/app-views/" + view.id).pipe(
-						Effect.flatMap(json(Api.Binding)),
+						Effect.flatMap(json(Binding)),
 					)).interaction,
 					{ revision: 1, context },
 				)

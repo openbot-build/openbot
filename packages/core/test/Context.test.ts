@@ -266,14 +266,10 @@ for (const strategy of [
 			const lm = LanguageModelTest({
 				streamText: () =>
 					Stream.unwrap(
-						Effect.map(
-							Effect.serviceOption(ContextWindow.CurrentWindow),
-							(window) => {
-								const w = Option.getOrThrow(window)
-								windows = Arr.append(windows, w)
-								return Stream.fromArray(textParts("answer"))
-							},
-						),
+						Effect.map(ContextWindow.CurrentWindow, (window) => {
+							windows = Arr.append(windows, window)
+							return Stream.fromArray(textParts("answer"))
+						}),
 					),
 				generateText: () =>
 					Effect.sync(() => {
@@ -382,14 +378,11 @@ it.effect(
 				LanguageModelTest({
 					streamText: ({ prompt }) =>
 						Stream.unwrap(
-							Effect.map(
-								Effect.serviceOption(ContextWindow.CurrentWindow),
-								(window) => {
-									prompts = Arr.append(prompts, prompt)
-									windows = Arr.append(windows, Option.getOrThrow(window))
-									return Stream.fromArray(textParts("answer"))
-								},
-							),
+							Effect.map(ContextWindow.CurrentWindow, (window) => {
+								prompts = Arr.append(prompts, prompt)
+								windows = Arr.append(windows, window)
+								return Stream.fromArray(textParts("answer"))
+							}),
 						),
 				}),
 			),

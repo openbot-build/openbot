@@ -1,5 +1,5 @@
-import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { Secrets } from "@openbot-build/server-kernel/Secrets"
+import * as Failures from "@openbot-build/server-kernel/Failures"
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { Clock, Effect, Layer, Option, Schema, String as Str } from "effect"
 import { Digest } from "effect/crypto"
@@ -10,12 +10,6 @@ import {
 	Reminder,
 	Reminders,
 } from "@openbot-build/conversation-contract/work/Reminders"
-export {
-	ReminderStatus,
-	Reminder,
-	Reminders,
-} from "@openbot-build/conversation-contract/work/Reminders"
-
 export const make: Effect.Effect<
 	typeof Reminders.Service,
 	never,

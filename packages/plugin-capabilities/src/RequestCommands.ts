@@ -1,17 +1,17 @@
+import { LimitControl } from "@openbot-build/domain/Delegations"
+import { ExecutionIdentity, Caller } from "@openbot-build/domain/Identity"
 import {
 	Store,
 	storage,
 	type Key,
 	type Fence,
-} from "@openbot-build/server-execution/execution/Store"
+} from "@openbot-build/server-execution/Store"
 import * as PolicyOrigin from "@openbot-build/conversation-contract/capabilities/PolicyOrigin"
 import * as ToolOrigins from "@openbot-build/conversation-contract/chats/ToolOrigins"
 import { Chat, Turn } from "@openbot-build/core"
 import {
 	Authorization,
-	Caller,
 	Execution,
-	ExecutionIdentity,
 	Requests as RequestDomain,
 } from "@openbot-build/domain"
 import { Clock, Effect, Layer, Option, Schema } from "effect"
@@ -26,7 +26,7 @@ import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAcces
 import {
 	type Authorize,
 	type DecisionCommand,
-} from "@openbot-build/server-execution/execution/Engine"
+} from "@openbot-build/server-execution/Engine"
 import {
 	Requests,
 	Stored,
@@ -40,19 +40,6 @@ import {
 	type End,
 	RequestCommands,
 } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
-export {
-	workflowName,
-	Continuation,
-	Details,
-	Input,
-	RequestCommands,
-} from "@openbot-build/conversation-contract/capabilities/RequestCommands"
-export type {
-	PolicyDecision,
-	End,
-	Service,
-} from "@openbot-build/conversation-contract/capabilities/RequestCommands"
-
 export const noticeWorkflowName = "openbot.request-notice"
 
 export const decisionId = (request: RequestDomain.CapabilityRequest) =>
@@ -60,7 +47,7 @@ export const decisionId = (request: RequestDomain.CapabilityRequest) =>
 
 const Reference = Schema.Struct({
 	source: Execution.Id,
-	control: Schema.optionalKey(PolicyOrigin.Control),
+	control: Schema.optionalKey(LimitControl),
 	continuation: Continuation,
 })
 
@@ -83,7 +70,7 @@ const make = Effect.gen(function* () {
 	const audit = yield* AuditLog
 	const sourceOf = Effect.fn("RequestCommands.sourceOf")(function* (
 		key: Key,
-		control?: PolicyOrigin.Control,
+		control?: LimitControl,
 	) {
 		if (control !== undefined) {
 			const origin = yield* policy.limit(key, control)

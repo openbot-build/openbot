@@ -8,7 +8,7 @@ import { Context, type Effect, type Option, type Redacted } from "effect"
 import type {
 	AuthUnavailable,
 	CredentialRejected,
-} from "@openbot-build/server-kernel/auth/Model"
+} from "@openbot-build/server-kernel/AuthModel"
 
 /**
  * Sign-in with Better Auth. Each call uses the sign-in configuration of the
@@ -66,5 +66,4 @@ export class Auth extends Context.Service<
 			CredentialRejected | AuthUnavailable
 		>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/identity-contract/auth/Auth") {}
+>()("@openbot-build/identity-contract/auth/Auth") {}

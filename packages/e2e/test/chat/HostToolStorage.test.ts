@@ -1,5 +1,7 @@
+import { FetchHttpClient } from "effect/http"
+import { NodeServices } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
-import { HostTools } from "@openbot-build/openbot"
+import * as HostTools from "@openbot-build/tools-contract/HostTools"
 import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
 import { Context, Deferred, Effect, Layer, Ref, Stream } from "effect"
 import { LanguageModel, Response } from "effect/ai"
@@ -29,7 +31,10 @@ const model = Layer.effect(
 )
 
 /** One set of services serves all the steps of a test, like one running server. */
-const residentServices = BrowserHost.layerPlatform.pipe(
+const residentServices = Layer.merge(
+	NodeServices.layer,
+	FetchHttpClient.layer,
+).pipe(
 	Layer.provideMerge(model),
 	Layer.provideMerge(Layer.succeed(ResidentConfiguration, 7)),
 )

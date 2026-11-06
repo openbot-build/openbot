@@ -1,17 +1,17 @@
+import type { SettingsUnavailable } from "@openbot-build/domain/SettingsErrors"
+import type { BotId } from "@openbot-build/domain/BotId"
+import type { ChatKind } from "@openbot-build/domain/Chats"
+import type { DelegationId } from "@openbot-build/domain/DelegationId"
+import type { TokenId } from "@openbot-build/domain/TokenId"
 import {
 	type MemberExecution,
 	type Fence,
 	type Key,
-} from "@openbot-build/server-execution/execution/Store"
-import type { Check } from "@openbot-build/server-execution/execution/Admission"
+} from "@openbot-build/server-execution/Store"
+import type { Check } from "@openbot-build/server-execution/Admission"
 import {
-	type TokenId,
-	type BotId,
-	type DelegationId,
 	type ToolExecution,
-	type ChatKind,
 	type PlanApproval,
-	type Settings as SettingsData,
 	CodeRuns,
 	Execution,
 	Vaults as VaultDomain,
@@ -22,7 +22,7 @@ import { Context, Effect, Option, Schema } from "effect"
 import {
 	type Authorize,
 	type Decide,
-} from "@openbot-build/server-execution/execution/Engine"
+} from "@openbot-build/server-execution/Engine"
 
 export const workflowName = "openbot.code"
 
@@ -213,7 +213,7 @@ export interface Service {
 	readonly decide: Decide
 	readonly enabled: Effect.Effect<
 		{ timeoutMs: number; memoryBytes: number; outputBytes: number },
-		Execution.Forbidden | SettingsData.SettingsUnavailable
+		Execution.Forbidden | SettingsUnavailable
 	>
 	readonly result: (
 		key: Key,
@@ -261,8 +261,7 @@ export interface Service {
 }
 
 export class CodeCommands extends Context.Service<CodeCommands, Service>()(
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
-	"@openbot-build/openbot/apps-contract/code/CodeCommands",
+	"@openbot-build/apps-contract/code/CodeCommands",
 ) {}
 
 export { Saved }

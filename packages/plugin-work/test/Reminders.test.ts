@@ -1,4 +1,5 @@
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import { Reminders as RemindersModel } from "@openbot-build/conversation-contract/work/Reminders"
+import * as Secrets from "@openbot-build/server-kernel/Secrets"
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Chat, Turn } from "@openbot-build/core"
@@ -82,7 +83,7 @@ const memoryRecords = Layer.effect(
 	}),
 )
 
-const layer = Layer.effect(Reminders.Reminders, Reminders.make).pipe(
+const layer = Layer.effect(RemindersModel, Reminders.make).pipe(
 	Layer.provide(
 		Layer.mergeAll(
 			memoryRecords,
@@ -95,7 +96,7 @@ const layer = Layer.effect(Reminders.Reminders, Reminders.make).pipe(
 )
 
 const start = Effect.gen(function* () {
-	const reminders = yield* Reminders.Reminders
+	const reminders = yield* RemindersModel
 	return yield* reminders.start(organizationId, {
 		userId: "user_1",
 		author: "user_1",
@@ -109,7 +110,7 @@ const start = Effect.gen(function* () {
 
 const statusOf = (id: string) =>
 	Effect.gen(function* () {
-		const reminders = yield* Reminders.Reminders
+		const reminders = yield* RemindersModel
 		const found = yield* reminders.find(organizationId, id)
 		return Option.map(found, (reminder) => reminder.status)
 	})
@@ -119,7 +120,7 @@ describe("Reminders", () => {
 		"only one step sends a reminder, and a cancel after the send changes nothing",
 		() =>
 			Effect.gen(function* () {
-				const reminders = yield* Reminders.Reminders
+				const reminders = yield* RemindersModel
 				const reminder = yield* start
 				const first = yield* reminders.change(
 					organizationId,
@@ -163,7 +164,7 @@ describe("Reminders", () => {
 		"a reminder whose note could not go out waits again, and a cancelled reminder is never sent",
 		() =>
 			Effect.gen(function* () {
-				const reminders = yield* Reminders.Reminders
+				const reminders = yield* RemindersModel
 				const reminder = yield* start
 				yield* reminders.change(organizationId, reminder.id, "waiting", "done")
 				const again = yield* reminders.change(

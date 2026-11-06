@@ -1,121 +1,45 @@
-import { Artifacts } from "@openbot-build/plugin-artifacts/Artifacts"
-import * as ResetCommands from "@openbot-build/plugin-apps/ResetCommands"
-import * as AuthorizationCommands from "@openbot-build/plugin-apps/AuthorizationCommands"
-import { ImportedRecords } from "@openbot-build/server-execution/imported/ImportedRecords"
-import { DelegationQueries } from "@openbot-build/conversation-contract/bots/DelegationQueries"
-import * as GrantCleanup from "@openbot-build/plugin-apps/GrantCleanup"
-import * as Records from "@openbot-build/server-kernel/errors/Records"
-import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
-import * as ExecutionStorage from "@openbot-build/server-execution/execution/Store"
-import * as ExecutionObservation from "@openbot-build/server-execution/execution/Observation"
-import { Observation } from "@openbot-build/server-execution/execution/Observation"
-import { ChannelRemoval } from "@openbot-build/plugin-channels/ChannelRemoval"
-import { ConnectionCommands } from "@openbot-build/plugin-apps/ConnectionCommands"
-import { Transport } from "@openbot-build/server-execution/resources/Transport"
-import { ChannelConfig } from "@openbot-build/plugin-channels/ChannelConfig"
-import { ChannelQueue } from "@openbot-build/plugin-channels/ChannelQueue"
-import { AppCommands } from "@openbot-build/apps-contract/apps/AppCommands"
-import { CodeCommands } from "@openbot-build/apps-contract/code/CodeCommands"
-import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
-import { DelegationCommands } from "@openbot-build/plugin-bots/DelegationCommands"
-import { RequestCommands } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
-import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
-import { Store as ExecutionStore } from "@openbot-build/server-execution/execution/Store"
-import { LiveConnections } from "@openbot-build/plugin-chats/live/LiveConnections"
-import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
-import { Commands as ExecutionCommands } from "@openbot-build/server-execution/execution/Commands"
-import * as BotFixture from "./BotFixture.ts"
-import * as TriggerStore from "@openbot-build/plugin-triggers/Triggers"
-import * as Channels from "@openbot-build/plugin-channels/Channels"
-import { ComputerProviders } from "@openbot-build/plugin-computers/ComputerProviders"
-import { Computers } from "@openbot-build/plugin-computers/Computers"
-import { Lifecycle as ComputerLifecycle } from "@openbot-build/plugin-computers/Lifecycle"
-import { Connectors } from "@openbot-build/plugin-computers/connector/Connectors"
-import { Drivers } from "@openbot-build/plugin-computers/Drivers"
-import { Pairings } from "@openbot-build/plugin-computers/Pairings"
-import { Sessions } from "@openbot-build/plugin-computers/Sessions"
-import { SecretProviders } from "@openbot-build/plugin-vaults/SecretProviders"
-import { Vaults } from "@openbot-build/apps-contract/vaults/Vaults"
-import { Files } from "@openbot-build/apps-contract/files/Files"
-import * as ChannelRegistry from "@openbot-build/plugin-channels/ChannelRegistry"
-import * as DeveloperLayers from "@openbot-build/plugin-apps/DeveloperLayers"
-import * as AppExperience from "@openbot-build/plugin-apps/Experience"
-import * as Views from "@openbot-build/plugin-apps/Views"
-import { ToolCommands } from "@openbot-build/conversation-contract/chats/ToolCommands"
+import { Result as ResultModel } from "@openbot-build/protocol/Discovery"
+import { Failed } from "@openbot-build/domain/AppDiscovery"
 import { assert, layer } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import {
 	Array as Arr,
-	Context,
 	Deferred,
 	Effect,
 	HashSet,
 	Layer,
 	Order,
 	Result,
-	Redacted,
 	Ref,
 	Schema,
 	String as Str,
 } from "effect"
 import {
-	AppConnections,
 	CatalogDiscovery,
 	Document,
 	Discovery,
 	Network,
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
-// @effect-diagnostics-next-line nodeBuiltinImport:off -- NodeHttpServer.layer needs a function that makes a Node HTTP server.
-import { createServer } from "node:http"
-import {
-	NodeCrypto,
-	NodeHttpServer as PlatformHttpServer,
-	NodeServices,
-} from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import {
 	FetchHttpClient,
 	HttpClient,
 	HttpClientRequest,
 	HttpClientResponse,
-	HttpRouter,
-	HttpServer,
 	HttpServerRequest,
 	HttpServerResponse,
 } from "effect/http"
 import * as Client from "@openbot-build/client"
-import { Auth, DatabasePostgres } from "@openbot-build/openbot"
-import * as TestHost from "./TestHost.ts"
-// The migrations come through the entry point of the package, so the test checks that export too.
-import * as Migration from "@openbot-build/server-upgrade/Migrations"
-import * as Connections from "@openbot-build/plugin-apps/Connections"
-import * as Authorizations from "@openbot-build/plugin-apps/Authorizations"
-import * as ProtocolStores from "@openbot-build/plugin-apps/ProtocolStores"
-import * as AppHost from "@openbot-build/plugin-apps/AppHost"
-import * as ActionPolicy from "@openbot-build/plugin-apps/ActionPolicy"
-import * as Lifecycle from "@openbot-build/plugin-apps/Lifecycle"
-import * as ConnectionSessions from "@openbot-build/plugin-apps/ConnectionSessions"
-import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Probe from "@openbot-build/plugin-apps/Probe"
-import * as DomainControl from "@openbot-build/server-kernel/apps/DomainControl"
-import * as OutboundPolicy from "@openbot-build/server-kernel/network/OutboundPolicy"
-import { TokensPostgres } from "@openbot-build/plugin-auth/Auth"
-import * as OrganizationFixture from "./OrganizationFixture.ts"
-import * as PostgresTest from "./PostgresTest.ts"
+import * as BrowserHost from "../src/BrowserHost.ts"
+import * as Caller from "../src/Caller.ts"
+import * as AppsOutside from "@openbot-build/plugin-apps/Outside"
 import { Fixture } from "@openbot-build/protocol/testing"
-import {
-	AuthApi,
-	DeveloperApi,
-	AppDiscoveryFailed,
-	AppDiscoveryResult,
-	OpenBotApi,
-} from "@openbot-build/api"
+import { AuthApi, DeveloperApi, OpenBotApi } from "@openbot-build/api"
 import { HttpApi } from "effect/http-api"
-import * as HttpHost from "@openbot-build/server-kernel/errors/HttpHost"
+import * as HttpHost from "@openbot-build/server-kernel/HttpHost"
 import * as AppDiscovery from "@openbot-build/plugin-apps/Discovery"
-import * as Governance from "@openbot-build/plugin-apps/Governance"
 import * as PublicIndex from "@openbot-build/plugin-apps/AppIndex"
-import * as IndexStore from "@openbot-build/plugin-apps/IndexStore"
 
 /** The Node services for the test servers, and an HTTP client to call them. */
 const platform = Layer.mergeAll(
@@ -322,262 +246,40 @@ const postJson = (
 const getText = (url: string, headers: Record<string, string> = {}) =>
 	Effect.flatMap(HttpClient.get(url, { headers }), (response) => response.text)
 
+/**
+ * Starts a whole test host whose App discovery and public network are these
+ * fakes, and signs in one person.
+ */
 const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 	discovery: Layer.Layer<Discovery.Discovery>,
 	publicNetwork?: Layer.Layer<Network.PublicNetwork>,
 ) {
-	const database = yield* PostgresTest.start
-	// The migration has its own database pool. It closes after the migration.
-	yield* DatabasePostgres.migrate.pipe(
-		Effect.provide(
-			DatabasePostgres.layer({
-				databaseUrl: Redacted.make(database.url),
-			}).pipe(Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer))),
-		),
-	)
-	const authCalls = yield* Ref.make<ReadonlyArray<string>>([])
-	const identity = {
-		userId: "local-user",
-		organizationId: "local-organization",
-	}
-	const auth = Auth.Auth.of({
-		emailSend: () => Effect.die("Discovery must not send mail"),
-		emailVerify: () => Effect.die("Discovery must not verify mail"),
-		handle: () => Effect.die("Discovery must not call Better Auth routes"),
-		signInProvider: () => Effect.succeedNone,
-		startSignIn: () => Effect.die("Discovery must not start a sign-in"),
-		resolveSession: (credential) =>
-			Effect.gen(function* () {
-				yield* Ref.update(authCalls, Arr.append("session"))
-				if (Redacted.value(credential) === "unavailable")
-					return yield* Auth.Model.AuthUnavailable.make({
-						dependency: "storage",
-					})
-				if (Redacted.value(credential) !== "local-session")
-					return yield* Auth.Model.CredentialRejected.make({ kind: "session" })
-				return {
-					userId: identity.userId,
-					profile: {},
-					memberships: [
-						{
-							organizationId: identity.organizationId,
-							name: "Local",
-							status: "active" as const,
-							roles: ["super_administrator"],
-						},
-					],
-					platformAdmin: false,
-					canCreateOrganization: false,
-					expiresAt: "2099-01-01T00:00:00.000Z",
-					setCookies: [],
-				}
-			}),
+	const host = yield* BrowserHost.start({
+		publicOrigin,
+		discovery,
+		indexPublicNetwork: publicNetwork,
 	})
-	const encryptionKey = Redacted.make("test:" + Str.repeat(32)("11"))
-	const settings = OrganizationFixture.layerSettings({ publicOrigin })
-	const errorRecords = Records.layer.pipe(
-		Layer.provide(Secrets.layer(encryptionKey)),
-		Layer.provide(NodeCrypto.layer),
-	)
-	const services = yield* Layer.build(
-		HttpRouter.serve(TestHost.layerApi).pipe(
-			Layer.provide([
-				Layer.mock(Artifacts, {}),
-				Layer.mock(ExecutionCommands, {}),
-				Layer.mock(ImportedRecords, {}),
-				Layer.mock(DelegationQueries, {}),
-				Layer.mock(RequestCommands, {}),
-				Layer.mock(DelegationCommands, {}),
-				Layer.mock(InputCommands, {}),
-				Layer.mock(ToolCommands, {}),
-				Layer.mock(AppCommands, {}),
-				Layer.mock(CodeCommands, {}),
-				Layer.mock(TurnAccess, {}),
-				Layer.mock(LiveConnections, {}),
-				Layer.mock(ProviderOAuth, {}),
-				Layer.mock(ExecutionStore, {}),
-				errorRecords,
-				discovery,
-				DeveloperLayers.layer.pipe(
-					Layer.provide(IndexCommandsFixture.layer),
-					Layer.provide(
-						ExecutionObservation.layer.pipe(
-							Layer.provideMerge(
-								Layer.merge(ExecutionStorage.layer, Records.layer),
-							),
-						),
-					),
-					Layer.provide(
-						OrganizationFixture.layerAuthorization.pipe(
-							Layer.provide(TokensPostgres.layer),
-						),
-					),
-					Layer.provide(
-						Layer.mergeAll(
-							publicNetwork ?? OutboundPolicy.layerPublicNetwork,
-							DomainControl.layer,
-							AppHost.layerNetwork,
-						),
-					),
-					Layer.provide(
-						Governance.layer.pipe(
-							Layer.provide(OrganizationFixture.layerDefaultSettings),
-						),
-					),
-					Layer.provide(Secrets.layer(encryptionKey)),
-					Layer.provide(discovery),
-					Layer.provide(IndexStore.layer),
-				),
-				Layer.mergeAll(
-					AppExperience.layer.pipe(Layer.provideMerge(Lifecycle.layer)),
-					Lifecycle.layer,
-					Authorizations.layer,
-					Layer.mock(Views.Views, {}),
-				).pipe(
-					Layer.provideMerge(
-						ResetCommands.layer.pipe(
-							Layer.provideMerge(
-								AuthorizationCommands.layer.pipe(
-									Layer.provideMerge(
-										GrantCleanup.layer.pipe(
-											Layer.provide(ExecutionObservation.layer),
-										),
-									),
-								),
-							),
-							Layer.provide(ExecutionStorage.layer),
-							Layer.provide(
-								OrganizationFixture.layerAuthorization.pipe(
-									Layer.provide(TokensPostgres.layer),
-								),
-							),
-						),
-					),
-					Layer.provide(
-						ActionPolicy.layer.pipe(
-							Layer.provide(OrganizationFixture.layerDefaultSettings),
-						),
-					),
-					Layer.provideMerge(Connections.layer),
-					Layer.provide(
-						OrganizationFixture.layerAuthorization.pipe(
-							Layer.provide(TokensPostgres.layer),
-						),
-					),
-					Layer.provideMerge(ConnectionSessions.layer),
-					Layer.provide(AppHost.layer),
-					Layer.provide(discovery),
-					Layer.provide(CatalogDiscovery.layerRules),
-					Layer.provide(Probe.layer),
-					Layer.provide(
-						Governance.layer.pipe(
-							Layer.provide(OrganizationFixture.layerDefaultSettings),
-						),
-					),
-					Layer.provide(AppHost.layerNetwork),
-					Layer.provideMerge(AppConnections.layerConnectionScopes),
-					Layer.provide(NodeCrypto.layer),
-					Layer.provideMerge(ProtocolStores.layer),
-					Layer.provide(IndexCommandsFixture.layer),
-					Layer.provideMerge(Secrets.layer(encryptionKey)),
-				),
-				PublicIndex.layer({}).pipe(
-					Layer.provide(
-						Governance.layer.pipe(
-							Layer.provide(OrganizationFixture.layerDefaultSettings),
-						),
-					),
-					Layer.provide(IndexStore.layer),
-				),
-				TokensPostgres.layer,
-				// The triggers take the authorizer when they are built.
-				TriggerStore.layer.pipe(
-					Layer.provide(Layer.mock(ExecutionStore, {})),
-					Layer.provide(Secrets.layer(encryptionKey)),
-					Layer.provide(OrganizationFixture.layerAuthorization),
-					Layer.provide(TokensPostgres.layer),
-				),
-				Layer.mock(ChannelQueue, {}),
-				Layer.mock(ChannelConfig, {}),
-				Layer.mock(Observation, {}),
-				ChannelRegistry.layer.pipe(
-					Layer.provideMerge(Channels.layer),
-					Layer.provide(
-						OrganizationFixture.layerAuthorization.pipe(
-							Layer.provide(TokensPostgres.layer),
-						),
-					),
-					Layer.provide(
-						Layer.merge(FetchHttpClient.layer, AppHost.layerNetwork),
-					),
-					Layer.provide(Secrets.layer(encryptionKey)),
-				),
-				OrganizationFixture.layerEveryoneAdministrator,
-				OrganizationFixture.layerNoAudit,
-				OrganizationFixture.layerUnusedPlatform,
-				// The settings of the platform win over the empty ones of the line above.
-				settings,
-				Secrets.layer(encryptionKey),
-				BotFixture.layerBotServices.pipe(
-					Layer.provide(Secrets.layer(encryptionKey)),
-					Layer.provide(OrganizationFixture.layerAuthorization),
-					Layer.provide(TokensPostgres.layer),
-				),
-				Layer.succeed(Auth.Auth, auth),
-				// Discovery never uses Computers. Their handlers only need the services to exist.
-				Layer.mock(ComputerProviders, {}),
-				Layer.mock(Computers, {}),
-				Layer.mock(ComputerLifecycle, {}),
-				Layer.mock(Connectors, {}),
-				Layer.mock(Drivers, {}),
-				// Discovery never uses Vaults. Their handlers only need the services to exist.
-				Layer.mergeAll(Layer.mock(Vaults, {}), Layer.mock(SecretProviders, {})),
-				Layer.mock(Pairings, {}),
-				Layer.mock(Sessions, {}),
-				// Discovery never uses files. Their handlers only need the service to exist.
-				Layer.mock(Files, {}),
-				// The Live handlers take the open Live sessions when they are built.
-			]),
-			// Discovery does not submit connection changes or hold physical sessions.
-			Layer.provide([
-				Layer.mock(ChannelRemoval, {}),
-				Layer.mock(ConnectionCommands, {}),
-				Layer.mock(Transport, {}),
-				Layer.mock(GrantCleanup.GrantCleanup, {}),
-				errorRecords,
-			]),
-			// The services above read the public origin from these settings.
-			Layer.provide(settings),
-			Layer.provideMerge(
-				DatabasePostgres.layer({
-					databaseUrl: Redacted.make(database.url),
-				}).pipe(
-					Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
-				),
-			),
-			Layer.provideMerge(
-				PlatformHttpServer.layer(createServer, { host: "127.0.0.1", port: 0 }),
-			),
-		),
-	)
-	yield* Effect.provideContext(Migration.initialize, services)
-	const address = HttpServer.formatAddress(
-		Context.get(services, HttpServer.HttpServer).address,
-	)
-	const sql = Context.get(services, PgClient.PgClient)
+	const user = yield* host.login("local")
+	const address = yield* host.address
 	return {
 		address,
-		sql: (statement: string) => sql.unsafe(statement),
-		/** Every session that the server asked Auth to resolve. */
-		authCalls: Ref.get(authCalls),
-		host: Context.get(services, HttpHost.HttpHost),
+		/** The cookie header of the session of the person. */
+		cookie: Caller.sessionCookie(user.session),
+		sql: (statement: string) =>
+			host.run(
+				Effect.flatMap(PgClient.PgClient, (sql) => sql.unsafe(statement)),
+			),
+		/** The groups of the contract that the host mounted. */
+		mounted: host.run(
+			Effect.flatMap(HttpHost.HttpHost, (http) => http.mounted),
+		),
 		request: (payload: unknown, headers: Record<string, string> = {}) =>
 			postJson(address + "/v1/apps/discover", payload, headers),
 	}
 })
 
 layer(platform, { excludeTestServices: true })((it) => {
-	it.effect("TestHost.layerApi mounts every group of the contract", () =>
+	it.effect("the test host mounts every group of the contract", () =>
 		Effect.gen(function* () {
 			const publisher = yield* fixture()
 			const api = yield* startApi(publisher.layer)
@@ -590,7 +292,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 			})
 			assert.strictEqual(HashSet.size(groups), 46)
 			assert.deepStrictEqual(
-				Arr.sort(Arr.fromIterable(yield* api.host.mounted), Order.String),
+				Arr.sort(Arr.fromIterable(yield* api.mounted), Order.String),
 				Arr.sort(Arr.fromIterable(groups), Order.String),
 			)
 		}),
@@ -630,7 +332,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 					multiple.issues[0]?.url,
 					publisher.origin + "/invalid",
 				)
-				yield* Schema.decodeEffect(AppDiscoveryResult)(multiple)
+				yield* Schema.decodeEffect(ResultModel)(multiple)
 				const page = yield* discover(publisher.origin + "/page?edition=team")
 				assert.ok(page._tag === "Single")
 				assert.strictEqual(
@@ -714,7 +416,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 		() =>
 			Effect.gen(function* () {
 				const publisher = yield* fixture()
-				const services = yield* Layer.build(AppDiscovery.layerPublic)
+				const services = yield* Layer.build(AppsOutside.layerDiscovery)
 				const result = yield* Effect.provideContext(
 					Effect.result(
 						AppDiscovery.discover(publisher.origin + "/card?edition=team"),
@@ -734,7 +436,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 				const publisher = yield* fixture()
 				const api = yield* startApi(publisher.layer)
 				const payload = { input: publisher.origin + "/card?edition=team" }
-				const session = { cookie: `${AuthApi.SessionCookie}=local-session` }
+				const session = { cookie: api.cookie }
 				const authenticated = { ...session, origin: publicOrigin }
 				const denied: ReadonlyArray<readonly [Record<string, string>, number]> =
 					[
@@ -749,13 +451,6 @@ layer(platform, { excludeTestServices: true })((it) => {
 						],
 						[session, 403],
 						[{ ...session, origin: "https://foreign.fixture.test" }, 403],
-						[
-							{
-								cookie: `${AuthApi.SessionCookie}=unavailable`,
-								origin: publicOrigin,
-							},
-							503,
-						],
 					]
 				for (const [headers, status] of denied) {
 					const response = yield* api.request(payload, headers)
@@ -782,7 +477,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(response.status, 200)
 				const single =
-					yield* HttpClientResponse.schemaBodyJson(AppDiscoveryResult)(response)
+					yield* HttpClientResponse.schemaBodyJson(ResultModel)(response)
 				assert.ok(single._tag === "Single")
 				assert.strictEqual(single.candidate.cardUrl, payload.input)
 				assert.strictEqual(
@@ -821,10 +516,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 			Effect.gen(function* () {
 				const publisher = yield* fixture()
 				const api = yield* startApi(publisher.layer)
-				const browser = {
-					cookie: `${AuthApi.SessionCookie}=local-session`,
-					origin: publicOrigin,
-				}
+				const browser = { cookie: api.cookie, origin: publicOrigin }
 				const client = yield* Layer.build(
 					Client.layer({ baseUrl: api.address }),
 				)
@@ -839,10 +531,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 						}),
 					)
 				const failureOf = (response: HttpClientResponse.HttpClientResponse) =>
-					Effect.flatMap(
-						response.json,
-						Schema.decodeUnknownEffect(AppDiscoveryFailed),
-					)
+					Effect.flatMap(response.json, Schema.decodeUnknownEffect(Failed))
 				const multiple = yield* discover(publisher.origin + "/catalog")
 				assert.ok(multiple._tag === "Multiple")
 				assert.strictEqual(multiple.candidates.length, 2)
@@ -868,13 +557,13 @@ layer(platform, { excludeTestServices: true })((it) => {
 					assert.strictEqual(failure.reason, reason)
 					const result = yield* Effect.result(discover(input))
 					assert.ok(Result.isFailure(result))
-					assert.ok(Schema.is(AppDiscoveryFailed)(result.failure))
+					assert.ok(Schema.is(Failed)(result.failure))
 					assert.strictEqual(result.failure.reason, reason)
 				}
-				const publicApi = yield* startApi(AppDiscovery.layerPublic)
+				const publicApi = yield* startApi(AppsOutside.layerDiscovery)
 				const rejected = yield* publicApi.request(
 					{ input: publisher.origin + "/card?edition=team" },
-					browser,
+					{ cookie: publicApi.cookie, origin: publicOrigin },
 				)
 				assert.strictEqual(rejected.status, 422)
 				assert.strictEqual((yield* failureOf(rejected)).reason, "BlockedTarget")
@@ -887,10 +576,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 			Effect.gen(function* () {
 				const publisher = yield* fixture()
 				const api = yield* startApi(publisher.layer, publisher.publicNetwork)
-				const headers = {
-					cookie: `${AuthApi.SessionCookie}=local-session`,
-					origin: publicOrigin,
-				}
+				const headers = { cookie: api.cookie, origin: publicOrigin }
 				const inventory = yield* getText(
 					api.address + "/v1/connections",
 					headers,
@@ -907,7 +593,6 @@ layer(platform, { excludeTestServices: true })((it) => {
 							DeveloperApi.InspectionReport,
 						)(response)
 					})
-				const authCalls = (yield* api.authCalls).length
 				const single = yield* inspect(publisher.origin + "/card?edition=team")
 				assert.strictEqual(single.apps[0]?.eligibility._tag, "Eligible")
 				assert.ok(
@@ -952,7 +637,6 @@ layer(platform, { excludeTestServices: true })((it) => {
 						Arr.some(report.stages, (stage) => stage.status === "NotChecked"),
 					)
 				}
-				assert.strictEqual((yield* api.authCalls).length, authCalls)
 				const count = (yield* publisher.requests).length
 				const invalid = yield* postJson(api.address + "/v1/developer/inspect", {
 					input: "http://insecure.example/card",

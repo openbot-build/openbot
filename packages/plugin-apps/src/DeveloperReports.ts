@@ -1,3 +1,5 @@
+import { transactionFailures } from "@openbot-build/server-execution/Store"
+import { getApp } from "@openbot-build/apps-contract/apps/DeveloperRows"
 import * as Models from "./DeveloperModels.ts"
 import { Developers } from "@openbot-build/domain"
 
@@ -17,7 +19,8 @@ import { developerReports } from "@openbot-build/server-database/Schema"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
 import { AppInspections } from "./AppInspections.ts"
-import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { instanceNamespace } from "@openbot-build/apps-contract/apps/DeveloperRows"
+import type { InstanceSettings } from "@openbot-build/server-kernel/InstanceSettings"
 import * as Db from "@openbot-build/server-database/Database"
 
 export class DeveloperReports extends Context.Service<
@@ -53,8 +56,7 @@ export class DeveloperReports extends Context.Service<
 			Developers.Failure
 		>
 	}
-	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
->()("@openbot-build/openbot/plugin-apps/DeveloperReports") {}
+>()("@openbot-build/plugin-apps/DeveloperReports") {}
 export const issueKey = (issue: Developers.Issue): string =>
 	JSON.stringify([
 		issue.code,
@@ -91,18 +93,19 @@ export const make: Effect.Effect<
 	| PgClient.PgClient
 	| AppInspections
 	| SecureRandom.SecureRandom
+	| InstanceSettings
 > = Effect.gen(function* () {
 	const access = yield* DeveloperAccess
 	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
-	const namespace = yield* IndexNamespace
+	const namespace = yield* instanceNamespace
 	const inspections = yield* AppInspections
 	const crypto = yield* SecureRandom.SecureRandom
 	const reportWhere = (id: string) =>
 		and(eq(developerReports.namespace, namespace), eq(developerReports.id, id))
 	const read = Effect.fn("DeveloperReports.read")(function* (id: string) {
 		if (!isUuid(id)) return yield* Developers.DeveloperNotFound.make({})
-		const row = (yield* Rows.stored(
+		const row = (yield* transactionFailures(
 			db.select().from(developerReports).where(reportWhere(id)),
 		))[0]
 		if (row === undefined) return yield* Developers.DeveloperNotFound.make({})
@@ -129,7 +132,7 @@ export const make: Effect.Effect<
 		if (before !== undefined) {
 			if (!isUuid(before))
 				return yield* Developers.DeveloperInputInvalid.make({ message })
-			const cursor = (yield* Rows.stored(
+			const cursor = (yield* transactionFailures(
 				db
 					.select({
 						checkedAt: developerReports.checkedAt,
@@ -148,7 +151,7 @@ export const make: Effect.Effect<
 				),
 			)
 		}
-		return yield* Rows.stored(
+		return yield* transactionFailures(
 			db
 				.select()
 				.from(developerReports)
@@ -180,7 +183,7 @@ export const make: Effect.Effect<
 			return yield* inTransaction(
 				Effect.gen(function* () {
 					// Lock the App first, so the monitor does not change it at the same time.
-					const app = yield* Rows.getApp(db, namespace, cardUrl, true)
+					const app = yield* getApp(db, namespace, cardUrl, true)
 					yield* access.authorize(owner, cardUrl, true)
 					const value: Models.SavedReport = {
 						id: yield* crypto.uuidV7().pipe(Effect.orDie),
@@ -234,7 +237,9 @@ export const make: Effect.Effect<
 			const row = yield* read(id)
 			if (row.owner !== owner)
 				return yield* Developers.DeveloperNotFound.make({})
-			yield* Rows.stored(db.delete(developerReports).where(reportWhere(id)))
+			yield* transactionFailures(
+				db.delete(developerReports).where(reportWhere(id)),
+			)
 		}),
 	})
 })
